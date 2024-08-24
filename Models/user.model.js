@@ -41,7 +41,11 @@ const Userschema=new mongoose.Schema(
         country:{
             type: String,
             required: true
-        }
+        },
+        createdAt: {  
+            type: Date,  
+            default: Date.now  // Automatically set to the current date/time when created  
+        } 
         
          
     }

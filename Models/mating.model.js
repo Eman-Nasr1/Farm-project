@@ -40,7 +40,11 @@ const Matinglschema=new mongoose.Schema(
          animalId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Animal'
-             }
+             },
+             createdAt: {  
+                type: Date,  
+                default: Date.now  // Automatically set to the current date/time when created  
+            } 
        
   
     }

@@ -26,7 +26,7 @@ const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
         const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
         return next(error);
     }
-    const mating = await Mating.findOne({ animalId: animal._id });
+    const mating = await Mating.find({ animalId: animal._id });
 
     if (!mating) {
         const error = AppError.create('Mating information not found for this animal', 404, httpstatustext.FAIL);

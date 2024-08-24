@@ -13,10 +13,10 @@ const Animalschema=new mongoose.Schema(
         },
         animalType:{
             type: String,
-            enum:["goat","sheap"],
+            enum:["goat","sheep"],
             required: true 
         },
-        brithDate:{
+        birthDate:{
             type: Date
             
         },
@@ -25,6 +25,9 @@ const Animalschema=new mongoose.Schema(
         },
         purchaseData:{
             type: Date
+        },
+        purchasePrice:{
+            type: Number
         },
         tarderName:{
             type: String
@@ -41,15 +44,24 @@ const Animalschema=new mongoose.Schema(
         gender:{
             type: String,
             enum:["male","female"],
+            required: true
         },
         female_Condition:{
             type: String
+        },
+        Teething:{
+            type: String,
+            enum:["two","four","six"],
         },
 
         owner: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
-         }
+         },
+         createdAt: {  
+            type: Date,  
+            default: Date.now  // Automatically set to the current date/time when created  
+        } 
        
         
    
@@ -57,12 +69,17 @@ const Animalschema=new mongoose.Schema(
     }
 )
 
+
+// Animalschema.index({ owner: 1 });
+// Animalschema.index({ createdAt: 1 });
+// Animalschema.index({ animalType: 1 });
+
 Animalschema.pre('save', function(next) {
    // console.log('Before saving - brithDate:', this.brithDate);
-    if (this.brithDate) {
-        const brithDate = new Date(this.brithDate);
+    if (this.birthDate) {
+        const birthDate = new Date(this.birthDate);
         const currentDate = new Date();
-        const ageInMilliseconds = currentDate - brithDate;
+        const ageInMilliseconds = currentDate - birthDate;
        this.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
        
       // console.log('Calculated ageInDays:', this.ageInDays);

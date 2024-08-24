@@ -23,7 +23,7 @@ const getbreedingforspacficanimal =asyncwrapper(async( req, res, next)=>{
         const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
         return next(error);
     }
-    const breeding = await Breeding.findOne({ animalId: animal._id });
+    const breeding = await Breeding.find({ animalId: animal._id });
 
     if (!breeding) {
         const error = AppError.create('breeding information not found for this animal', 404, httpstatustext.FAIL);

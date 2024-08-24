@@ -30,6 +30,21 @@ app.use('/',matingRoutes)
 const breedingRoutes=require('./Routes/breedingRoutes');
 app.use('/',breedingRoutes)
 
+const vaccineRoutes=require('./Routes/vaccineRoutes');
+app.use('/',vaccineRoutes)
+
+const weightRoutes=require('./Routes/weightRoutes');
+app.use('/',weightRoutes)
+
+const reportRoutes=require('./Routes/reportRoutes');
+app.use('/',reportRoutes)
+
+
+const excludedRoutes=require('./Routes/excludedRoutes');
+app.use('/',excludedRoutes)
+
+
+
 
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
