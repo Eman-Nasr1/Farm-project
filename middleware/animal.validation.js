@@ -14,14 +14,14 @@ const animalValidationRules = () => {
             .notEmpty().withMessage('Animal type is required')  
             .isIn(['goat', 'sheep']).withMessage('Animal type must be either goat or sheep'),  
         body('birthDate')  
-            .optional()  
-            .isISO8601().withMessage('Birth date must be a valid date'),  
+            .optional()  ,
+           
         body('purchaseData')  
-            .optional()  
-            .isISO8601().withMessage('Purchase date must be a valid date'),  
+            .optional() , 
+             
         body('purchasePrice')  
-            .optional()  
-            .isNumeric().withMessage('Purchase price must be a number'),  
+            .optional()  ,
+              
         body('gender')  
             .notEmpty().withMessage('Gender is required')  
             .isIn(['male', 'female']).withMessage('Gender must be either male or female'),  
