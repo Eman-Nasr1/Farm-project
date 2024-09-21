@@ -85,77 +85,116 @@ const getallusers=asyncwrapper(async(req,res)=>{
  })
 
 
- const forgotPassword = asyncwrapper(async(req, res, next) => {  
-  const { email } = req.body; 
-  
-  if (!email) {  
-      return next(AppError.create('Email is required', 400, httpstatustext.FAIL));  
-  }  
+ const forgotPassword = asyncwrapper(async (req, res, next) => {
+  const { email } = req.body;
 
-  const user = await User.findOne({ email });  
-  if (!user) {  
-      return next(AppError.create('User not found', 404, httpstatustext.ERROR));  
-  }  
+  if (!email) {
+    return next(AppError.create('Email is required', 400, httpstatustext.FAIL));
+  }
 
-  // Create a token for password reset  
-  const resetToken = crypto.randomBytes(32).toString('hex');  
-  user.resetPasswordToken = resetToken;  
-  user.resetPasswordExpires = Date.now() + 3600000; // 1 hour  
+  const user = await User.findOne({ email });
 
-  await user.save();  
+  if (!user) {
+    return next(AppError.create('User not found', 404, httpstatustext.ERROR));
+  }
 
-  // Send email with the reset link (using nodemailer or any other email service)  
-  const transporter = nodemailer.createTransport({  
-      service: 'Gmail', // Using Gmail as an example  
-      auth: {  
-          user: process.env.EMAIL_USER,  
-          pass: process.env.EMAIL_PASS,  
-      },  
-  });  
+  // Generate a 6-digit verification code
+  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-  const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${resetToken}`;  
+  // Store the verification code and its expiration time in the user's document
+  user.resetPasswordToken = verificationCode; // Store the verification code
+  user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
 
-  const mailOptions = {  
-    to: email,  
-    subject: 'Password Reset',  
-    html: `<p>You are receiving this email because you (or someone else) have requested the reset of a password.</p>  
-           <p>Please click on the following button to reset your password:</p>  
-           <a href="${resetUrl}" style="display:inline-block; background-color:#4CAF50; color:white; padding:10px 20px; text-align:center; text-decoration:none; border-radius:5px;">  
-               Reset Password  
-           </a>  
-           <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>`,  
-};
-  await transporter.sendMail(mailOptions);  
+  await user.save();
 
-  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Reset link sent to your email' });  
-});  
+  // Send email with the verification code
+  const transporter = nodemailer.createTransport({
+    service: 'Gmail', // Using Gmail as an example
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  const mailOptions = {
+    to: email,
+    subject: 'Password Reset Verification Code',
+    html: `<p>Your password reset verification code is:</p>
+           <h2>${verificationCode}</h2>
+           <p>This code will expire in 1 hour. Please use it to reset your password.</p>`,
+  };
+
+  await transporter.sendMail(mailOptions);
+
+  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Verification code sent to your email' });
+});
+
+ 
+const verifyCode = asyncwrapper(async (req, res, next) => {
+  const { verificationCode } = req.body;
+
+  if (!verificationCode) {
+    return next(AppError.create('Verification code is required', 400, httpstatustext.FAIL));
+  }
+
+  const user = await User.findOne({
+    resetPasswordToken: verificationCode,
+    resetPasswordExpires: { $gt: Date.now() }, // Ensure the token is not expired
+  });
+
+  if (!user) {
+    return next(AppError.create('Invalid or expired verification code', 400, httpstatustext.ERROR));
+  }
+
+  // Generate a token (JWT) with the user's ID
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET_KEY, { expiresIn: '1h' });
+
+  // Send the token back to the user
+  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Verification code is valid', token });
+});
+
 
 
 
 // Function to handle password reset  
-const resetPassword = asyncwrapper(async(req, res, next) => {  
-  const { token, password, confirmpassword } = req.body;  
+const resetPassword = asyncwrapper(async (req, res, next) => {
+  const { newPassword } = req.body;
+  const token = req.headers.authorization?.split(' ')[1]; // Extract the token from the Authorization header
 
-  if (password !== confirmpassword) {  
-      return next(AppError.create('Passwords do not match', 400, httpstatustext.FAIL));  
-  }  
+  if (!newPassword) {
+    return next(AppError.create('New password is required', 400, httpstatustext.FAIL));
+  }
 
-  const user = await User.findOne({ resetPasswordToken: token, resetPasswordExpires: { $gt: Date.now() } });  
-  
-  if (!user) {  
-      return next(AppError.create('Password reset token is invalid or has expired', 400, httpstatustext.FAIL));  
-  }  
+  if (!token) {
+    return next(AppError.create('No token provided', 401, httpstatustext.FAIL));
+  }
 
-  const hashPassword = await bcrypt.hash(password, 7);  
-  user.password = hashPassword;  
-  user.confirmpassword = hashPassword; // This may not be necessary depending on your implementation  
-  user.resetPasswordToken = undefined; // Clear the token  
-  user.resetPasswordExpires = undefined; // Clear the expiry  
+  // Verify the token and extract the user's ID
+  const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  const userId = decoded.id;
 
-  await user.save();  
+  // Find the user by ID
+  const user = await User.findById(userId);
 
-  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Password has been reset successfully' });  
-});  
+  if (!user) {
+    return next(AppError.create('User not found', 404, httpstatustext.ERROR));
+  }
+
+  // Hash the new password
+  const hashedPassword = await bcrypt.hash(newPassword, 7);
+
+  // Update the user's password
+  user.password = hashedPassword;
+  user.resetPasswordToken = undefined; // Clear the token fields
+  user.resetPasswordExpires = undefined;
+
+  // Save the updated user
+  await user.save();
+
+  // Send success response
+  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Password has been reset successfully' });
+});
+
 
 
  module.exports={
