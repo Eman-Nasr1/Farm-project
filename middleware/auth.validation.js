@@ -31,10 +31,7 @@ const userValidationRules = () => {
             .isString().withMessage('Phone number must be a string')  
             .isLength({ min: 10 }).withMessage('Phone number must be at least 10 characters long'),  
 
-        body('role')  
-            .optional()  
-            .isIn(['user', 'admin']).withMessage('Role must be either user or admin'),  
-
+     
         body('usertype')  
             .optional()  
             .isIn(['farm', 'trader']).withMessage('User type must be either farm or trader'),  

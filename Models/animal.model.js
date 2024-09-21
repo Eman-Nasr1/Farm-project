@@ -29,7 +29,7 @@ const Animalschema=new mongoose.Schema(
         purchasePrice:{
             type: Number
         },
-        tarderName:{
+        traderName:{
             type: String
         },
         motherId:{
