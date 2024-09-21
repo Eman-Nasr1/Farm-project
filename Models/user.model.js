@@ -35,7 +35,7 @@ const Userschema=new mongoose.Schema(
         },
         usertype:{
             type:String,
-            enum:["farm","tarder"],
+            enum:["farm","trader"],
             default:"farm"
         },
         country:{
