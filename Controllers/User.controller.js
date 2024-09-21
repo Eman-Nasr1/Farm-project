@@ -202,6 +202,7 @@ const resetPassword = asyncwrapper(async (req, res, next) => {
     register,
     login,
     resetPassword ,
-    forgotPassword
+    forgotPassword,
+    verifyCode,
 
 }
