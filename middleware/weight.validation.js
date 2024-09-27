@@ -9,8 +9,8 @@ const weightValidationRules = () => {
             .isString().withMessage('Tag ID must be a string'),  
 
         body('Date')  
-            .notEmpty().withMessage('Date is required')  
-            .isISO8601().withMessage('Date must be a valid date') , 
+            .notEmpty().withMessage('Date is required') , 
+            
       
 
         body('weight')  

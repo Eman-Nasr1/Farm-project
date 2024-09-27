@@ -11,8 +11,8 @@ const breedingValidationRules = () => {
             .optional()  
             .isString().withMessage('Delivery state must be a string'),  
         body('deliveryDate')  
-            .notEmpty().withMessage('Delivery date is required')  
-            .isISO8601().withMessage('Delivery date must be a valid date'),  
+            .notEmpty().withMessage('Delivery date is required')  ,
+            
         body('numberOfBriths')  
             .optional()  
             .isNumeric().withMessage('Number of births must be a number')  

@@ -14,11 +14,11 @@ const matingValidationRules = () => {
             .notEmpty().withMessage('Mating Type is required')  
             .isString().withMessage('Mating Type must be a string'),  
         body('matingDate')  
-            .optional()  
-            .isISO8601().withMessage('Mating Date must be a valid date'),  
+            .notEmpty().withMessage('Mating Date date is required') ,  
+            
         body('sonarDate')  
-            .optional()  
-            .isISO8601().withMessage('Sonar Date must be a valid date'),  
+            .notEmpty().withMessage('Mating Date date is required') ,  
+             
         body('sonarRsult')  
             .optional()  
             .isIn(['positive', 'negative']).withMessage('Sonar Result must be either "positive" or "negative"'),  
