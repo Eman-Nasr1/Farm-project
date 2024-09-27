@@ -61,5 +61,21 @@ Matinglschema.pre('save', function (next) {
     next();
 });
 
+// Pre-update middleware for updating existing documents
+Matinglschema.pre('findOneAndUpdate', async function (next) {
+    const update = this.getUpdate();
+    
+    if (update.sonarRsult === 'positive' && update.matingDate) {
+        // Calculate the expected delivery date if sonarResult is updated to 'positive'
+        const daysToAdd = 147;
+        update.expectedDeliveryDate = new Date(update.matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+    } else if (update.sonarRsult === 'negative') {
+        // If sonarResult is updated to 'negative', remove expectedDeliveryDate
+        update.expectedDeliveryDate = null;
+    }
+    
+    next();
+});
+
 
 module.exports= mongoose.model('Mating',Matinglschema)
