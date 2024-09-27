@@ -37,23 +37,19 @@ const getVaccineforspacficanimal =asyncwrapper(async( req, res, next)=>{
 })
 
 
-// const addvaccine = asyncwrapper(async (req, res,next) => {
-//     const userId = req.userId;
+const getsinglevaccine = asyncwrapper(async (req, res, next) => {
+    const vaccineId = req.params.vaccineId;
 
-//     const { tagId, ...vaccineData } = req.body;
-//     console.log('Request body:', req.body);
-//     // Find the animal with the provided tagId
-//     const animal = await Animal.findOne({ tagId });
-//     if (!animal) {
-//         const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
-//         return next(error);
-//     }
-//     const newvaccine = new Vaccine({ ...vaccineData, owner: userId, tagId, animalId: animal._id });
+    // Find the vaccine document by its ID
+    const vaccine = await Vaccine.findById(vaccineId);
+    if (!vaccine) {
+        const error = AppError.create('vaccine information not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
 
-//     await newvaccine.save();
-
-//     res.json({ status: httpstatustext.SUCCESS, data: { vaccine: newvaccine } });
-// })
+    // Return the single vaccine record
+    return res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
+});
 
 const addvaccine = asyncwrapper(async (req, res, next) => {  
     const userId = req.userId;  
@@ -125,6 +121,7 @@ module.exports={
     updateVaccine,
     addvaccine,
     getVaccineforspacficanimal,
+    getsinglevaccine,
     getallVaccine
 
 }

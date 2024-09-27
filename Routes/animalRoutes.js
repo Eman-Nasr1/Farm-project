@@ -7,7 +7,7 @@ const { animalValidationRules, validateAnimal } =require('../middleware/animal.v
 router.get('/api/animal/getallanimals',verifytoken,animalcontroller.getallanimals);
 router.get('/api/animal/getsinglanimals/:tagId',verifytoken,animalcontroller.getsnigleanimal);
 router.post('/api/animal/addanimal',verifytoken, animalValidationRules(), validateAnimal,animalcontroller.addanimal);
-router.patch('/api/animal/updateanimal/:tagId',verifytoken,animalValidationRules(), validateAnimal,animalcontroller.updateanimal);
+router.patch('/api/animal/updateanimal/:tagId',verifytoken, validateAnimal,animalcontroller.updateanimal);
 router.delete('/api/animal/deleteanimal/:tagId',verifytoken,animalcontroller.deleteanimal);
 
 

@@ -58,6 +58,21 @@ const addmating = asyncwrapper(async (req, res,next) => {
 })
 
 
+const getsinglemating = asyncwrapper(async (req, res, next) => {
+    const matingId = req.params.matingId;
+
+    // Find the Mating document by its ID
+    const mating = await Mating.findById(matingId);
+    if (!mating) {
+        const error = AppError.create('Mating information not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Return the single mating record
+    return res.json({ status: httpstatustext.SUCCESS, data: { mating } });
+});
+
+
 
 const deletemating= asyncwrapper(async(req,res,next)=>{
     const userId = req.userId;
@@ -95,6 +110,7 @@ module.exports={
     updatemating,
     deletemating,
     addmating,
+    getsinglemating,
     getmatingforspacficanimal
 
 }

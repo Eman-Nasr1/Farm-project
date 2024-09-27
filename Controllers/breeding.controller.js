@@ -34,10 +34,25 @@ const getbreedingforspacficanimal =asyncwrapper(async( req, res, next)=>{
 
 })
 
+const getsinglebreeding = asyncwrapper(async (req, res, next) => {
+    const breedingId = req.params.breedingId;
+
+    // Find the Breeding document by its ID
+    const breeding = await Breeding.findById(breedingId);
+    if (!breeding) {
+        const error = AppError.create('Breeding information not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Return the single Breeding record
+    return res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
+});
+
+
 const addBreeding = asyncwrapper(async (req, res,next) => {
     const userId = req.userId;
 
-    // Extract tagId from the request body along with the mating data
+    // Extract tagId from the request body along with the Breeding data
     const { tagId, ...breedingData } = req.body;
 
     // Find the animal with the provided tagId
@@ -91,6 +106,7 @@ module.exports={
     deletebreeding,
     addBreeding,
     getbreedingforspacficanimal,
+    getsinglebreeding,
     getallBreeding
 
 }

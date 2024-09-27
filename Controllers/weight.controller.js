@@ -34,6 +34,20 @@ const getWeightforspacficanimal =asyncwrapper(async( req, res, next)=>{
 
 })
 
+const getsingleWeight = asyncwrapper(async (req, res, next) => {
+    const weightId = req.params.weightId;
+
+    // Find the Weight document by its ID
+    const weight = await Weight.findById(weightId);
+    if (!weight) {
+        const error = AppError.create('Weight information not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Return the single Weight record
+    return res.json({ status: httpstatustext.SUCCESS, data: { weight } });
+});
+
 const addweight = asyncwrapper(async (req, res,next) => {
     const userId = req.userId;
 
@@ -89,6 +103,7 @@ module.exports={
     updateweight,
     deleteweight,
     addweight,
+    getsingleWeight,
     getWeightforspacficanimal,
     getallweight
 
