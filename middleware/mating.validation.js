@@ -13,8 +13,8 @@ const matingValidationRules = () => {
         body('matingType')  
             .notEmpty().withMessage('Mating Type is required')  
             .isString().withMessage('Mating Type must be a string'),  
-        body('matingDate')  
-            .notEmpty().withMessage('Mating Date date is required') ,  
+        // body('matingDate')  
+        //     .notEmpty().withMessage('Mating Date date is required') ,  
             
         body('sonarDate')  
             .notEmpty().withMessage('Mating Date date is required') ,  
