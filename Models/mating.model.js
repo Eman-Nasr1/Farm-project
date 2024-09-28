@@ -68,10 +68,16 @@ Matinglschema.pre('findOneAndUpdate', async function (next) {
         if (update.matingDate) {
             // Calculate the expected delivery date if sonarResult is 'positive' and matingDate is provided
             const daysToAdd = 147;
-            update.expectedDeliveryDate = new Date(new Date(this.matingDate).getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+            update.expectedDeliveryDate = new Date(new Date(update.matingDate).getTime() + daysToAdd * 24 * 60 * 60 * 1000);
         } else {
-            // If matingDate is not provided, avoid crashing by skipping expectedDeliveryDate calculation
-            update.expectedDeliveryDate = undefined; // or you can choose to handle this case differently
+            // If matingDate is not provided in the update, use the existing matingDate in the document
+            const doc = await this.model.findOne(this.getQuery());
+            if (doc && doc.matingDate) {
+                const daysToAdd = 147;
+                update.expectedDeliveryDate = new Date(new Date(doc.matingDate).getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+            } else {
+                update.expectedDeliveryDate = undefined;
+            }
         }
     } else if (update.sonarRsult === 'negative') {
         // If sonarResult is 'negative', remove the expectedDeliveryDate
