@@ -64,18 +64,30 @@ Matinglschema.pre('save', function (next) {
 Matinglschema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     
+    // First check if the update contains sonarResult and matingDate
     if (update.sonarRsult === 'positive') {
         if (update.matingDate) {
-            // Calculate the expected delivery date if sonarResult is 'positive' and matingDate is provided
-            const daysToAdd = 147;
-            update.expectedDeliveryDate = new Date(new Date(update.matingDate).getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+            // Check if matingDate is a valid date
+            const matingDate = new Date(update.matingDate);
+            if (!isNaN(matingDate.getTime())) {
+                const daysToAdd = 147;
+                update.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+            } else {
+                return next(new Error('Invalid matingDate provided in the update.'));
+            }
         } else {
-            // If matingDate is not provided in the update, use the existing matingDate in the document
+            // If matingDate is not provided in the update, fetch the document's current matingDate
             const doc = await this.model.findOne(this.getQuery());
             if (doc && doc.matingDate) {
-                const daysToAdd = 147;
-                update.expectedDeliveryDate = new Date(new Date(doc.matingDate).getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+                const matingDate = new Date(doc.matingDate);
+                if (!isNaN(matingDate.getTime())) {
+                    const daysToAdd = 147;
+                    update.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+                } else {
+                    return next(new Error('Invalid matingDate in the document.'));
+                }
             } else {
+                // No matingDate to work with
                 update.expectedDeliveryDate = undefined;
             }
         }
