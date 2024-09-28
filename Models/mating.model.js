@@ -65,7 +65,7 @@ Matinglschema.pre('save', function (next) {
 Matinglschema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     
-    if (update.sonarRsult === 'positive' && update.matingDate) {
+    if (update.sonarRsult === 'positive' ) {
         // Calculate the expected delivery date if sonarResult is updated to 'positive'
         const daysToAdd = 147;
         update.expectedDeliveryDate = new Date(update.matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
