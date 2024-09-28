@@ -61,19 +61,23 @@ Matinglschema.pre('save', function (next) {
     next();
 });
 
-// Pre-update middleware for updating existing documents
 Matinglschema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     
-    if (update.sonarRsult === 'positive' ) {
-        // Calculate the expected delivery date if sonarResult is updated to 'positive'
-        const daysToAdd = 147;
-        update.expectedDeliveryDate = new Date(this.matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+    if (update.sonarRsult === 'positive') {
+        if (update.matingDate) {
+            // Calculate the expected delivery date if sonarResult is 'positive' and matingDate is provided
+            const daysToAdd = 147;
+            update.expectedDeliveryDate = new Date(new Date(update.matingDate).getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+        } else {
+            // If matingDate is not provided, avoid crashing by skipping expectedDeliveryDate calculation
+            update.expectedDeliveryDate = undefined; // or you can choose to handle this case differently
+        }
     } else if (update.sonarRsult === 'negative') {
-        // If sonarResult is updated to 'negative', remove expectedDeliveryDate
+        // If sonarResult is 'negative', remove the expectedDeliveryDate
         update.expectedDeliveryDate = null;
     }
-    
+
     next();
 });
 
