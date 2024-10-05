@@ -84,7 +84,7 @@ const getsinglevaccine = asyncwrapper(async (req, res, next) => {
 //     res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });  
 // });
 
-const addvaccine = asyncWrapper(async (req, res, next) => {
+const addvaccine = asyncwrapper(async (req, res, next) => {
     const userId = req.userId;  
     const { vaccinationLog, ...vaccineData } = req.body;  
     const createdVaccines = []; // Array to keep track of created vaccines
