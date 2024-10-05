@@ -106,19 +106,20 @@ const updatebreeding = asyncwrapper(async (req, res, next) => {
     const breedingId = req.params.breedingId;
     const updatedData = req.body;
 
-    let breeding = await Breeding.findOne({ _id: breedingId, owner: userId });
+    let breeding = await Breeding.findOneAndUpdate(
+        { _id: breedingId, owner: userId },
+        updatedData,
+        { new: true, runValidators: true }
+    );
+
     if (!breeding) {
         const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
         return next(error);
     }
 
-    // Manually update fields instead of using findOneAndUpdate
-    Object.assign(breeding, updatedData);  // Update the fields
-    
-    await breeding.save();  // Trigger pre-save middleware
-    
     res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
 });
+
 
 
 module.exports={
