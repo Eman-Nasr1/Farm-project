@@ -145,6 +145,46 @@ const addvaccine = asyncwrapper(async (req, res, next) => {
 // });
 
 
+const addvaccineforanimal = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;  
+    const { vaccinationLog, ...vaccineData } = req.body;  
+    const createdVaccines = []; // Array to keep track of created vaccines
+
+    // Check if the vaccinationLog is valid and has DateGiven and tagId
+    if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven || !vaccinationLog[0].tagId) {
+        return next(new AppError('Vaccination log must include at least one entry with DateGiven and tagId', 400, httpstatustext.FAIL));
+    }
+
+    const tagId = vaccinationLog[0].tagId; // Extract tagId from the first log entry
+    if (tagId) {
+        const animal = await Animal.findOne({ tagId });
+        if (!animal) {
+            return next(new AppError('Animal not found for the provided tagId', 404, httpstatustext.FAIL));
+        }
+
+        // Create the vaccination log for the single animal
+        const newVaccine = new Vaccine({
+            ...vaccineData,
+            vaccinationLog: [{
+                tagId: animal.tagId,
+                DateGiven: vaccinationLog[0].DateGiven,
+                locationShed: vaccinationLog[0].locationShed || animal.locationShed,
+                vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
+                createdAt: new Date()
+            }],
+            owner: userId,
+            animalId: animal._id
+        });
+
+        await newVaccine.save();
+        createdVaccines.push(newVaccine);
+
+        return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
+    }
+
+
+    return next(new AppError(' tagId must be provided', 400, httpstatustext.FAIL));
+});
 
 
 
@@ -183,6 +223,7 @@ module.exports={
     deleteVaccine,
     updateVaccine,
     addvaccine,
+    addvaccineforanimal,
     getVaccineforspacficanimal,
     getsinglevaccine,
     getallVaccine
