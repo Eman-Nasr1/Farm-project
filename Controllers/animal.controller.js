@@ -45,6 +45,10 @@ const getallanimals = asyncwrapper(async (req, res) => {
         filter.breed = query.breed; // e.g., "balady"
     }
 
+    if (query.tagId) {
+        filter.tagId = query.tagId; // e.g., 
+    }
+
     // Find animals with applied filters
     const animals = await Animal.find(filter, { "__v": false })
         .limit(limit)
