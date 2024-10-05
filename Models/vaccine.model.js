@@ -16,8 +16,8 @@ const Vaccineschema=new mongoose.Schema(
 
         vaccinationLog: [{
             tagId: {
-                type: String,
-                required: true
+                type: String
+               
             },
             DateGiven:{
                 type: Date
