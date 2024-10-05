@@ -23,7 +23,7 @@ const weightValidationRules = () => {
 
         body('weightType')  
             .notEmpty().withMessage('Weight Type is required')  
-            .isIn(['birth', 'Weaning', 'regular']).withMessage('Weight Type must be one of: birth, Weaning, regular'),  
+             
 
         
     ];  
