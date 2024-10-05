@@ -84,74 +84,52 @@ const getsinglevaccine = asyncwrapper(async (req, res, next) => {
 //     res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });  
 // });
 
-const addvaccine = asyncwrapper(async (req, res, next) => {
+const addvaccine = asyncWrapper(async (req, res, next) => {
     const userId = req.userId;  
     const { vaccinationLog, ...vaccineData } = req.body;  
     const createdVaccines = []; // Array to keep track of created vaccines
 
-    // Check if the vaccinationLog is valid and has DateGiven and tagId
-    if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven || !vaccinationLog[0].tagId) {
-        return next(new AppError('Vaccination log must include at least one entry with DateGiven and tagId', 400, httpstatustext.FAIL));
+    // Check if vaccinationLog has a valid entry for DateGiven
+    if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven) {
+        return next(new AppError('Vaccination log must include at least one entry with DateGiven', 400, httpstatustext.FAIL));
     }
 
-    const tagId = vaccinationLog[0].tagId; // Extract tagId from the first log entry
-    if (tagId) {
-        const animal = await Animal.findOne({ tagId });
-        if (!animal) {
-            return next(new AppError('Animal not found for the provided tagId', 404, httpstatustext.FAIL));
-        }
-
-        // Create the vaccination log for the single animal
-        const newVaccine = new Vaccine({
-            ...vaccineData,
-            vaccinationLog: [{
-                tagId: animal.tagId,
-                DateGiven: vaccinationLog[0].DateGiven,
-                locationShed: vaccinationLog[0].locationShed || animal.locationShed,
-                vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
-                createdAt: new Date()
-            }],
-            owner: userId,
-            animalId: animal._id
-        });
-
-        await newVaccine.save();
-        createdVaccines.push(newVaccine);
-
-        return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
-    }
-
-    // Handle locationShed logic
-    const locationShed = vaccinationLog[0].locationShed;
+    // Check if locationShed is provided
+    const locationShed = vaccinationLog[0].locationShed; // Assuming locationShed is part of the first log entry
     if (locationShed) {
+        // Fetch all animals in the specified shed
         const animals = await Animal.find({ locationShed });
+        
         if (animals.length === 0) {
             return next(new AppError('No animals found in the specified location shed', 404, httpstatustext.FAIL));
         }
 
+        // Create vaccine for each animal in the shed
         for (const animal of animals) {
             const newVaccine = new Vaccine({
-                ...vaccineData,
+                ...vaccineData,  // Include vaccine name and givenEvery
                 vaccinationLog: [{
-                    tagId: animal.tagId,
+                    tagId: animal.tagId,  // Adding the tagId from the animal
                     DateGiven: vaccinationLog[0].DateGiven,
-                    locationShed: vaccinationLog[0].locationShed,
+                    locationShed: locationShed, // Using the location shed from the request
                     vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
                     createdAt: new Date()
                 }],
                 owner: userId,
-                animalId: animal._id
+                animalId: animal._id // Reference to the animal
             });
 
             await newVaccine.save();
-            createdVaccines.push(newVaccine);
+            createdVaccines.push(newVaccine);  // Store the created vaccine in the array
         }
 
         return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
     }
 
+    // If neither tagId nor locationShed is provided, return an error
     return next(new AppError('Either tagId or locationShed must be provided', 400, httpstatustext.FAIL));
 });
+
 
 
 
