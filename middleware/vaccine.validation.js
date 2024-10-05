@@ -20,9 +20,9 @@ const vaccineValidationRules = () => {
             .notEmpty().withMessage('Date Given is required')  
             .isISO8601().withMessage('Date Given must be a valid date')  ,
          
-        body('vaccinationLog.*.locationShed')  
-            .optional()  
-            .isString().withMessage('Location Shed must be a string'),  
+        // body('vaccinationLog.*.locationShed')  
+        //     .optional()  
+        //     .isString().withMessage('Location Shed must be a string'),  
 
        
 
