@@ -86,20 +86,40 @@ const deletebreeding= asyncwrapper(async(req,res,next)=>{
 })
 
 
-const updatebreeding = asyncwrapper(async (req,res,next)=>{
+// const updatebreeding = asyncwrapper(async (req,res,next)=>{
+//     const userId = req.userId;
+//     const breedingId = req.params.breedingId;
+//     const updatedData = req.body;
+
+//     let breeding = await Breeding.findOne({ _id: breedingId, owner: userId });
+//         if (!breeding) {
+//             const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
+//             return next(error);
+//         }
+//         breeding = await Breeding.findOneAndUpdate({ _id: breedingId }, updatedData, { new: true });
+
+//         res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
+// })
+
+const updatebreeding = asyncwrapper(async (req, res, next) => {
     const userId = req.userId;
     const breedingId = req.params.breedingId;
     const updatedData = req.body;
 
     let breeding = await Breeding.findOne({ _id: breedingId, owner: userId });
-        if (!breeding) {
-            const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
-            return next(error);
-        }
-        breeding = await Breeding.findOneAndUpdate({ _id: breedingId }, updatedData, { new: true });
+    if (!breeding) {
+        const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
+        return next(error);
+    }
 
-        res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
-})
+    // Manually update fields instead of using findOneAndUpdate
+    Object.assign(breeding, updatedData);  // Update the fields
+    
+    await breeding.save();  // Trigger pre-save middleware
+    
+    res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
+});
+
 
 module.exports={
     updatebreeding,
