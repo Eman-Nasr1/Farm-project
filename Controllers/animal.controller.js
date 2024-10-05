@@ -6,17 +6,57 @@ const AppError=require('../utilits/AppError');
 const User=require('../Models/user.model');
 //const jwt = require('jsonwebtoken');
 
-const getallanimals =asyncwrapper(async(req,res)=>{
+// const getallanimals =asyncwrapper(async(req,res)=>{
 
+//     const userId = req.userId;
+//     const query=req.query;
+//     const limit=query.limit||10;
+//     const page=query.page||1;
+//     const skip=(page-1)*limit;
+
+//     const animals= await Animal.find({ owner: userId },{"__v":false}).limit(limit).skip(skip);
+//     res.json({status:httpstatustext.SUCCESS,data:{animals}});
+// })
+
+const getallanimals = asyncwrapper(async (req, res) => {
     const userId = req.userId;
-    const query=req.query;
-    const limit=query.limit||10;
-    const page=query.page||1;
-    const skip=(page-1)*limit;
+    const query = req.query;
+    const limit = query.limit || 10;
+    const page = query.page || 1;
+    const skip = (page - 1) * limit;
 
-    const animals= await Animal.find({ owner: userId },{"__v":false}).limit(limit).skip(skip);
-    res.json({status:httpstatustext.SUCCESS,data:{animals}});
-})
+    // Create filter object
+    const filter = { owner: userId };
+
+    // Add filters based on query parameters
+    if (query.animalType) {
+        filter.animalType = query.animalType; // e.g., "goat" or "sheep"
+    }
+
+    if (query.gender) {
+        filter.gender = query.gender; // e.g., "male" or "female"
+    }
+
+    if (query.locationShed) {
+        filter.locationShed = query.locationShed; // e.g., "Shed A"
+    }
+
+    if (query.breed) {
+        filter.breed = query.breed; // e.g., "balady"
+    }
+
+    // Find animals with applied filters
+    const animals = await Animal.find(filter, { "__v": false })
+        .limit(limit)
+        .skip(skip);
+
+    // Return response
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: { animals }
+    });
+});
+
 
 const getsnigleanimal =asyncwrapper(async( req, res, next)=>{
     // console.log(req.params);
