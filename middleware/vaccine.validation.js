@@ -12,9 +12,9 @@ const vaccineValidationRules = () => {
             .notEmpty().withMessage('Given Every must be specified')  
             .isInt({ min: 1 }).withMessage('Given Every must be a positive integer'),  
 
-        body('vaccinationLog.*.tagId')  
-        .optional() 
-            .isString().withMessage('Tag ID must be a string'),  
+        // body('vaccinationLog.*.tagId')  
+        //      .optional() 
+        //     .isString().withMessage('Tag ID must be a string'),  
 
         body('vaccinationLog.*.DateGiven')  
             .notEmpty().withMessage('Date Given is required')  
