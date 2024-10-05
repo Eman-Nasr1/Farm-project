@@ -77,7 +77,13 @@ const addvaccine = asyncwrapper(async (req, res, next) => {
         // Create and save a new vaccine for each found animal  
         for (const animal of animals) {  
             const newVaccine = new Vaccine({   
-                vaccinationLog: [log],  // Pass the current log as vaccinationLog  
+                vaccinationLog: [{
+                    tagId: animal.tagId,  // Adding the tagId from the animal
+                    DateGiven: vaccinationLog[0].DateGiven,
+                    locationShed: locationShed, // Using the location shed from the request
+                    vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
+                    createdAt: new Date()
+                }],  // Pass the current log as vaccinationLog  
                 ...vaccineData, // Includes global vaccine data  
                 ...vaccineData2, // Includes vaccine data from the current log  
                 owner: userId,  
