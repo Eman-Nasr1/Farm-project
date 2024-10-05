@@ -51,84 +51,92 @@ const getsinglevaccine = asyncwrapper(async (req, res, next) => {
     return res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
 });
 
-// const addvaccine = asyncwrapper(async (req, res, next) => {  
-//     const userId = req.userId;  
-//     const { vaccinationLog, ...vaccineData } = req.body;  
-//     const createdVaccines = []; // Array to keep track of created vaccines  
-//     // Check if vaccinationLog is empty  
-//     if (!vaccinationLog || vaccinationLog.length === 0) {  
-//         return next(new AppError('Vaccination log is empty', 400, httpstatustext.FAIL));  
-//     }  
-//     // Process each log in the vaccinationLog array  
-//     for (const log of vaccinationLog) {  
-//         const { tagId, ...vaccineData2 } = log; // Destructure tagId and other vaccine data  
-//         const animal = await Animal.findOne({ tagId });  
-    
-//         if (!animal) {  
-//             const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);  
-//             return next(error);  
-//         }  
-//         // Create and save the new vaccine  
-//         const newVaccine = new Vaccine({ 
-//             vaccinationLog,
-//             ...vaccineData, // Includes global vaccine data  
-//             ...vaccineData2, // Includes vaccine data from the current log  
-//             owner: userId,  
-//             animalId: animal._id  
-//         });  
-//         await newVaccine.save();  
-//         createdVaccines.push(newVaccine); // Store the created vaccine in the array  
-//     }  
-
-//     // Send back the array of created vaccines  
-//     res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });  
-// });
-
-const addvaccine = asyncwrapper(async (req, res, next) => {
+const addvaccine = asyncwrapper(async (req, res, next) => {  
     const userId = req.userId;  
     const { vaccinationLog, ...vaccineData } = req.body;  
-    const createdVaccines = []; // Array to keep track of created vaccines
+    const createdVaccines = []; // Array to keep track of created vaccines  
+  
+    // Check if vaccinationLog is empty  
+    if (!vaccinationLog || vaccinationLog.length === 0) {  
+        return next(new AppError('Vaccination log is empty', 400, httpstatustext.FAIL));  
+    }  
+    
+    // Process each log in the vaccinationLog array  
+    for (const log of vaccinationLog) {  
+        const { locationShed, ...vaccineData2 } = log; // Destructure locationShed and other vaccine data  
 
-    // Check if vaccinationLog has a valid entry for DateGiven
-    if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven) {
-        return next(new AppError('Vaccination log must include at least one entry with DateGiven', 400, httpstatustext.FAIL));
-    }
+        // Find all animals that match the provided locationShed  
+        const animals = await Animal.find({ locationShed });  
 
-    // Check if locationShed is provided
-    const locationShed = vaccinationLog[0].locationShed; // Assuming locationShed is part of the first log entry
-    if (locationShed) {
-        // Fetch all animals in the specified shed
-        const animals = await Animal.find({ locationShed });
-        
-        if (animals.length === 0) {
-            return next(new AppError('No animals found in the specified location shed', 404, httpstatustext.FAIL));
-        }
+        // If no animals are found for the provided locationShed  
+        if (animals.length === 0) {  
+            const error = AppError.create('No animals found for the provided locationShed', 404, httpstatustext.FAIL);  
+            return next(error);  
+        }  
 
-        // Create vaccine for each animal in the shed
-        for (const animal of animals) {
-            const newVaccine = new Vaccine({
-                ...vaccineData,  // Include vaccine name and givenEvery
-                vaccinationLog: [{
-                    tagId: animal.tagId,  // Adding the tagId from the animal
-                    DateGiven: vaccinationLog[0].DateGiven,
-                    locationShed: locationShed, // Using the location shed from the request
-                    vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
-                    createdAt: new Date()
-                }],
-                owner: userId,
-                animalId: animal._id // Reference to the animal
-            });
+        // Create and save a new vaccine for each found animal  
+        for (const animal of animals) {  
+            const newVaccine = new Vaccine({   
+                vaccinationLog: [log],  // Pass the current log as vaccinationLog  
+                ...vaccineData, // Includes global vaccine data  
+                ...vaccineData2, // Includes vaccine data from the current log  
+                owner: userId,  
+                animalId: animal._id  
+            });  
+            await newVaccine.save();  
+            createdVaccines.push(newVaccine); // Store the created vaccine in the array  
+        }  
+    }  
 
-            await newVaccine.save();
-            createdVaccines.push(newVaccine);  // Store the created vaccine in the array
-        }
-
-        return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
-    }
-
-    // If neither tagId nor locationShed is provided, return an error
-    return next(new AppError('Either tagId or locationShed must be provided', 400, httpstatustext.FAIL));
+    // Send back the array of created vaccines  
+    res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });  
 });
+
+// const addvaccine = asyncwrapper(async (req, res, next) => {
+//     const userId = req.userId;  
+//     const { vaccinationLog, ...vaccineData } = req.body;  
+//     const createdVaccines = []; // Array to keep track of created vaccines
+
+//     // Check if vaccinationLog has a valid entry for DateGiven
+//     if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven) {
+//         return next(new AppError('Vaccination log must include at least one entry with DateGiven', 400, httpstatustext.FAIL));
+//     }
+
+//     // Check if locationShed is provided
+//     const locationShed = vaccinationLog[0].locationShed; // Assuming locationShed is part of the first log entry
+//     if (locationShed) {
+//         // Fetch all animals in the specified shed
+//         const animals = await Animal.find({ locationShed });
+        
+//         if (animals.length === 0) {
+//             return next(new AppError('No animals found in the specified location shed', 404, httpstatustext.FAIL));
+//         }
+
+//         // Create vaccine for each animal in the shed
+//         for (const animal of animals) {
+//             const newVaccine = new Vaccine({
+//                 ...vaccineData,  // Include vaccine name and givenEvery
+//                 vaccinationLog: [{
+//                     tagId: animal.tagId,  // Adding the tagId from the animal
+//                     DateGiven: vaccinationLog[0].DateGiven,
+//                     locationShed: locationShed, // Using the location shed from the request
+//                     vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
+//                     createdAt: new Date()
+//                 }],
+//                 owner: userId,
+//                 animalId: animal._id // Reference to the animal
+//             });
+
+//             await newVaccine.save();
+//             createdVaccines.push(newVaccine);  // Store the created vaccine in the array
+//         }
+
+//         return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
+//     }
+
+//     // If neither tagId nor locationShed is provided, return an error
+//     return next(new AppError('Either tagId or locationShed must be provided', 400, httpstatustext.FAIL));
+// });
 
 
 
