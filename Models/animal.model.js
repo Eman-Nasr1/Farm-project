@@ -70,9 +70,7 @@ const Animalschema=new mongoose.Schema(
 )
 
 
-// Animalschema.index({ owner: 1 });
-// Animalschema.index({ createdAt: 1 });
-// Animalschema.index({ animalType: 1 });
+
 
 Animalschema.pre('save', function(next) {
    // console.log('Before saving - brithDate:', this.brithDate);
@@ -87,6 +85,22 @@ Animalschema.pre('save', function(next) {
  
     next();
     
+});
+
+
+// Pre-update hook to update ageInDays when birthDate is updated
+Animalschema.pre('findOneAndUpdate', async function(next) {
+    const update = this.getUpdate();
+    
+    // If birthDate is being updated
+    if (update.birthDate) {
+        const birthDate = new Date(update.birthDate);
+        const currentDate = new Date();
+        const ageInMilliseconds = currentDate - birthDate;
+        update.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
+    }
+
+    next();
 });
 
 module.exports= mongoose.model('Animal',Animalschema)

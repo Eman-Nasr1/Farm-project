@@ -72,4 +72,29 @@ Vaccineschema.pre('save', function(next) {
     next();  
 });
 
+Vaccineschema.pre('findOneAndUpdate', async function(next) {
+    const update = this.getUpdate();
+
+    // Check if givenEvery or vaccinationLog.DateGiven are being updated
+    if (update.givenEvery || (update.vaccinationLog && update.vaccinationLog.length > 0)) {
+        const vaccine = await this.model.findOne(this.getQuery());
+
+        if (vaccine) {
+            const givenEvery = update.givenEvery || vaccine.givenEvery;
+
+            // Iterate over vaccinationLog entries if they exist
+            if (update.vaccinationLog) {
+                update.vaccinationLog.forEach((log, index) => {
+                    if (log.DateGiven) {
+                        update.vaccinationLog[index].vallidTell = new Date(log.DateGiven.getTime() + (givenEvery * 24 * 60 * 60 * 1000));
+                    }
+                });
+            }
+        }
+    }
+    
+    next();
+});
+
+
 module.exports= mongoose.model('Vaccine',Vaccineschema)
