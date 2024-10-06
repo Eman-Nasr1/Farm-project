@@ -12,7 +12,25 @@ const getallamating =asyncwrapper(async(req,res)=>{
     const page=query.page||1;
     const skip=(page-1)*limit;
 
-    const mating= await Mating.find({ owner: userId },{"__v":false}).limit(limit).skip(skip);
+    const filter = { owner: userId };
+
+    if (query.tagId) {
+        filter.tagId = query.tagId; // e.g., 
+    }
+
+    if (query.matingDate) {
+        filter.matingDate = query.matingDate; // e.g., 
+    }
+
+    if (query.sonarDate) {
+        filter.sonarDate = query.sonarDate; // e.g., 
+    }
+
+    if (query.sonarRsult) {
+        filter.sonarRsult = query.sonarRsult; // e.g., 
+    }
+
+    const mating= await Mating.find(filter,{"__v":false}).limit(limit).skip(skip);
     res.json({status:httpstatustext.SUCCESS,data:{mating}});
 })
 
