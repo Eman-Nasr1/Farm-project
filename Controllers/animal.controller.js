@@ -106,6 +106,7 @@ const deleteanimal= asyncwrapper(async(req,res)=>{
 
 const uploadAnimalData = asyncwrapper(async (req, res, next) => {
     const file = req.file;
+    console.log(req.file); 
     if (!file) {
         return next(AppError.create('No file uploaded', 400, httpstatustext.FAIL));
     }
