@@ -10,5 +10,6 @@ router.post('/api/animal/addanimal',verifytoken, animalValidationRules(), valida
 router.patch('/api/animal/updateanimal/:tagId',verifytoken, validateAnimal,animalcontroller.updateanimal);
 router.delete('/api/animal/deleteanimal/:tagId',verifytoken,animalcontroller.deleteanimal);
 
+router.post('/api/animal/uploadanimaldata', verifytoken, animalcontroller.uploadAnimalData);
 
 module.exports=router;

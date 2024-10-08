@@ -4,6 +4,11 @@ const httpstatustext=require('../utilits/httpstatustext');
 const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const User=require('../Models/user.model');
+const xlsx = require('xlsx');
+const multer = require('multer');
+
+const storage = multer.memoryStorage(); // Use memory storage to get the file buffer
+const upload = multer({ storage: storage }).single('file');
 //const jwt = require('jsonwebtoken');
 
 // const getallanimals =asyncwrapper(async(req,res)=>{
@@ -98,10 +103,61 @@ const deleteanimal= asyncwrapper(async(req,res)=>{
 
 })
 
+
+const uploadAnimalData = asyncwrapper(async (req, res, next) => {
+    const file = req.file;
+    if (!file) {
+        return next(AppError.create('No file uploaded', 400, httpstatustext.FAIL));
+    }
+
+    // Parse the Excel file
+    const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    
+    // Convert Excel sheet to JSON
+    const animalData = xlsx.utils.sheet_to_json(sheet);
+    
+    if (!animalData.length) {
+        return next(AppError.create('No valid data in the uploaded file', 400, httpstatustext.FAIL));
+    }
+
+    // Loop through the data and create animal records
+    const createdAnimals = [];
+    for (const animal of animalData) {
+        const newAnimal = new Animal({
+            tagId: row[0],
+            breed: row[1],
+            animalType: row[2],
+            birthDate: new Date(row[3]),
+            purchaseData: new Date(row[4]),
+            purchasePrice: row[5],
+            traderName: row[6],
+            motherId: row[7],
+            fatherId: row[8],
+            locationShed: row[9],
+            gender: row[10],
+            female_Condition: row[11],
+            Teething: row[12],
+            owner: req.userId // Ensure the owner is set to the authenticated user
+        });
+
+        await newAnimal.save();
+        createdAnimals.push(newAnimal);
+    }
+
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: { animals: createdAnimals }
+    });
+});
+
 module.exports={
     getallanimals,
     getsnigleanimal,
     addanimal,
     updateanimal,
-    deleteanimal
+    deleteanimal,
+    uploadAnimalData,
+    
 }
