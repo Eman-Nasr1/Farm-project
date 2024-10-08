@@ -123,24 +123,23 @@ const updatebreeding = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
+    // Update top-level fields (excluding birthEntries)
+    Object.assign(breeding, updatedData);
+
     // If the deliveryDate is being updated, adjust the weaning dates for birth entries
     if (updatedData.deliveryDate && breeding.birthEntries.length > 0) {
         const newDeliveryDate = new Date(updatedData.deliveryDate);
         const weaningDate = new Date(newDeliveryDate);
         weaningDate.setMonth(weaningDate.getMonth() + 2);
 
-        updatedData.birthEntries = breeding.birthEntries.map(entry => ({
-            ...entry.toObject(), // Convert Mongoose subdocument to plain JS object
-            expectedWeaningDate: weaningDate,  // Set new weaning date
-        }));
+        breeding.birthEntries = breeding.birthEntries.map(entry => {
+            entry.expectedWeaningDate = weaningDate;
+            return entry;
+        });
     }
 
-    // Perform the update
-    breeding = await Breeding.findOneAndUpdate(
-        { _id: breedingId, owner: userId },
-        updatedData,
-        { new: true, runValidators: true }
-    );
+    // Save the updated breeding document
+    await breeding.save();
 
     res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
 });
