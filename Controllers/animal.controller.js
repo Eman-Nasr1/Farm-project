@@ -8,7 +8,11 @@ const xlsx = require('xlsx');
 const multer = require('multer');
 
 const storage = multer.memoryStorage(); // Use memory storage to get the file buffer
-const upload = multer({ storage: storage }).single('file');
+const upload = multer({ 
+    storage: storage, 
+    limits: { fileSize: 10000000 }  // Limit to 10MB (adjust as needed)
+}).single('file');
+
 //const jwt = require('jsonwebtoken');
 
 // const getallanimals =asyncwrapper(async(req,res)=>{
@@ -106,7 +110,7 @@ const deleteanimal= asyncwrapper(async(req,res)=>{
 
 const uploadAnimalData = asyncwrapper(async (req, res, next) => {
     const file = req.file;
-    console.log(req.file); 
+
     if (!file) {
         return next(AppError.create('No file uploaded', 400, httpstatustext.FAIL));
     }
