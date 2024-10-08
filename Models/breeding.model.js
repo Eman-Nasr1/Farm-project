@@ -73,27 +73,27 @@ breedingSchema.pre('save', function(next) {
 });
 
 // Pre-update middleware to handle updates to deliveryDate
-breedingSchema.pre('findOneAndUpdate', async function(next) {
-    const update = this.getUpdate();
+// breedingSchema.pre('findOneAndUpdate', async function(next) {
+//     const update = this.getUpdate();
     
-    if (update.deliveryDate) {
-        // Fetch the current document being updated
-        const docToUpdate = await this.model.findOne(this.getQuery());
+//     if (update.deliveryDate) {
+//         // Fetch the current document being updated
+//         const docToUpdate = await this.model.findOne(this.getQuery());
 
-        if (docToUpdate && docToUpdate.birthEntries.length > 0) {
-            // Calculate new weaning dates if deliveryDate is being updated
-            const updatedWeaningDate = new Date(update.deliveryDate);
-            updatedWeaningDate.setMonth(updatedWeaningDate.getMonth() + 2);
+//         if (docToUpdate && docToUpdate.birthEntries.length > 0) {
+//             // Calculate new weaning dates if deliveryDate is being updated
+//             const updatedWeaningDate = new Date(update.deliveryDate);
+//             updatedWeaningDate.setMonth(updatedWeaningDate.getMonth() + 2);
             
-            // Update each birthEntry's expectedWeaningDate
-            update.birthEntries = docToUpdate.birthEntries.map(entry => {
-                entry.expectedWeaningDate = updatedWeaningDate;
-                return entry;
-            });
-        }
-    }
+//             // Update each birthEntry's expectedWeaningDate
+//             update.birthEntries = docToUpdate.birthEntries.map(entry => {
+//                 entry.expectedWeaningDate = updatedWeaningDate;
+//                 return entry;
+//             });
+//         }
+//     }
     
-    next();
-});
+//     next();
+// });
 
 module.exports = mongoose.model('Breeding', breedingSchema);
