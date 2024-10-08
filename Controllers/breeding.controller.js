@@ -96,39 +96,55 @@ const deletebreeding= asyncwrapper(async(req,res,next)=>{
 })
 
 
-const updatebreeding = asyncwrapper(async (req,res,next)=>{
-    const userId = req.userId;
-    const breedingId = req.params.breedingId;
-    const updatedData = req.body;
-
-    let breeding = await Breeding.findOne({ _id: breedingId, owner: userId });
-        if (!breeding) {
-            const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
-            return next(error);
-        }
-        breeding = await Breeding.findOneAndUpdate({ _id: breedingId }, updatedData, { new: true });
-
-        res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
-})
-
-// const updatebreeding = asyncwrapper(async (req, res, next) => {
+// const updatebreeding = asyncwrapper(async (req,res,next)=>{
 //     const userId = req.userId;
 //     const breedingId = req.params.breedingId;
 //     const updatedData = req.body;
 
-//     let breeding = await Breeding.findOneAndUpdate(
-//         { _id: breedingId, owner: userId },
-//         updatedData,
-//         { new: true, runValidators: true }
-//     );
+//     let breeding = await Breeding.findOne({ _id: breedingId, owner: userId });
+//         if (!breeding) {
+//             const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
+//             return next(error);
+//         }
+//         breeding = await Breeding.findOneAndUpdate({ _id: breedingId }, updatedData, { new: true });
 
-//     if (!breeding) {
-//         const error = AppError.create('breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
-//         return next(error);
-//     }
+//         res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
+// })
 
-//     res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
-// });
+const updatebreeding = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;
+    const breedingId = req.params.breedingId;
+    const updatedData = req.body;
+
+    // Find the existing breeding document
+    let breeding = await Breeding.findOne({ _id: breedingId, owner: userId });
+    if (!breeding) {
+        const error = AppError.create('Breeding information not found or unauthorized to update', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // If the deliveryDate is being updated, adjust the weaning dates for birth entries
+    if (updatedData.deliveryDate && breeding.birthEntries.length > 0) {
+        const newDeliveryDate = new Date(updatedData.deliveryDate);
+        const weaningDate = new Date(newDeliveryDate);
+        weaningDate.setMonth(weaningDate.getMonth() + 2);
+
+        updatedData.birthEntries = breeding.birthEntries.map(entry => ({
+            ...entry.toObject(), // Convert Mongoose subdocument to plain JS object
+            expectedWeaningDate: weaningDate,  // Set new weaning date
+        }));
+    }
+
+    // Perform the update
+    breeding = await Breeding.findOneAndUpdate(
+        { _id: breedingId, owner: userId },
+        updatedData,
+        { new: true, runValidators: true }
+    );
+
+    res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
+});
+
 
 
 
