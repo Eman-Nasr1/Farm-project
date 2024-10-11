@@ -12,6 +12,7 @@ const storage = multer.memoryStorage(); // Use memory storage to get the file bu
 const upload = multer({ storage: storage }).single('file');
 
 const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
+    console.log(`Owner ID: ${req.userId}`);
     upload(req, res, async function (err) {
         if (err) {
             return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
@@ -64,7 +65,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             }
 
             // Create new animal object
-            console.log(`Owner ID: ${req.userId}`);
+            
             const newAnimal = new Animal({
                 tagId,
                 breed,
