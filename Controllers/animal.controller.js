@@ -31,12 +31,12 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
 
             // Skip empty rows
             if (!row || row.length === 0 || row.every(cell => cell === undefined || cell === null || cell === '')) {
-                console.log(`Skipping empty row ${i}`);
+               // console.log(`Skipping empty row ${i}`);
                 continue;
             }
 
             // Log the row for debugging
-            console.log(`Processing row ${i}:`, row);
+          //  console.log(`Processing row ${i}:`, row);
 
             // Validate essential fields
             const tagId = row[0]?.toString().trim();
@@ -64,6 +64,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             }
 
             // Create new animal object
+            console.log(`Owner ID: ${req.userId}`);
             const newAnimal = new Animal({
                 tagId,
                 breed,
