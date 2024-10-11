@@ -12,72 +12,77 @@ const storage = multer.memoryStorage(); // Use memory storage to get the file bu
 const upload = multer({ storage: storage }).single('file');
 
 const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
-    // Use multer to handle the uploaded file
     upload(req, res, async function (err) {
         if (err) {
             return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
         }
 
-        // Get the file buffer from multer
         const fileBuffer = req.file.buffer;
-
-        // Read the Excel file using xlsx
         const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-
-        // Assuming the data is in the first sheet
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
         // Convert sheet to JSON format (array of arrays)
         const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
-        // Start iterating from index 1, assuming row 0 is the header
+        // Iterate over the rows (skip header row at index 0)
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
 
-            // Log the row index for debugging purposes
+            // Log the row for debugging
             console.log(`Processing row ${i}:`, row);
 
-            // Validate essential fields by their index
-            if (!row[0] || !row[1] || !row[2] || !row[10]) {
-                return next(AppError.create(`Required fields are missing in row ${i}`, 400, httpstatustext.FAIL));
-            }
+            // Validate essential fields
+            const tagId = row[0]?.toString().trim(); // Ensure tagId is a string and trimmed
+            const breed = row[1]?.toString().trim();
+            const animalType = row[2]?.toString().trim();
+            const birthDate = new Date(row[3]?.toString().trim());
+            const purchaseData = new Date(row[4]?.toString().trim());
+            const purchasePrice = row[5]?.toString().trim();
+            const traderName = row[6]?.toString().trim();
+            const motherId = row[7]?.toString().trim();
+            const fatherId = row[8]?.toString().trim();
+            const locationShed = row[9]?.toString().trim();
+            const gender = row[10]?.toString().trim();
+            const female_Condition = row[11]?.toString().trim();
+            const teething = row[12]?.toString().trim();
 
-            // Parse dates
-            const birthDate = new Date(row[3]);
-            const purchaseData = new Date(row[4]);
+            // Check if required fields are present
+            if (!tagId || !breed || !animalType || !gender) {
+                return next(AppError.create(`Missing required fields in row ${i}`, 400, httpstatustext.FAIL));
+            }
 
             // Check if dates are valid
             if (isNaN(birthDate.getTime()) || isNaN(purchaseData.getTime())) {
                 return next(AppError.create(`Invalid date format in row ${i}`, 400, httpstatustext.FAIL));
             }
 
-            // Create a new Animal instance using the row data
+            // Create new animal object
             const newAnimal = new Animal({
-                tagId: row[0],
-                breed: row[1],
-                animalType: row[2],
-                birthDate: birthDate,
-                purchaseData: purchaseData,
-                purchasePrice: row[5],
-                traderName: row[6],
-                motherId: row[7],
-                fatherId: row[8],
-                locationShed: row[9],
-                gender: row[10],
-                female_Condition: row[11],
-                Teething: row[12],
-                owner: req.userId // Assuming the user is authenticated
+                tagId,
+                breed,
+                animalType,
+                birthDate,
+                purchaseData,
+                purchasePrice,
+                traderName,
+                motherId,
+                fatherId,
+                locationShed,
+                gender,
+                female_Condition,
+                Teething: teething,
+                owner: req.userId
             });
 
-            // Save the animal to the database
+            // Save the new animal document
             await newAnimal.save();
         }
 
-        // Send success response
+        // Return success response
         res.json({
             status: httpstatustext.SUCCESS,
-            message: 'Animals imported successfully'
+            message: 'Animals imported successfully',
         });
     });
 });
