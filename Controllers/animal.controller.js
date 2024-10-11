@@ -29,11 +29,17 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
 
+            // Skip empty rows
+            if (!row || row.length === 0 || row.every(cell => cell === undefined || cell === null || cell === '')) {
+                console.log(`Skipping empty row ${i}`);
+                continue;
+            }
+
             // Log the row for debugging
             console.log(`Processing row ${i}:`, row);
 
             // Validate essential fields
-            const tagId = row[0]?.toString().trim(); // Ensure tagId is a string and trimmed
+            const tagId = row[0]?.toString().trim();
             const breed = row[1]?.toString().trim();
             const animalType = row[2]?.toString().trim();
             const birthDate = new Date(row[3]?.toString().trim());
@@ -49,12 +55,12 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
 
             // Check if required fields are present
             if (!tagId || !breed || !animalType || !gender) {
-                return next(AppError.create(`Missing required fields in row ${i}`, 400, httpstatustext.FAIL));
+                return next(AppError.create(`Required fields are missing in row ${i + 1}`, 400, httpstatustext.FAIL));
             }
 
             // Check if dates are valid
             if (isNaN(birthDate.getTime()) || isNaN(purchaseData.getTime())) {
-                return next(AppError.create(`Invalid date format in row ${i}`, 400, httpstatustext.FAIL));
+                return next(AppError.create(`Invalid date format in row ${i + 1}`, 400, httpstatustext.FAIL));
             }
 
             // Create new animal object
