@@ -28,18 +28,37 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
-        // Convert sheet to JSON format
-        const data = xlsx.utils.sheet_to_json(worksheet);
+        // Convert sheet to JSON format (array of arrays)
+        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
-        // Iterate over the JSON data and insert into Animal collection
-        for (let row of data) {
-            // You can adjust this based on the column names in your Excel
+        // Start iterating from index 1, assuming row 0 is the header
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+
+            // Log the row index for debugging purposes
+            console.log(`Processing row ${i}:`, row);
+
+            // Validate essential fields by their index
+            if (!row[0] || !row[1] || !row[2] || !row[10]) {
+                return next(AppError.create(`Required fields are missing in row ${i}`, 400, httpstatustext.FAIL));
+            }
+
+            // Parse dates
+            const birthDate = new Date(row[3]);
+            const purchaseData = new Date(row[4]);
+
+            // Check if dates are valid
+            if (isNaN(birthDate.getTime()) || isNaN(purchaseData.getTime())) {
+                return next(AppError.create(`Invalid date format in row ${i}`, 400, httpstatustext.FAIL));
+            }
+
+            // Create a new Animal instance using the row data
             const newAnimal = new Animal({
                 tagId: row[0],
                 breed: row[1],
                 animalType: row[2],
-                birthDate: new Date(row[3]),
-                purchaseData: new Date(row[4]),
+                birthDate: birthDate,
+                purchaseData: purchaseData,
                 purchasePrice: row[5],
                 traderName: row[6],
                 motherId: row[7],
@@ -48,18 +67,22 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 gender: row[10],
                 female_Condition: row[11],
                 Teething: row[12],
-                owner: req.userId // assuming the user is authenticated and userId is available
+                owner: req.userId // Assuming the user is authenticated
             });
 
-            await newAnimal.save(); // Save each animal to the database
+            // Save the animal to the database
+            await newAnimal.save();
         }
 
+        // Send success response
         res.json({
             status: httpstatustext.SUCCESS,
             message: 'Animals imported successfully'
         });
     });
 });
+
+
 
 
 // const getallanimals =asyncwrapper(async(req,res)=>{
