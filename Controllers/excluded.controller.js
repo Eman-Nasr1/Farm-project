@@ -13,7 +13,17 @@ const getallexcluded =asyncwrapper(async(req,res)=>{
     const page=query.page||1;
     const skip=(page-1)*limit;
 
-    const excluded= await Excluded.find({ owner: userId },{"__v":false}).limit(limit).skip(skip);
+    const filter = { owner: userId };
+
+    if (query.tagId) {
+        filter.tagId = query.tagId; // e.g., 
+    }
+    
+    if (query.excludedType) {
+        filter.excludedType = query.excludedType; // e.g., 
+    }
+
+    const excluded= await Excluded.find(filter,{"__v":false}).limit(limit).skip(skip);
     res.json({status:httpstatustext.SUCCESS,data:{excluded}});
 })
 

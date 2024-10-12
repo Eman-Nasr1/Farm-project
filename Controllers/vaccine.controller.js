@@ -13,7 +13,26 @@ const getallVaccine =asyncwrapper(async(req,res)=>{
     const page=query.page||1;
     const skip=(page-1)*limit;
 
-    const vaccine= await Vaccine.find({ owner: userId },{"__v":false}).limit(limit).skip(skip);
+    const filter = { owner: userId };
+    const vaccinationLogFilter = {};
+
+    if (query.tagId) {
+        vaccinationLogFilter["vaccinationLog.tagId"] = query.tagId; // e.g., filter by tagId
+    }
+
+    if (query.locationShed) {
+        vaccinationLogFilter["vaccinationLog.locationShed"] = query.locationShed; // e.g., filter by locationShed
+    }
+
+    if (query.DateGiven) {
+        vaccinationLogFilter["vaccinationLog.DateGiven"] = { $gte: new Date(query.DateGiven) }; // filter by DateGiven
+    }
+    
+    if (query.vaccineName) {
+        filter.vaccineName = query.vaccineName; // e.g., 
+    }
+
+    const vaccine= await Vaccine.find(filter,{"__v":false}).limit(limit).skip(skip);
     res.json({status:httpstatustext.SUCCESS,data:{vaccine}});
 })
 
