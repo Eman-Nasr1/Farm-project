@@ -11,7 +11,8 @@ const mongoose = require('mongoose');
 
 const generateDailyyyCounts = asyncwrapper(async (req, res, next) => {  
     const userId = new mongoose.Types.ObjectId(req.userId);   
-    let animalType = req.body.animalType;  
+    let animalType = req.params.animalType;
+ 
    
     // Ensure animalType is an array  
     if (!Array.isArray(animalType)) {  

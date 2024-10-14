@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 
 const generateCombinedReport = asyncwrapper(async (req, res, next) => {
     const userId = new mongoose.Types.ObjectId(req.userId);
-    const { animalType, dateFrom, dateTo } = req.body;
+    const { animalType, dateFrom, dateTo } = req.params;
 
     const fromDate = new Date(dateFrom);
     fromDate.setUTCHours(0, 0, 0, 0);
