@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 
 const generateCombinedReport = asyncwrapper(async (req, res, next) => {
     const userId = new mongoose.Types.ObjectId(req.userId);
+    console.log(req.query);
     const { animalType, dateFrom, dateTo } = req.query;
 
     const fromDate = new Date(dateFrom);
