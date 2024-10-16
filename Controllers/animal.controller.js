@@ -95,99 +95,56 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
     });
 });
 
-const exportAnimalsToExcel = asyncwrapper(async (req, res) => {
+const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     const userId = req.userId;
+    
+    // Fetch animals based on filter logic
     const query = req.query;
-    const limit = query.limit || 10;
-    const page = query.page || 1;
-    const skip = (page - 1) * limit;
-
-    // Create filter object
     const filter = { owner: userId };
+    if (query.animalType) filter.animalType = query.animalType;
+    if (query.gender) filter.gender = query.gender;
+    if (query.locationShed) filter.locationShed = query.locationShed;
+    if (query.breed) filter.breed = query.breed;
+    if (query.tagId) filter.tagId = query.tagId;
 
-    // Add filters based on query parameters
-    if (query.animalType) {
-        filter.animalType = query.animalType; // e.g., "goat" or "sheep"
-    }
+    const animals = await Animal.find(filter);
 
-    if (query.gender) {
-        filter.gender = query.gender; // e.g., "male" or "female"
-    }
+    // Create a new workbook and sheet
+    const workbook = xlsx.utils.book_new();
+    const worksheetData = [['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Purchase Data', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']];
 
-    if (query.locationShed) {
-        filter.locationShed = query.locationShed; // e.g., "Shed A"
-    }
-
-    if (query.breed) {
-        filter.breed = query.breed; // e.g., "balady"
-    }
-
-    if (query.tagId) {
-        filter.tagId = query.tagId; // e.g., specific animal tag
-    }
-
-    // Find animals with applied filters
-    const animals = await Animal.find(filter, { "__v": false })
-        .limit(limit)
-        .skip(skip);
-
-    if (!animals || animals.length === 0) {
-        return res.status(404).json({
-            status: httpstatustext.FAIL,
-            message: 'No animals found to export'
-        });
-    }
-
-    // Prepare data for Excel in the desired format
-    const animalData = animals.map((animal) => {
-        const tagId = animal.tagId?.toString().trim();
-        const breed = animal.breed?.toString().trim();
-        const animalType = animal.animalType?.toString().trim();
-        const birthDate = animal.birthDate ? new Date(animal.birthDate).toISOString().split('T')[0] : '';
-        const purchaseData = animal.purchaseData ? new Date(animal.purchaseData).toISOString().split('T')[0] : '';
-        const purchasePrice = animal.purchasePrice?.toString().trim();
-        const traderName = animal.traderName?.toString().trim();
-        const motherId = animal.motherId?.toString().trim();
-        const fatherId = animal.fatherId?.toString().trim();
-        const locationShed = animal.locationShed?.toString().trim();
-        const gender = animal.gender?.toString().trim();
-        const female_Condition = animal.female_Condition?.toString().trim();
-        const teething = animal.Teething?.toString().trim();
-
-        return {
-            tagId,
-            breed,
-            animalType,
-            birthDate,
-            purchaseData,
-            purchasePrice,
-            traderName,
-            motherId,
-            fatherId,
-            locationShed,
-            gender,
-            female_Condition,
-            teething
-        };
+    animals.forEach(animal => {
+        worksheetData.push([
+            animal.tagId,
+            animal.breed,
+            animal.animalType,
+            animal.birthDate.toISOString().split('T')[0],  // Format as YYYY-MM-DD
+            animal.purchaseData.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            animal.purchasePrice,
+            animal.traderName,
+            animal.motherId,
+            animal.fatherId,
+            animal.locationShed,
+            animal.gender,
+            animal.female_Condition,
+            animal.Teething
+        ]);
     });
 
-    // Create a new worksheet
-    const worksheet = xlsx.utils.json_to_sheet(animalData);
+    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Animals');
 
-    // Create a new workbook and append the worksheet
-    const workbook = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(workbook, worksheet, "Animals");
+    // Write to buffer
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-    // Write the Excel file to a buffer
-    const excelBuffer = xlsx.write(workbook, { type: "buffer", bookType: "xlsx" });
-
-    // Set response headers for file download
-    res.setHeader('Content-Disposition', 'attachment; filename=animals.xlsx');
+    // Set the proper headers for file download
+    res.setHeader('Content-Disposition', 'attachment; filename="animals.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
-    // Send the Excel file as a response
-    res.send(excelBuffer);
+    // Send the file as a response
+    res.send(buffer);
 });
+
 
 
 
