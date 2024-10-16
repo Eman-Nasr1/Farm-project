@@ -97,7 +97,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
 
 const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     const userId = req.userId;
-    
+
     // Fetch animals based on filter logic
     const query = req.query;
     const filter = { owner: userId };
@@ -111,23 +111,25 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
 
     // Create a new workbook and sheet
     const workbook = xlsx.utils.book_new();
-    const worksheetData = [['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Purchase Data', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']];
+    const worksheetData = [
+        ['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Purchase Data', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']
+    ];
 
     animals.forEach(animal => {
         worksheetData.push([
             animal.tagId,
             animal.breed,
             animal.animalType,
-            animal.birthDate.toISOString().split('T')[0],  // Format as YYYY-MM-DD
-            animal.purchaseData.toISOString().split('T')[0], // Format as YYYY-MM-DD
-            animal.purchasePrice,
-            animal.traderName,
-            animal.motherId,
-            animal.fatherId,
-            animal.locationShed,
-            animal.gender,
-            animal.female_Condition,
-            animal.Teething
+            animal.birthDate ? animal.birthDate.toISOString().split('T')[0] : '',  // Check if birthDate exists
+            animal.purchaseData ? animal.purchaseData.toISOString().split('T')[0] : '',  // Check if purchaseData exists
+            animal.purchasePrice || '',  // Fallback to empty string if undefined
+            animal.traderName || '',      // Fallback to empty string if undefined
+            animal.motherId || '',        // Fallback to empty string if undefined
+            animal.fatherId || '',        // Fallback to empty string if undefined
+            animal.locationShed || '',    // Fallback to empty string if undefined
+            animal.gender || '',          // Fallback to empty string if undefined
+            animal.female_Condition || '', // Fallback to empty string if undefined
+            animal.Teething || ''         // Fallback to empty string if undefined
         ]);
     });
 
@@ -144,6 +146,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     // Send the file as a response
     res.send(buffer);
 });
+
 
 
 
