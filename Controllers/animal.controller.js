@@ -221,8 +221,9 @@ const getsnigleanimal =asyncwrapper(async( req, res, next)=>{
 
 
 const addanimal = asyncwrapper(async (req, res,next) => {
+    console.log(req.body);
     const userId = req.userId;
-   // console.log(userId);
+   // 
    
     const newanimal = new Animal({ ...req.body, owner: userId }); // Assuming Course is a model for courses
     await newanimal.save();
