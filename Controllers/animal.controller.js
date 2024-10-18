@@ -112,7 +112,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     // Create a new workbook and sheet
     const workbook = xlsx.utils.book_new();
     const worksheetData = [
-        ['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Purchase Data', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']
+        ['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Purchase Date', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']
     ];
 
     animals.forEach(animal => {
