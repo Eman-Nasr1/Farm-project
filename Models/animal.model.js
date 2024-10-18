@@ -23,7 +23,7 @@ const Animalschema=new mongoose.Schema(
         ageInDays: {
             type: Number
         },
-        purchaseData:{
+        purchaseDate:{
             type: Date
         },
         purchasePrice:{
