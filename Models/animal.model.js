@@ -73,19 +73,16 @@ const Animalschema=new mongoose.Schema(
 
 
 Animalschema.pre('save', function(next) {
-   // console.log('Before saving - brithDate:', this.brithDate);
+    console.log('Final Animal Object:', this);
     if (this.birthDate) {
         const birthDate = new Date(this.birthDate);
         const currentDate = new Date();
         const ageInMilliseconds = currentDate - birthDate;
-       this.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
-       
-      // console.log('Calculated ageInDays:', this.ageInDays);
+        this.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
     }
- 
     next();
-    
 });
+
 
 
 // Pre-update hook to update ageInDays when birthDate is updated
