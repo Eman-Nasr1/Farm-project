@@ -73,7 +73,7 @@ const Animalschema=new mongoose.Schema(
 
 
 Animalschema.pre('save', function(next) {
-    console.log('Final Animal Object:', this);
+   // console.log('Final Animal Object:', this);
     if (this.birthDate) {
         const birthDate = new Date(this.birthDate);
         const currentDate = new Date();

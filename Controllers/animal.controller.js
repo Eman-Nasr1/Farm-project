@@ -221,7 +221,7 @@ const getsnigleanimal =asyncwrapper(async( req, res, next)=>{
 
 
 const addanimal = asyncwrapper(async (req, res,next) => {
-    console.log(req.body);
+    // console.log(req.body);
     const userId = req.userId;
    // 
    
