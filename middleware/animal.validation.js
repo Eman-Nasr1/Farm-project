@@ -13,11 +13,11 @@ const animalValidationRules = () => {
         body('animalType')  
             .notEmpty().withMessage('Animal type is required')  
             .isIn(['goat', 'sheep']).withMessage('Animal type must be either goat or sheep'),  
-        body('birthDate')  
-            .optional()  ,
+        // body('birthDate')  
+        //     .optional()  ,
            
-        body('purchaseDate')  
-            .optional() , 
+        // body('purchaseDate')  
+        //     .optional() , 
              
         body('purchasePrice')  
             .optional()  ,
