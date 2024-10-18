@@ -44,7 +44,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             const breed = row[1]?.toString().trim();
             const animalType = row[2]?.toString().trim();
             const birthDate = new Date(row[3]?.toString().trim());
-            const purchaseData = new Date(row[4]?.toString().trim());
+            const purchaseDate = new Date(row[4]?.toString().trim());
             const purchasePrice = row[5]?.toString().trim();
             const traderName = row[6]?.toString().trim();
             const motherId = row[7]?.toString().trim();
@@ -71,7 +71,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 breed,
                 animalType,
                 birthDate,
-                purchaseData,
+                purchaseDate,
                 purchasePrice,
                 traderName,
                 motherId,
@@ -121,7 +121,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
             animal.breed,
             animal.animalType,
             animal.birthDate ? animal.birthDate.toISOString().split('T')[0] : '',  // Check if birthDate exists
-            animal.purchaseData ? animal.purchaseData.toISOString().split('T')[0] : '',  // Check if purchaseData exists
+            animal.purchaseDate ? animal.purchaseDate.toISOString().split('T')[0] : '',  // Check if purchaseData exists
             animal.purchasePrice || '',  // Fallback to empty string if undefined
             animal.traderName || '',      // Fallback to empty string if undefined
             animal.motherId || '',        // Fallback to empty string if undefined
