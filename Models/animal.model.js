@@ -78,14 +78,11 @@ Animalschema.pre('findOneAndUpdate', function (next) {
     const update = this.getUpdate();
 
     // Check if birthDate is being updated
-    if (update.birthDate) {
-        const birthDate = new Date(update.birthDate);
+    if (update.$set && update.$set.birthDate) {
+        const birthDate = new Date(update.$set.birthDate);
         const currentDate = new Date();
         const ageInMilliseconds = currentDate - birthDate;
-        update.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
-
-        // Set ageInDays in the update object directly
-        this.findOneAndUpdate({}, { ageInDays: update.ageInDays });
+        update.$set.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
     }
 
     next();
