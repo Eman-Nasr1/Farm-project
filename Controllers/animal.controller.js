@@ -231,11 +231,15 @@ const addanimal = asyncwrapper(async (req, res,next) => {
 })
 
 
-const updateanimal = asyncwrapper(async (req,res)=>{
-    const animalId=req.params.tagId;
-      const updatedanimal= await Animal.updateOne({ _id: animalId },{$set: {...req.body}});
-      return  res.status(200).json({status:httpstatustext.SUCCESS,data:{animal:updatedanimal}})
-})
+const updateanimal = asyncwrapper(async (req, res) => {
+    const animalId = req.params.tagId;
+    const updatedanimal = await Animal.findOneAndUpdate(
+        { _id: animalId },
+        { $set: { ...req.body } },
+        { new: true, runValidators: true }
+    );
+    return res.status(200).json({ status: httpstatustext.SUCCESS, data: { animal: updatedanimal } });
+});
 
 
 const deleteanimal= asyncwrapper(async(req,res)=>{
