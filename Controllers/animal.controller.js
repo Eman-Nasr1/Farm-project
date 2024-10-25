@@ -112,7 +112,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     // Create a new workbook and sheet
     const workbook = xlsx.utils.book_new();
     const worksheetData = [
-        ['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Purchase Date', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']
+        ['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Age in Days', 'Purchase Date', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']
     ];
 
     animals.forEach(animal => {
@@ -120,16 +120,17 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
             animal.tagId,
             animal.breed,
             animal.animalType,
-            animal.birthDate ? animal.birthDate.toISOString().split('T')[0] : '',  // Check if birthDate exists
-            animal.purchaseDate ? animal.purchaseDate.toISOString().split('T')[0] : '',  // Check if purchaseData exists
-            animal.purchasePrice || '',  // Fallback to empty string if undefined
-            animal.traderName || '',      // Fallback to empty string if undefined
-            animal.motherId || '',        // Fallback to empty string if undefined
-            animal.fatherId || '',        // Fallback to empty string if undefined
-            animal.locationShed || '',    // Fallback to empty string if undefined
-            animal.gender || '',          // Fallback to empty string if undefined
-            animal.female_Condition || '', // Fallback to empty string if undefined
-            animal.Teething || ''         // Fallback to empty string if undefined
+            animal.birthDate ? animal.birthDate.toISOString().split('T')[0] : '',
+            animal.ageInDays || '',  // Include ageInDays here
+            animal.purchaseDate ? animal.purchaseDate.toISOString().split('T')[0] : '',
+            animal.purchasePrice || '',
+            animal.traderName || '',
+            animal.motherId || '',
+            animal.fatherId || '',
+            animal.locationShed || '',
+            animal.gender || '',
+            animal.female_Condition || '',
+            animal.Teething || ''
         ]);
     });
 
@@ -146,6 +147,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     // Send the file as a response
     res.send(buffer);
 });
+
 
 
 
