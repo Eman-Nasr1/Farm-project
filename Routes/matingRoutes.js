@@ -11,5 +11,7 @@ router.post('/api/mating/AddMating',verifytoken, matingValidationRules(), valida
 router.patch('/api/mating/UpdateMating/:matingId',verifytoken, matingValidationRules(),  validateMating,matingcontroller.updatemating);
 router.delete('/api/mating/DeleteMating/:matingId',verifytoken,matingcontroller.deletemating);
 
+router.post('/api/mating/import',verifytoken, matingcontroller.importMatingFromExcel);
+router.get('/api/mating/exportmatingToExcel',verifytoken,matingcontroller.exportMatingToExcel);
 
 module.exports=router;

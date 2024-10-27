@@ -4,38 +4,184 @@ const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const Animal=require('../Models/animal.model');
 
-const getallamating =asyncwrapper(async(req,res)=>{
-
+const getallamating = asyncwrapper(async (req, res) => {
     const userId = req.userId;
-    const query=req.query;
-    const limit=query.limit||10;
-    const page=query.page||1;
-    const skip=(page-1)*limit;
+    const query = req.query;
+    const limit = query.limit || 10;
+    const page = query.page || 1;
+    const skip = (page - 1) * limit;
 
     const filter = { owner: userId };
 
     if (query.tagId) {
-        filter.tagId = query.tagId; // e.g., 
+        filter.tagId = query.tagId;
     }
 
     if (query.matingDate) {
-        filter.matingDate = query.matingDate; // e.g., 
+        filter.matingDate = query.matingDate;
     }
 
     if (query.sonarDate) {
-        filter.sonarDate = query.sonarDate; // e.g., 
+        filter.sonarDate = query.sonarDate;
     }
 
     if (query.sonarRsult) {
-        filter.sonarRsult = query.sonarRsult; // e.g., 
+        filter.sonarRsult = query.sonarRsult;
     }
 
-    const mating= await Mating.find(filter,{"__v":false}).limit(limit).skip(skip);
-    res.json({status:httpstatustext.SUCCESS,data:{mating}});
-})
+    // Mongoose aggregate pipeline with a lookup to filter by animalType
+    const mating = await Mating.aggregate([
+        { $match: filter },
+        {
+            $lookup: {
+                from: 'animals', // Collection name for Animal model
+                localField: 'animalId',
+                foreignField: '_id',
+                as: 'animalInfo'
+            }
+        },
+        { $unwind: '$animalInfo' },
+        query.animalType ? { $match: { 'animalInfo.animalType': query.animalType } } : { $match: {} },
+        { $project: { "__v": 0, "animalInfo.__v": 0 } },
+        { $skip: skip },
+        { $limit: limit }
+    ]);
+
+    res.json({ status: httpstatustext.SUCCESS, data: { mating } });
+});
+
 
 
 // in this function getmatingforspacficanimal it will get animal data and mating data 
+
+const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
+
+    upload(req, res, async function (err) {
+        if (err) {
+            return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
+        }
+
+        const fileBuffer = req.file.buffer;
+        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Convert sheet to JSON format (array of arrays)
+        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Iterate over the rows (skip header row at index 0)
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+
+            // Skip empty rows
+            if (!row || row.length === 0 || row.every(cell => cell === undefined || cell === null || cell === '')) {
+               // console.log(`Skipping empty row ${i}`);
+                continue;
+            }
+
+            // Log the row for debugging
+          //  console.log(`Processing row ${i}:`, row);
+
+            // Validate essential fields
+            const tagId = row[0]?.toString().trim();
+            const maleTag_id = row[1]?.toString().trim();
+            const matingType = row[2]?.toString().trim();
+            const matingDate = new Date(row[3]?.toString().trim());
+            const sonarDate = new Date(row[4]?.toString().trim());
+            const sonarRsult = row[5]?.toString().trim();
+           
+
+            // Check if required fields are present
+            if (!tagId || !maleTag_id || !matingType ) {
+                return next(AppError.create(`Required fields are missing in row ${i + 1}`, 400, httpstatustext.FAIL));
+            }
+
+            // Check if dates are valid
+            if (isNaN(birthDate.getTime()) || isNaN(purchaseData.getTime())) {
+                return next(AppError.create(`Invalid date format in row ${i + 1}`, 400, httpstatustext.FAIL));
+            }
+
+            // Create new animal object
+            
+            const newMating = new Mating({
+                tagId,
+                maleTag_id,
+                matingType,
+                matingDate,
+                sonarDate,
+                sonarRsult,
+               
+              
+            });
+
+            // Save the new animal document
+            await newMating.save();
+        }
+
+        // Return success response
+        res.json({
+            status: httpstatustext.SUCCESS,
+            message: 'Mating imported successfully',
+        });
+    });
+});
+
+
+const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;
+
+    // Build the initial filter based on user and query parameters
+    const query = req.query;
+    const filter = { owner: userId };
+    if (query.matingDate) filter.matingDate = query.matingDate;
+    if (query.sonarDate) filter.sonarDate = query.sonarDate;
+    if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
+    if (query.tagId) filter.tagId = query.tagId;
+
+    // Use aggregate to join and filter by animalType
+    const mating = await Mating.aggregate([
+        { $match: filter },
+        {
+            $lookup: {
+                from: 'animals', // Animal collection
+                localField: 'animalId',
+                foreignField: '_id',
+                as: 'animalInfo'
+            }
+        },
+        { $unwind: '$animalInfo' },
+        query.animalType ? { $match: { 'animalInfo.animalType': query.animalType } } : { $match: {} },
+        { $project: { "__v": 0, "animalInfo.__v": 0 } }
+    ]);
+
+    // Create the Excel workbook and sheet
+    const workbook = xlsx.utils.book_new();
+    const worksheetData = [
+        ['Tag ID', 'Male tag Id', 'Mating Date', 'Mating Type', 'Sonar Date', 'Sonar Result', 'Expected Delivery Date']
+    ];
+
+    mating.forEach(m => {
+        worksheetData.push([
+            m.tagId,
+            m.maleTag_id,
+            m.matingDate ? m.matingDate.toISOString().split('T')[0] : '',
+            m.matingType,
+            m.sonarDate ? m.sonarDate.toISOString().split('T')[0] : '',
+            m.sonarRsult || '',
+            m.expectedDeliveryDate ? m.expectedDeliveryDate.toISOString().split('T')[0] : '',
+        ]);
+    });
+
+    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Mating');
+
+    // Write the file to buffer and send as response
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', 'attachment; filename="Mating.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+});
+
 
 const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
@@ -129,6 +275,8 @@ module.exports={
     deletemating,
     addmating,
     getsinglemating,
-    getmatingforspacficanimal
+    getmatingforspacficanimal,
+    importMatingFromExcel,
+    exportMatingToExcel
 
 }
