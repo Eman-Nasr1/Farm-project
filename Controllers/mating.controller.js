@@ -3,6 +3,10 @@ const httpstatustext=require('../utilits/httpstatustext');
 const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const Animal=require('../Models/animal.model');
+const multer = require('multer');
+const xlsx = require('xlsx');
+const storage = multer.memoryStorage();
+
 
 const getallamating = asyncwrapper(async (req, res) => {
     const userId = req.userId;
