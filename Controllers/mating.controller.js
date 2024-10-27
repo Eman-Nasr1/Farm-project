@@ -8,50 +8,35 @@ const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
 
 
-const getallamating = asyncwrapper(async (req, res) => {
+
+const getallamating =asyncwrapper(async(req,res)=>{
+
     const userId = req.userId;
-    const query = req.query;
-    const limit = query.limit || 10;
-    const page = query.page || 1;
-    const skip = (page - 1) * limit;
+    const query=req.query;
+    const limit=query.limit||10;
+    const page=query.page||1;
+    const skip=(page-1)*limit;
 
     const filter = { owner: userId };
 
     if (query.tagId) {
-        filter.tagId = query.tagId;
+        filter.tagId = query.tagId; // e.g., 
     }
 
     if (query.matingDate) {
-        filter.matingDate = query.matingDate;
+        filter.matingDate = query.matingDate; // e.g., 
     }
 
     if (query.sonarDate) {
-        filter.sonarDate = query.sonarDate;
+        filter.sonarDate = query.sonarDate; // e.g., 
     }
 
     if (query.sonarRsult) {
-        filter.sonarRsult = query.sonarRsult;
+        filter.sonarRsult = query.sonarRsult; // e.g., 
     }
 
-    // Mongoose aggregate pipeline with a lookup to filter by animalType
-    const mating = await Mating.aggregate([
-        { $match: filter },
-        {
-            $lookup: {
-                from: 'animals', // Collection name for Animal model
-                localField: 'animalId',
-                foreignField: '_id',
-                as: 'animalInfo'
-            }
-        },
-        { $unwind: '$animalInfo' },
-        query.animalType ? { $match: { 'animalInfo.animalType': query.animalType } } : { $match: {} },
-        { $project: { "__v": 0, "animalInfo.__v": 0 } },
-        { $skip: skip },
-        { $limit: limit }
-    ]);
-
-    res.json({ status: httpstatustext.SUCCESS, data: { mating } });
+    const mating= await Mating.find(filter,{"__v":false}).limit(limit).skip(skip);
+    res.json({status:httpstatustext.SUCCESS,data:{mating}});
 });
 
 
