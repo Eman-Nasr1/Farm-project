@@ -6,6 +6,8 @@ const Animal=require('../Models/animal.model');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
+const upload = multer({ storage: storage }).single('file');
+
 
 const getallamating = asyncwrapper(async (req, res) => {  
     const userId = req.userId;  
@@ -50,10 +52,6 @@ const getallamating = asyncwrapper(async (req, res) => {
     // If no animalType filter is applied, return all mating data  
     res.json({ status: httpstatustext.SUCCESS, data: { mating: matingData } });  
 }); 
-
-
-
-
 
 // in this function getmatingforspacficanimal it will get animal data and mating data 
 
