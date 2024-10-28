@@ -38,7 +38,9 @@ const getallamating = asyncwrapper(async (req, res) => {
         { $skip: skip },
         { $limit: limit }
     ]);
-
+    console.log("Filter:", filter);
+    console.log("Animal Type:", query.animalType);
+    console.log("Results:", mating);
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
 
