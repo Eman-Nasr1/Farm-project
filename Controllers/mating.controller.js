@@ -7,7 +7,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
 
-const getallamating = asyncWrapper(async (req, res) => {  
+const getallamating = asyncwrapper(async (req, res) => {  
     const userId = req.userId;  
     const query = req.query;  
     const limit = query.limit || 10;  
