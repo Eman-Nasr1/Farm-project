@@ -12,33 +12,34 @@ const storage = multer.memoryStorage();
 const getallamating = asyncwrapper(async (req, res) => {
     const userId = req.userId;
     const query = req.query;
-    const limit = parseInt(query.limit, 10) || 10;
-    const page = parseInt(query.page, 10) || 1;
+    const limit = query.limit || 10;
+    const page = query.page || 1;
     const skip = (page - 1) * limit;
 
-    // Initialize the filter with owner ID
     const filter = { owner: userId };
 
-    // Add tag ID, dates, and sonar result if present in query
-    if (query.tagId) filter.tagId = query.tagId;
-    if (query.matingDate) filter.matingDate = new Date(query.matingDate);
-    if (query.sonarDate) filter.sonarDate = new Date(query.sonarDate);
-    if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
+    if (query.tagId) {
+        filter.tagId = query.tagId;
+    }
 
-//     console.log("Filter object for getallamating:", filter);
-//     console.log("Query parameters:", query);
-// console.log("tagId:", query.tagId);
-// console.log("matingDate:", query.matingDate);
-// console.log("sonarDate:", query.sonarDate);
-// console.log("sonarRsult:", query.sonarRsult);
-console.log("animalType:", query.animalType);
+    if (query.matingDate) {
+        filter.matingDate = query.matingDate;
+    }
 
-    // Aggregate pipeline to filter by animal type
+    if (query.sonarDate) {
+        filter.sonarDate = query.sonarDate;
+    }
+
+    if (query.sonarRsult) {
+        filter.sonarRsult = query.sonarRsult;
+    }
+
+    // Mongoose aggregate pipeline with a lookup to filter by animalType
     const mating = await Mating.aggregate([
         { $match: filter },
         {
             $lookup: {
-                from: 'animals',
+                from: 'animals', // Collection name for Animal model
                 localField: 'animalId',
                 foreignField: '_id',
                 as: 'animalInfo'
@@ -50,6 +51,8 @@ console.log("animalType:", query.animalType);
         { $skip: skip },
         { $limit: limit }
     ]);
+
+    console.log("Filter object for getallamating:", filter);
 
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
@@ -133,21 +136,21 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
 
 const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
     const userId = req.userId;
+
+    // Build the initial filter based on user and query parameters
     const query = req.query;
     const filter = { owner: userId };
-
-    if (query.tagId) filter.tagId = query.tagId;
-    if (query.matingDate) filter.matingDate = new Date(query.matingDate);
-    if (query.sonarDate) filter.sonarDate = new Date(query.sonarDate);
+    if (query.matingDate) filter.matingDate = query.matingDate;
+    if (query.sonarDate) filter.sonarDate = query.sonarDate;
     if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
+    if (query.tagId) filter.tagId = query.tagId;
 
-    console.log("Filter object for exportMatingToExcel:", filter);
-
+    // Use aggregate to join and filter by animalType
     const mating = await Mating.aggregate([
         { $match: filter },
         {
             $lookup: {
-                from: 'animals',
+                from: 'animals', // Animal collection
                 localField: 'animalId',
                 foreignField: '_id',
                 as: 'animalInfo'
@@ -179,12 +182,12 @@ const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
     const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Mating');
 
+    // Write the file to buffer and send as response
     const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', 'attachment; filename="Mating.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buffer);
 });
-
 
 
 const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
