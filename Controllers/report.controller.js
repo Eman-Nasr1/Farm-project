@@ -25,7 +25,7 @@ const generatePDF = (data) => {
 
     doc.fontSize(12).text(`Date: ${data.date}`);  
     doc.moveDown();  
-    
+    doc.text(`Animal Type: ${data.animalType}`);  
     doc.text(`Vaccine Log Count: ${data.vaccineLogCount}`);  
     doc.text(`Weight Count: ${data.weightCount}`);  
     doc.text(`Mating Count: ${data.matingCount}`);  
