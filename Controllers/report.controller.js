@@ -25,7 +25,8 @@ const generatePDF = (data) => {
 
     doc.fontSize(12).text(`Date: ${data.date}`);  
     doc.moveDown();  
-    doc.text(`Animal Type: ${data.animalType}`);  
+    doc.text(`Animal Type: ${data.animalType}`); // This line was already present  
+    doc.moveDown();
     doc.text(`Vaccine Log Count: ${data.vaccineLogCount}`);  
     doc.text(`Weight Count: ${data.weightCount}`);  
     doc.text(`Mating Count: ${data.matingCount}`);  
@@ -121,7 +122,7 @@ const generatePDFReport = async (req, res, next) => {
     // Prepare data for the PDF  
     const reportData = {  
         date: today.toISOString().split('T')[0],  
-        animalType,
+        animalType: animalType.join(', '),
         vaccineLogCount: vaccineLogCount[0]?.totalVaccineCount || 0,  
         weightCount: weightCount[0]?.totalWeightCount || 0,  
         matingCount: matingCount[0]?.totalMatingCount || 0,  
