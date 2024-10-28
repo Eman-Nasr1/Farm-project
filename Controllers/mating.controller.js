@@ -34,21 +34,21 @@ const getallamating = asyncwrapper(async (req, res) => {
 
     // Mongoose aggregate pipeline with a lookup to filter by animalType
     const mating = await Mating.aggregate([
-        { $match: { owner: userId } },  // Keep only the owner filter initially
+        { $match: filter },
         {
             $lookup: {
-                from: 'animals',
+                from: 'animals', // Collection name for Animal model
                 localField: 'animalId',
                 foreignField: '_id',
                 as: 'animalInfo'
             }
         },
         { $unwind: '$animalInfo' },
+        query.animalType ? { $match: { 'animalInfo.animalType': query.animalType } } : { $match: {} },
         { $project: { "__v": 0, "animalInfo.__v": 0 } },
         { $skip: skip },
         { $limit: limit }
     ]);
-    
 //console.log('mating',mating);
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
