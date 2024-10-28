@@ -34,6 +34,7 @@ const getallamating =asyncwrapper(async(req,res)=>{
     }
 
     const mating= await Mating.find(filter,{"__v":false}).limit(limit).skip(skip);
+    console.log('mating',mating);
     res.json({status:httpstatustext.SUCCESS,data:{mating}});
 })
 
