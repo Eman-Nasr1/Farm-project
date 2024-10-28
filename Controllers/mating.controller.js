@@ -40,8 +40,8 @@ const getallamating = asyncwrapper(async (req, res) => {
         { $skip: skip },
         { $limit: limit }
     ]);
-    // console.log("query:", query);
-    // console.log("Results:", mating);
+    console.log("query:", query);
+    console.log("Results:", mating);
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
 
