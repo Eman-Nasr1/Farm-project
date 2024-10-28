@@ -10,39 +10,40 @@ const storage = multer.memoryStorage();
 const getallamating = asyncwrapper(async (req, res) => {
     const userId = req.userId;
     const query = req.query;
-    const limit = query.limit || 10;
-    const page = query.page || 1;
+    const limit = parseInt(query.limit) || 10;
+    const page = parseInt(query.page) || 1;
     const skip = (page - 1) * limit;
 
-    // Ensure filter includes the owner and any optional query filters like tagId, matingDate, etc.
+    // Base filter for user ownership
     const filter = { owner: userId };
+
     if (query.tagId) filter.tagId = query.tagId;
-    if (query.matingDate) filter.matingDate = query.matingDate;
-    if (query.sonarDate) filter.sonarDate = query.sonarDate;
+    if (query.matingDate) filter.matingDate = new Date(query.matingDate);
+    if (query.sonarDate) filter.sonarDate = new Date(query.sonarDate);
     if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
 
-    // Mongoose aggregate pipeline with a mandatory animalType filter
+    // Aggregation pipeline for Mating with animalType filtering
     const mating = await Mating.aggregate([
         { $match: filter },
         {
             $lookup: {
-                from: 'animals', // Collection name for Animal model
+                from: 'animals',  // Make sure this matches your Animal collection name
                 localField: 'animalId',
                 foreignField: '_id',
                 as: 'animalInfo'
             }
         },
         { $unwind: '$animalInfo' },
-        { $match: { 'animalInfo.animalType': query.animalType } }, // Mandatory filter for animalType
+        // Mandatory filter by animalType
+        { $match: { 'animalInfo.animalType': query.animalType || "goat" } },
         { $project: { "__v": 0, "animalInfo.__v": 0 } },
         { $skip: skip },
         { $limit: limit }
     ]);
-    console.log("Filter:", filter);
-    console.log("Animal Type:", query.animalType);
-    console.log("Results:", mating);
+
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
+
 
 
 
