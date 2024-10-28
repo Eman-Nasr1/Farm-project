@@ -98,7 +98,7 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
             }
 
             // Check if dates are valid
-            if (isNaN(birthDate.getTime()) || isNaN(purchaseData.getTime())) {
+            if (isNaN(matingDate.getTime()) || isNaN(sonarDate.getTime())) {
                 return next(AppError.create(`Invalid date format in row ${i + 1}`, 400, httpstatustext.FAIL));
             }
 
