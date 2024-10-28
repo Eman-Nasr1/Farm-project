@@ -25,12 +25,12 @@ const getallamating = asyncwrapper(async (req, res) => {
     if (query.sonarDate) filter.sonarDate = new Date(query.sonarDate);
     if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
 
-    console.log("Filter object for getallamating:", filter);
-    console.log("Query parameters:", query);
-console.log("tagId:", query.tagId);
-console.log("matingDate:", query.matingDate);
-console.log("sonarDate:", query.sonarDate);
-console.log("sonarRsult:", query.sonarRsult);
+//     console.log("Filter object for getallamating:", filter);
+//     console.log("Query parameters:", query);
+// console.log("tagId:", query.tagId);
+// console.log("matingDate:", query.matingDate);
+// console.log("sonarDate:", query.sonarDate);
+// console.log("sonarRsult:", query.sonarRsult);
 console.log("animalType:", query.animalType);
 
     // Aggregate pipeline to filter by animal type
