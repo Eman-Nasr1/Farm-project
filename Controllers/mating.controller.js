@@ -14,25 +14,14 @@ const getallamating = asyncwrapper(async (req, res) => {
     const page = query.page || 1;
     const skip = (page - 1) * limit;
 
+    // Ensure filter includes the owner and any optional query filters like tagId, matingDate, etc.
     const filter = { owner: userId };
+    if (query.tagId) filter.tagId = query.tagId;
+    if (query.matingDate) filter.matingDate = query.matingDate;
+    if (query.sonarDate) filter.sonarDate = query.sonarDate;
+    if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
 
-    if (query.tagId) {
-        filter.tagId = query.tagId;
-    }
-
-    if (query.matingDate) {
-        filter.matingDate = query.matingDate;
-    }
-
-    if (query.sonarDate) {
-        filter.sonarDate = query.sonarDate;
-    }
-
-    if (query.sonarRsult) {
-        filter.sonarRsult = query.sonarRsult;
-    }
-
-    // Mongoose aggregate pipeline with a lookup to filter by animalType
+    // Mongoose aggregate pipeline with a mandatory animalType filter
     const mating = await Mating.aggregate([
         { $match: filter },
         {
@@ -44,14 +33,15 @@ const getallamating = asyncwrapper(async (req, res) => {
             }
         },
         { $unwind: '$animalInfo' },
-        query.animalType ? { $match: { 'animalInfo.animalType': query.animalType } } : { $match: {} },
+        { $match: { 'animalInfo.animalType': query.animalType } }, // Mandatory filter for animalType
         { $project: { "__v": 0, "animalInfo.__v": 0 } },
         { $skip: skip },
         { $limit: limit }
     ]);
-//console.log('mating',mating);
+
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
+
 
 
 
