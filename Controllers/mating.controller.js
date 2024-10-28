@@ -7,43 +7,49 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
 
-const getallamating = asyncwrapper(async (req, res) => {
-    const userId = req.userId;
-    const query = req.query;
-    const limit = parseInt(query.limit) || 10;
-    const page = parseInt(query.page) || 1;
-    const skip = (page - 1) * limit;
+const getallamating = asyncWrapper(async (req, res) => {  
+    const userId = req.userId;  
+    const query = req.query;  
+    const limit = query.limit || 10;  
+    const page = query.page || 1;  
+    const skip = (page - 1) * limit;  
 
-    // Base filter for user ownership
-    const filter = { owner: userId };
+    const filter = { owner: userId };  
 
-    if (query.tagId) filter.tagId = query.tagId;
-    if (query.matingDate) filter.matingDate = new Date(query.matingDate);
-    if (query.sonarDate) filter.sonarDate = new Date(query.sonarDate);
-    if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
+    if (query.tagId) {  
+        filter.tagId = query.tagId; // e.g.,   
+    }  
 
-    // Aggregation pipeline for Mating with animalType filtering
-    const mating = await Mating.aggregate([
-        { $match: filter },
-        {
-            $lookup: {
-                from: 'animals',  // Make sure this matches your Animal collection name
-                localField: 'animalId',
-                foreignField: '_id',
-                as: 'animal'
-            }
-        },
-        { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } }, 
-        // Mandatory filter by animalType
-        { $match: { 'animal.animalType': query.animalType || "goat" } },
-        { $project: { "__v": 0, "animal.__v": 0 } },
-        { $skip: skip },
-        { $limit: limit }
-    ]);
-    console.log("query:", query);
-    console.log("Results:", mating);
-    res.json({ status: httpstatustext.SUCCESS, data: { mating } });
-});
+    if (query.matingDate) {  
+        filter.matingDate = query.matingDate; // e.g.,   
+    }  
+
+    if (query.sonarDate) {  
+        filter.sonarDate = query.sonarDate; // e.g.,   
+    }  
+
+    if (query.sonarRsult) {  
+        filter.sonarRsult = query.sonarRsult; // e.g.,   
+    }  
+
+    // Create a query for mating that includes animalType  
+    const matingData = await Mating.find(filter, { "__v": false })  
+        .populate({  
+            path: 'animalId', // This is the field in the Mating schema that references Animal  
+            select: 'animalType' // Select only the animalType field from the Animal model  
+        })  
+        .limit(limit)  
+        .skip(skip);  
+
+    // If animalType is provided in the query, filter the results  
+    if (query.animalType) {  
+        const filteredMatingData = matingData.filter(mating => mating.animalId && mating.animalId.animalType === query.animalType);  
+        return res.json({ status: httpstatustext.SUCCESS, data: { mating: filteredMatingData } });  
+    }  
+
+    // If no animalType filter is applied, return all mating data  
+    res.json({ status: httpstatustext.SUCCESS, data: { mating: matingData } });  
+}); 
 
 
 
