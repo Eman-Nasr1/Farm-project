@@ -30,16 +30,17 @@ const getallamating = asyncwrapper(async (req, res) => {
                 from: 'animals',  // Make sure this matches your Animal collection name
                 localField: 'animalId',
                 foreignField: '_id',
-                as: 'animalInfo'
+                as: 'animal'
             }
         },
-        { $unwind: '$animalInfo' },
+        { $unwind: '$animal' },
         // Mandatory filter by animalType
-        { $match: { 'animalInfo.animalType': query.animalType || "goat" } },
-        { $project: { "__v": 0, "animalInfo.__v": 0 } },
+        { $match: { 'animal.animalType': query.animalType || "goat" } },
+        { $project: { "__v": 0, "animal.__v": 0 } },
         { $skip: skip },
         { $limit: limit }
     ]);
+    console.log("query:", query);
     console.log("Results:", mating);
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
