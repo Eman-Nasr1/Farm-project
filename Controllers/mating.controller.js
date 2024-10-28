@@ -33,15 +33,15 @@ const getallamating = asyncwrapper(async (req, res) => {
                 as: 'animal'
             }
         },
-        { $unwind: '$animal' },
+        { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } }, 
         // Mandatory filter by animalType
         { $match: { 'animal.animalType': query.animalType || "goat" } },
         { $project: { "__v": 0, "animal.__v": 0 } },
         { $skip: skip },
         { $limit: limit }
     ]);
-    console.log("query:", query);
-    console.log("Results:", mating);
+    // console.log("query:", query);
+    // console.log("Results:", mating);
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
 
