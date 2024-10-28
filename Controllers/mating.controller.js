@@ -49,7 +49,7 @@ const getallamating = asyncwrapper(async (req, res) => {
         { $skip: skip },
         { $limit: limit }
     ]);
-
+console.log('mating',mating);
     res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
 
