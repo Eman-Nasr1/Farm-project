@@ -125,8 +125,8 @@ const generatePDF = (data) => {
         <title>Daily Report</title>  
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">  
         <style>  
-            body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }   
-            .report-title { text-align: center; font-size: 20px; margin-bottom: 20px; font-weight: bold; }  
+            body { font-family: Arial, sans-serif;  font-size: 14px; }   
+            .report-title { text-align: center; font-size: 20px; font-weight: bold; }  
             
         </style>  
     </head>  
@@ -143,7 +143,7 @@ const generatePDF = (data) => {
                 </tr>  
             </thead>  
             <tbody>  
-                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount || 0}</td></tr>  
+                <tr><td>Vaccine Log Count</td> <td>${data.vaccineLogCount || 0}</td></tr>  
                 <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>  
                 <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>  
                 <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>  
