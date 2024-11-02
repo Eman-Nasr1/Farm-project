@@ -129,8 +129,8 @@ const generatePDF = (data) => {
         <style>  
             body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }   
             .report-title { text-align: center; font-size: 16px; margin-bottom: 20px; font-weight: bold; }  
-            .table { width: 70%; margin: 0 auto; }  
-            .table td, .table th { padding: 8px; text-align: left; }  
+            .table { width: 100%; margin: 0 auto; }  
+            .table td, .table th { padding: 4px; text-align: left; }  
         </style>  
     </head>  
     <body>  
