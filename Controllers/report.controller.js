@@ -161,7 +161,7 @@ const generatePDF = (data) => {
     `;
 
     const filePath = path.join(__dirname, 'report.pdf');
-    const options = { format: 'A4', orientation: 'portrait', border: '10mm' };
+    const options = { format: 'A4', orientation: 'portrait', border: '15mm' };
 
     return new Promise((resolve, reject) => {
         pdf.create(htmlContent, options).toFile(filePath, (err, res) => {
