@@ -32,7 +32,19 @@ const getallVaccine =asyncwrapper(async(req,res)=>{
         filter.vaccineName = query.vaccineName; // e.g., 
     }
 
-    const vaccine= await Vaccine.find(filter,{"__v":false}).limit(limit).skip(skip);
+    const vaccine = await Vaccine.find(filter, { "__v": false })  
+    .populate({  
+        path: 'animalId', // This is the field in the Mating schema that references Animal  
+        select: 'animalType' // Select only the animalType field from the Animal model  
+    })  
+    .limit(limit)  
+    .skip(skip);  
+
+    if (query.animalType) {  
+        const filteredvaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);  
+        return res.json({ status: httpstatustext.SUCCESS, data: { vaccine: filteredvaccineData } });  
+    }  
+
     res.json({status:httpstatustext.SUCCESS,data:{vaccine}});
 })
 
