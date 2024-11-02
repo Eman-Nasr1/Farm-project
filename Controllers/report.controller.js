@@ -125,10 +125,10 @@ const generatePDF = (data) => {
         <title>Daily Report</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; font-size: 10px; } /* Reduced font size */
-            .report-title { text-align: center; font-size: 18px; margin-bottom: 20px; } /* Smaller title */
-            .table { width: 100%; margin: 0 auto; } /* Center table and use full width */
-            .table td, .table th { padding: 8px; } /* Reduce padding in cells */
+            body { font-family: Arial, sans-serif; margin: 20px; font-size: 15px; } 
+            .report-title { text-align: center; font-size: 18px; margin-bottom: 20px; font-weight: bold; }
+            .table { width: 100%; margin: 0 auto; }
+            .table td, .table th { padding: 8px; text-align: left; } /* Ensure alignment */
         </style>
     </head>
     <body>
@@ -144,14 +144,14 @@ const generatePDF = (data) => {
                 </tr>
             </thead>
             <tbody>
-                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount}</td></tr>
-                <tr><td>Weight Count</td><td>${data.weightCount}</td></tr>
-                <tr><td>Mating Count</td><td>${data.matingCount}</td></tr>
-                <tr><td>Breeding Count</td><td>${data.breedingCount}</td></tr>
-                <tr><td>Total Birth Entries</td><td>${data.totalBirthEntries}</td></tr>
-                <tr><td>Total Males</td><td>${data.totalMales}</td></tr>
-                <tr><td>Total Females</td><td>${data.totalFemales}</td></tr>
-                <tr><td>Total Weanings</td><td>${data.totalWeanings}</td></tr>
+                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount || 0}</td></tr>
+                <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>
+                <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>
+                <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>
+                <tr><td>Total Birth Entries</td><td>${data.totalBirthEntries || 0}</td></tr>
+                <tr><td>Total Males</td><td>${data.totalMales || 0}</td></tr>
+                <tr><td>Total Females</td><td>${data.totalFemales || 0}</td></tr>
+                <tr><td>Total Weanings</td><td>${data.totalWeanings || 0}</td></tr>
             </tbody>
         </table>
     </body>
@@ -159,7 +159,7 @@ const generatePDF = (data) => {
     `;
 
     const filePath = path.join(__dirname, 'report.pdf');
-    const options = { format: 'A4', orientation: 'portrait', border: '10mm' }; // Added border for better spacing
+    const options = { format: 'A4', orientation: 'portrait', border: '10mm' };
 
     return new Promise((resolve, reject) => {
         pdf.create(htmlContent, options).toFile(filePath, (err, res) => {
