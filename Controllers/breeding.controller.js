@@ -22,7 +22,18 @@ const getallBreeding =asyncwrapper(async(req,res)=>{
         filter.deliveryDate = query.deliveryDate; // e.g., 
     }
 
-    const breeding= await Breeding.find(filter,{"__v":false}).limit(limit).skip(skip);
+    const breeding= await Breeding.find(filter,{"__v":false})
+    .populate({  
+        path: 'animalId', // This is the field in the Mating schema that references Animal  
+        select: 'animalType' // Select only the animalType field from the Animal model  
+    })  
+    .limit(limit).skip(skip);
+
+    if (query.animalType) {  
+        const filteredbreedingData = Breeding.filter(breeding => breeding.animalId && breeding.animalId.animalType === query.animalType);  
+        return res.json({ status: httpstatustext.SUCCESS, data: { breeding: filteredbreedingData } });  
+    }  
+
     res.json({status:httpstatustext.SUCCESS,data:{breeding}});
 })
 
