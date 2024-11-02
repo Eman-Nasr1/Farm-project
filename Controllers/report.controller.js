@@ -10,7 +10,6 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');  
 const path = require('path');  
 const pdf = require('html-pdf');
-const { width, height } = require('pdfkit/js/page');
 
 
 // const generatePDF = (data) => {  
@@ -128,8 +127,7 @@ const generatePDF = (data) => {
         <style>  
             body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }   
             .report-title { text-align: center; font-size: 20px; margin-bottom: 20px; font-weight: bold; }  
-            .table { width: 100%; margin: 0 auto; }  
-            .table td, .table th { padding: 8px; text-align: left; } /* Ensure alignment */  
+            
         </style>  
     </head>  
     <body>  
@@ -137,11 +135,11 @@ const generatePDF = (data) => {
         <p><strong>Date:</strong> ${data.date}</p>  
         <p><strong>Animal Type:</strong> ${Array.isArray(data.animalType) ? data.animalType.join(', ') : data.animalType}</p>  
         
-        <table class="table table-bordered">  
-            <thead class="thead-dark">  
+        <table class="table">  
+            <thead >  
                 <tr>  
-                    <th>Metric</th>  
-                    <th>Count</th>  
+                    <th scope="col">Metric</th>  
+                    <th scope="col">Count</th>  
                 </tr>  
             </thead>  
             <tbody>  
@@ -164,12 +162,10 @@ const generatePDF = (data) => {
         format: 'A4',  
         orientation: 'portrait',  
         border: {  
-            width: '90%',
-            height: '90%',
-            // top: '20mm',  
-            // right: '10mm',  
-            // bottom: '10mm',  
-            // left: '10mm'  
+            top: '20mm',  
+            right: '10mm',  
+            bottom: '10mm',  
+            left: '10mm'  
         }  
     };  
 
