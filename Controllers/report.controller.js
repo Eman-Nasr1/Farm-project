@@ -129,7 +129,7 @@ const generatePDF = (data) => {
         <style>  
             body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }   
             .report-title { text-align: center; font-size: 16px; margin-bottom: 20px; font-weight: bold; }  
-            .table { width: 100%; margin: 0 auto; }  
+            .table { width: 70%; margin: 0 auto; }  
             .table td, .table th { padding: 8px; text-align: left; }  
         </style>  
     </head>  
@@ -146,7 +146,7 @@ const generatePDF = (data) => {
                 </tr>  
             </thead>  
             <tbody>  
-                <tr><td>Vaccine Log Count</td><td>3</td></tr>  
+                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount || 0}</td></tr>  
                 <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>  
                 <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>  
                 <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>  
