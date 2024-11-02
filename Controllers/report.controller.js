@@ -132,7 +132,7 @@ const generatePDF = (data) => {
     <body>
         <h2 class="report-title">Daily Report</h2>
         <p><strong>Date:</strong> ${data.date}</p>
-        <p><strong>Animal Type:</strong> ${data.animalType.join(', ')}</p>
+        <p><strong>Animal Type:</strong> ${Array.isArray(data.animalType) ? data.animalType.join(', ') : data.animalType}</p>
         
         <table class="table table-bordered">
             <thead class="thead-dark">
