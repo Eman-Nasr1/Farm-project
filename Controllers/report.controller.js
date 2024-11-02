@@ -260,7 +260,7 @@ const generatePDFReport = async (req, res, next) => {
     };  
 
     // Generate the PDF report  
-    const pdfPath = generatePDF(reportData);  
+    const pdfPath = await generatePDF(reportData);  
 
     // Send the PDF file as a response  
     res.download(pdfPath, 'daily_report.pdf', (err) => {  
