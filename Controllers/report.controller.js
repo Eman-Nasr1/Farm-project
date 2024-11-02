@@ -10,6 +10,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');  
 const path = require('path');  
 const pdf = require('html-pdf');
+const { width, height } = require('pdfkit/js/page');
 
 
 // const generatePDF = (data) => {  
@@ -126,7 +127,7 @@ const generatePDF = (data) => {
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">  
         <style>  
             body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }   
-            .report-title { text-align: center; font-size: 24px; margin-bottom: 20px; font-weight: bold; }  
+            .report-title { text-align: center; font-size: 20px; margin-bottom: 20px; font-weight: bold; }  
             .table { width: 100%; margin: 0 auto; }  
             .table td, .table th { padding: 8px; text-align: left; } /* Ensure alignment */  
         </style>  
@@ -163,10 +164,12 @@ const generatePDF = (data) => {
         format: 'A4',  
         orientation: 'portrait',  
         border: {  
-            top: '20mm',  
-            right: '10mm',  
-            bottom: '10mm',  
-            left: '10mm'  
+            width: '90%',
+            height: '90%',
+            // top: '20mm',  
+            // right: '10mm',  
+            // bottom: '10mm',  
+            // left: '10mm'  
         }  
     };  
 
