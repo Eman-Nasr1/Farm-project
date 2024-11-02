@@ -9,7 +9,7 @@ const mongoose = require('mongoose');
 const PDFDocument = require('pdfkit');  
 const fs = require('fs');  
 const path = require('path');  
-
+const pdf = require('html-pdf');
 
 
 // const generatePDF = (data) => {  
@@ -42,76 +42,130 @@ const path = require('path');
 //     return filePath; // Return the file path for further use  
 // };  
 
-const generatePDF = (data) => {  
-    const doc = new PDFDocument();  
-    const filePath = path.join(__dirname, 'report.pdf'); // Specify the path where you want to save the PDF  
+// const generatePDF = (data) => {  
+//     const doc = new PDFDocument();  
+//     const filePath = path.join(__dirname, 'report.pdf'); // Specify the path where you want to save the PDF  
 
-    // Pipe the PDF into a file  
-    doc.pipe(fs.createWriteStream(filePath));  
+//     // Pipe the PDF into a file  
+//     doc.pipe(fs.createWriteStream(filePath));  
 
-    // Title  
-    doc.fontSize(25).text('Daily Report', { align: 'center' });  
-    doc.moveDown();  
+//     // Title  
+//     doc.fontSize(25).text('Daily Report', { align: 'center' });  
+//     doc.moveDown();  
 
-    // Adding date  
-    doc.fontSize(12).text(`Date: ${data.date}`);  
-    doc.moveDown();  
+//     // Adding date  
+//     doc.fontSize(12).text(`Date: ${data.date}`);  
+//     doc.moveDown();  
 
-    // Table headers  
-    doc.fontSize(14).text('Summary', { underline: true });  
-    doc.moveDown();  
+//     // Table headers  
+//     doc.fontSize(14).text('Summary', { underline: true });  
+//     doc.moveDown();  
 
-    // Draw the headers  
-    const headers = ['Metric', 'Value'];  
-    const headerY = doc.y; // Current y-position for headers  
+//     // Draw the headers  
+//     const headers = ['Metric', 'Value'];  
+//     const headerY = doc.y; // Current y-position for headers  
     
-    // Define the widths  
-    const leftWidth = 160;  
-    const rightWidth = 80;  
+//     // Define the widths  
+//     const leftWidth = 160;  
+//     const rightWidth = 80;  
 
-    // Draw the header row  
-    doc.fontSize(12)  
-       .text(headers[0], 50, headerY) // Metric header  
-       .text(headers[1], 50 + leftWidth, headerY); // Value header  
+//     // Draw the header row  
+//     doc.fontSize(12)  
+//        .text(headers[0], 50, headerY) // Metric header  
+//        .text(headers[1], 50 + leftWidth, headerY); // Value header  
 
-    // Draw line under headers  
-    doc.moveTo(50, headerY + 5)  
-       .lineTo(50 + leftWidth + rightWidth, headerY + 5)  
-       .stroke();  
+//     // Draw line under headers  
+//     doc.moveTo(50, headerY + 5)  
+//        .lineTo(50 + leftWidth + rightWidth, headerY + 5)  
+//        .stroke();  
 
-    // Define the data to be displayed in the table  
-    const rows = [  
-        { metric: 'Animal Type', value: data.animalType },  
-        { metric: 'Vaccine Log Count', value: data.vaccineLogCount },  
-        { metric: 'Weight Count', value: data.weightCount },  
-        { metric: 'Mating Count', value: data.matingCount },  
-        { metric: 'Breeding Count', value: data.breedingCount },  
-        { metric: 'Total Birth Entries', value: data.totalBirthEntries },  
-        { metric: 'Total Males', value: data.totalMales },  
-        { metric: 'Total Females', value: data.totalFemales },  
-        { metric: 'Total Weanings', value: data.totalWeanings }  
-    ];  
+//     // Define the data to be displayed in the table  
+//     const rows = [  
+//         { metric: 'Animal Type', value: data.animalType },  
+//         { metric: 'Vaccine Log Count', value: data.vaccineLogCount },  
+//         { metric: 'Weight Count', value: data.weightCount },  
+//         { metric: 'Mating Count', value: data.matingCount },  
+//         { metric: 'Breeding Count', value: data.breedingCount },  
+//         { metric: 'Total Birth Entries', value: data.totalBirthEntries },  
+//         { metric: 'Total Males', value: data.totalMales },  
+//         { metric: 'Total Females', value: data.totalFemales },  
+//         { metric: 'Total Weanings', value: data.totalWeanings }  
+//     ];  
 
-    // Variables for positioning  
-    const rowHeight = 20; // Height of each row  
-    let yPosition = headerY + 15; // Start position for rows  
+//     // Variables for positioning  
+//     const rowHeight = 20; // Height of each row  
+//     let yPosition = headerY + 15; // Start position for rows  
 
-    // Draw rows  
-    rows.forEach(row => {  
-        doc.text(row.metric, 50, yPosition); // Metric column  
-        doc.text(row.value.toString(), 50 + leftWidth, yPosition); // Value column  
-        yPosition += rowHeight; // Move down for the next row  
+//     // Draw rows  
+//     rows.forEach(row => {  
+//         doc.text(row.metric, 50, yPosition); // Metric column  
+//         doc.text(row.value.toString(), 50 + leftWidth, yPosition); // Value column  
+//         yPosition += rowHeight; // Move down for the next row  
 
-        // Draw line under each row  
-        doc.moveTo(50, yPosition - 5)  
-           .lineTo(50 + leftWidth + rightWidth, yPosition - 5)  
-           .stroke();  
-    });  
+//         // Draw line under each row  
+//         doc.moveTo(50, yPosition - 5)  
+//            .lineTo(50 + leftWidth + rightWidth, yPosition - 5)  
+//            .stroke();  
+//     });  
 
-    // Finalize the PDF and end the stream  
-    doc.end();  
+//     // Finalize the PDF and end the stream  
+//     doc.end();  
 
-    return filePath; // Return the file path for further use  
+//     return filePath; // Return the file path for further use  
+// };
+
+
+const generatePDF = (data) => {
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Daily Report</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .report-title { text-align: center; font-size: 24px; margin-bottom: 20px; }
+        </style>
+    </head>
+    <body>
+        <h2 class="report-title">Daily Report</h2>
+        <p><strong>Date:</strong> ${data.date}</p>
+        <p><strong>Animal Type:</strong> ${data.animalType.join(', ')}</p>
+        
+        <table class="table table-bordered">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Metric</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount}</td></tr>
+                <tr><td>Weight Count</td><td>${data.weightCount}</td></tr>
+                <tr><td>Mating Count</td><td>${data.matingCount}</td></tr>
+                <tr><td>Breeding Count</td><td>${data.breedingCount}</td></tr>
+                <tr><td>Total Birth Entries</td><td>${data.totalBirthEntries}</td></tr>
+                <tr><td>Total Males</td><td>${data.totalMales}</td></tr>
+                <tr><td>Total Females</td><td>${data.totalFemales}</td></tr>
+                <tr><td>Total Weanings</td><td>${data.totalWeanings}</td></tr>
+            </tbody>
+        </table>
+    </body>
+    </html>
+    `;
+
+    const filePath = path.join(__dirname, 'report.pdf');
+
+    const options = { format: 'A4', orientation: 'portrait' };
+
+    return new Promise((resolve, reject) => {
+        pdf.create(htmlContent, options).toFile(filePath, (err, res) => {
+            if (err) reject(err);
+            else resolve(filePath);
+        });
+    });
 };
 
 const generatePDFReport = async (req, res, next) => {  
