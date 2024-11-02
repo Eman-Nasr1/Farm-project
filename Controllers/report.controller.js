@@ -131,7 +131,7 @@ const generatePDF = (data) => {
         </style>  
     </head>  
     <body>  
-        <h2 class="report-title">Daily Report</h2>  
+        <h2 >Daily Report</h2>  
         <p><strong>Date:</strong> ${data.date}</p>  
         <p><strong>Animal Type:</strong> ${Array.isArray(data.animalType) ? data.animalType.join(', ') : data.animalType}</p>  
         
@@ -143,7 +143,10 @@ const generatePDF = (data) => {
                 </tr>  
             </thead>  
             <tbody>  
-                <tr><td>Vaccine Log Count</td> <td>${data.vaccineLogCount || 0}</td></tr>  
+                <tr>
+                <td>Vaccine Log Count</td>
+                 <td>${data.vaccineLogCount || 0}</td>
+                 </tr>  
                 <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>  
                 <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>  
                 <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>  
@@ -161,12 +164,12 @@ const generatePDF = (data) => {
     const options = {  
         format: 'A4',  
         orientation: 'portrait',  
-        border: {  
-            top: '20mm',  
-            right: '10mm',  
-            bottom: '10mm',  
-            left: '10mm'  
-        }  
+        // border: {  
+        //     top: '20mm',  
+        //     right: '10mm',  
+        //     bottom: '10mm',  
+        //     left: '10mm'  
+        // }  
     };  
 
     return new Promise((resolve, reject) => {  
