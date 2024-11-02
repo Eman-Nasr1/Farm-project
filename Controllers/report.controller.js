@@ -146,7 +146,7 @@ const generatePDF = (data) => {
                 </tr>  
             </thead>  
             <tbody>  
-                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount || 0}</td></tr>  
+                <tr><td>Vaccine Log Count</td><td>3</td></tr>  
                 <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>  
                 <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>  
                 <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>  
