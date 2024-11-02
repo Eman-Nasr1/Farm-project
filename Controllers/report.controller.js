@@ -125,8 +125,10 @@ const generatePDF = (data) => {
         <title>Daily Report</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .report-title { text-align: center; font-size: 24px; margin-bottom: 20px; }
+            body { font-family: Arial, sans-serif; margin: 20px; font-size: 10px; } /* Reduced font size */
+            .report-title { text-align: center; font-size: 18px; margin-bottom: 20px; } /* Smaller title */
+            .table { width: 100%; margin: 0 auto; } /* Center table and use full width */
+            .table td, .table th { padding: 8px; } /* Reduce padding in cells */
         </style>
     </head>
     <body>
@@ -157,8 +159,7 @@ const generatePDF = (data) => {
     `;
 
     const filePath = path.join(__dirname, 'report.pdf');
-
-    const options = { format: 'A4', orientation: 'portrait' };
+    const options = { format: 'A4', orientation: 'portrait', border: '10mm' }; // Added border for better spacing
 
     return new Promise((resolve, reject) => {
         pdf.create(htmlContent, options).toFile(filePath, (err, res) => {
@@ -167,7 +168,6 @@ const generatePDF = (data) => {
         });
     });
 };
-
 const generatePDFReport = async (req, res, next) => {  
     const userId = new mongoose.Types.ObjectId(req.userId);  
     let animalType = req.query.animalType;  
