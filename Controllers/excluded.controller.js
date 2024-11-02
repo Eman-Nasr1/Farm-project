@@ -23,7 +23,21 @@ const getallexcluded =asyncwrapper(async(req,res)=>{
         filter.excludedType = query.excludedType; // e.g., 
     }
 
-    const excluded= await Excluded.find(filter,{"__v":false}).limit(limit).skip(skip);
+
+    const excluded = await Excluded.find(filter, { "__v": false })  
+    .populate({  
+        path: 'animalId', // This is the field in the Mating schema that references Animal  
+        select: 'animalType' // Select only the animalType field from the Animal model  
+    })  
+    .limit(limit)  
+    .skip(skip);  
+
+// If animalType is provided in the query, filter the results  
+if (query.animalType) {  
+    const filteredexcludedData = excluded.filter(excluded => excluded.animalId && excluded.animalId.animalType === query.animalType);  
+    return res.json({ status: httpstatustext.SUCCESS, data: { excluded: filteredexcludedData } });  
+}  
+
     res.json({status:httpstatustext.SUCCESS,data:{excluded}});
 })
 
