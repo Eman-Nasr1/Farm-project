@@ -115,58 +115,67 @@ const pdf = require('html-pdf');
 // };
 
 
-const generatePDF = (data) => {
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Daily Report</title>
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; font-size: 15px; } 
-            .report-title { text-align: center; font-size: 18px; margin-bottom: 20px; font-weight: bold; }
-            .table { width: 100%; margin: 0 auto; }
-            .table td, .table th { padding: 8px; text-align: left; } /* Ensure alignment */
-        </style>
-    </head>
-    <body>
-        <h2 class="report-title">Daily Report</h2>
-        <p><strong>Date:</strong> ${data.date}</p>
-        <p><strong>Animal Type:</strong> ${Array.isArray(data.animalType) ? data.animalType.join(', ') : data.animalType}</p>
+const generatePDF = (data) => {  
+    const htmlContent = `  
+    <!DOCTYPE html>  
+    <html lang="en">  
+    <head>  
+        <meta charset="UTF-8">  
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+        <title>Daily Report</title>  
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">  
+        <style>  
+            body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }   
+            .report-title { text-align: center; font-size: 24px; margin-bottom: 20px; font-weight: bold; }  
+            .table { width: 100%; margin: 0 auto; }  
+            .table td, .table th { padding: 8px; text-align: left; } /* Ensure alignment */  
+        </style>  
+    </head>  
+    <body>  
+        <h2 class="report-title">Daily Report</h2>  
+        <p><strong>Date:</strong> ${data.date}</p>  
+        <p><strong>Animal Type:</strong> ${Array.isArray(data.animalType) ? data.animalType.join(', ') : data.animalType}</p>  
         
-        <table class="table table-bordered">
-            <thead class="thead-dark">
-                <tr>
-                    <th>Metric</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount || 0}</td></tr>
-                <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>
-                <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>
-                <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>
-                <tr><td>Total Birth Entries</td><td>${data.totalBirthEntries || 0}</td></tr>
-                <tr><td>Total Males</td><td>${data.totalMales || 0}</td></tr>
-                <tr><td>Total Females</td><td>${data.totalFemales || 0}</td></tr>
-                <tr><td>Total Weanings</td><td>${data.totalWeanings || 0}</td></tr>
-            </tbody>
-        </table>
-    </body>
-    </html>
-    `;
+        <table class="table table-bordered">  
+            <thead class="thead-dark">  
+                <tr>  
+                    <th>Metric</th>  
+                    <th>Count</th>  
+                </tr>  
+            </thead>  
+            <tbody>  
+                <tr><td>Vaccine Log Count</td><td>${data.vaccineLogCount || 0}</td></tr>  
+                <tr><td>Weight Count</td><td>${data.weightCount || 0}</td></tr>  
+                <tr><td>Mating Count</td><td>${data.matingCount || 0}</td></tr>  
+                <tr><td>Breeding Count</td><td>${data.breedingCount || 0}</td></tr>  
+                <tr><td>Total Birth Entries</td><td>${data.totalBirthEntries || 0}</td></tr>  
+                <tr><td>Total Males</td><td>${data.totalMales || 0}</td></tr>  
+                <tr><td>Total Females</td><td>${data.totalFemales || 0}</td></tr>  
+                <tr><td>Total Weanings</td><td>${data.totalWeanings || 0}</td></tr>  
+            </tbody>  
+        </table>  
+    </body>  
+    </html>  
+    `;  
 
-    const filePath = path.join(__dirname, 'report.pdf');
-    const options = { format: 'A4', orientation: 'portrait', border: '10mm' };
+    const filePath = path.join(__dirname, 'report.pdf');  
+    const options = {  
+        format: 'A4',  
+        orientation: 'portrait',  
+        border: {  
+            top: '20mm',  
+            right: '10mm',  
+            bottom: '10mm',  
+            left: '10mm'  
+        }  
+    };  
 
-    return new Promise((resolve, reject) => {
-        pdf.create(htmlContent, options).toFile(filePath, (err, res) => {
-            if (err) reject(err);
-            else resolve(filePath);
-        });
-    });
+    return new Promise((resolve, reject) => {  
+        pdf.create(htmlContent, options).toFile(filePath, (err, res) => {  
+            if (err) reject(err);  
+            else resolve(filePath);  
+        });  
+    });  
 };
 const generatePDFReport = async (req, res, next) => {  
     const userId = new mongoose.Types.ObjectId(req.userId);  
