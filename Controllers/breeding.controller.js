@@ -30,7 +30,7 @@ const getallBreeding =asyncwrapper(async(req,res)=>{
     .limit(limit).skip(skip);
 
     if (query.animalType) {  
-        const filteredbreedingData = Breeding.filter(breeding => breeding.animalId && breeding.animalId.animalType === query.animalType);  
+        const filteredbreedingData = breeding.filter(breeding => breeding.animalId && breeding.animalId.animalType === query.animalType);  
         return res.json({ status: httpstatustext.SUCCESS, data: { breeding: filteredbreedingData } });  
     }  
 
