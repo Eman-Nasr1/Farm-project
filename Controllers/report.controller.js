@@ -127,7 +127,7 @@ const generatePDF = (data) => {
         <title>Daily Report</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; font-size: 10px; } 
+            body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; } 
             .report-title { text-align: center; font-size: 16px; margin-bottom: 20px; font-weight: bold; width: 100%; }
             .table { width: 100%; margin: 0 auto; }
             .table td, .table th { padding: 8px; text-align: left; }
@@ -161,7 +161,7 @@ const generatePDF = (data) => {
     `;
 
     const filePath = path.join(__dirname, 'report.pdf');
-    const options = { format: 'A4', orientation: 'portrait', border: '5mm' };
+    const options = { format: 'A4', orientation: 'portrait'};
 
     return new Promise((resolve, reject) => {
         pdf.create(htmlContent, options).toFile(filePath, (err, res) => {
