@@ -128,7 +128,8 @@ const addBreeding = asyncWrapper(async (req, res, next) => {
                 gender: entry.gender,  
                 owner: userId,  
                 motherId: motherAnimal._id,  // Set the motherId  
-                fatherId: fatherId // Set the fatherId from the last mating record  
+                fatherId: fatherId, // Set the fatherId from the last mating record  
+                locationShed: motherAnimal.locationShed,
             });  
 
             // Save the new animal document  
