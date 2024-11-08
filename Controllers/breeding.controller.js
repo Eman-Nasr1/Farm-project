@@ -90,10 +90,10 @@ const getsinglebreeding = asyncwrapper(async (req, res, next) => {
 //     res.json({ status: httpstatustext.SUCCESS, data: { breeding: newBreeding } });
 // })
 
-const addBreeding = asyncwrapper(async (req, res, next) => {  
+const addBreeding = asyncWrapper(async (req, res, next) => {  
     const userId = req.userId;  
 
-    // Extract tagId from the request body along with the Breeding data  
+    // Extract tagId from the request body along with the breeding data  
     const { tagId, birthEntries, ...breedingData } = req.body;  
 
     // Find the animal with the provided tagId  
@@ -107,8 +107,14 @@ const addBreeding = asyncwrapper(async (req, res, next) => {
     const lastMating = await Mating.findOne({ animalId: motherAnimal._id }).sort({ createdAt: -1 });  
     const fatherId = lastMating ? lastMating.maleTag_id : null; // Get the father's tagId from the last mating record  
 
-    // Create the new Breeding document  
-    const newBreeding = new Breeding({ ...breedingData, owner: userId, tagId, animalId: motherAnimal._id });  
+    // Create the new Breeding document with birthEntries included  
+    const newBreeding = new Breeding({   
+        ...breedingData,   
+        owner: userId,   
+        tagId,   
+        animalId: motherAnimal._id,   
+        birthEntries // Include birthEntries here  
+    });  
     await newBreeding.save();  
 
     // Insert each birth entry as a new Animal  
@@ -117,13 +123,12 @@ const addBreeding = asyncwrapper(async (req, res, next) => {
             const newAnimal = new Animal({  
                 tagId: entry.tagId,  
                 breed: motherAnimal.breed, // Mother's breed  
-                animalType: motherAnimal.animalType, // Assuming this is provided in each birth entry  
+                animalType: entry.animalType, // Assuming this is provided in each birth entry  
                 birthDate: new Date(), // Set birth date to current date or entry birth date  
                 gender: entry.gender,  
                 owner: userId,  
                 motherId: motherAnimal._id,  // Set the motherId  
-                fatherId: fatherId, // Set the fatherId from the last mating record 
-                locationShed: motherAnimal.locationShed,
+                fatherId: fatherId // Set the fatherId from the last mating record  
             });  
 
             // Save the new animal document  
