@@ -124,10 +124,10 @@ const addBreeding = asyncwrapper(async (req, res, next) => {
                 tagId: entry.tagId,  
                 breed: motherAnimal.breed, // Mother's breed  
                 animalType: motherAnimal.animalType, // Assuming this is provided in each birth entry  
-                birthDate: new Date(), // Set birth date to current date or entry birth date  
+                birthDate: breeding.deliveryDate, // Set birth date to current date or entry birth date  
                 gender: entry.gender,  
                 owner: userId,  
-                motherId: motherAnimal._id,  // Set the motherId  
+                motherId: motherAnimal.tagId,  // Set the motherId  
                 fatherId: fatherId, // Set the fatherId from the last mating record  
                 locationShed: motherAnimal.locationShed,
             });  
