@@ -70,25 +70,68 @@ const getsinglebreeding = asyncwrapper(async (req, res, next) => {
 });
 
 
-const addBreeding = asyncwrapper(async (req, res,next) => {
-    const userId = req.userId;
+// const addBreeding = asyncwrapper(async (req, res,next) => {
+//     const userId = req.userId;
 
-    // Extract tagId from the request body along with the Breeding data
-    const { tagId, ...breedingData } = req.body;
+//     // Extract tagId from the request body along with the Breeding data
+//     const { tagId, ...breedingData } = req.body;
 
-    // Find the animal with the provided tagId
-    const animal = await Animal.findOne({ tagId });
-    if (!animal) {
-        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
-        return next(error);
-    }
-    const newBreeding = new Breeding({ ...breedingData, owner: userId, tagId, animalId: animal._id });
+//     // Find the animal with the provided tagId
+//     const animal = await Animal.findOne({ tagId });
+//     if (!animal) {
+//         const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
+//         return next(error);
+//     }
+//     const newBreeding = new Breeding({ ...breedingData, owner: userId, tagId, animalId: animal._id });
 
-    await newBreeding.save();
+//     await newBreeding.save();
 
-    res.json({ status: httpstatustext.SUCCESS, data: { breeding: newBreeding } });
-})
+//     res.json({ status: httpstatustext.SUCCESS, data: { breeding: newBreeding } });
+// })
 
+const addBreeding = asyncwrapper(async (req, res, next) => {  
+    const userId = req.userId;  
+
+    // Extract tagId from the request body along with the Breeding data  
+    const { tagId, birthEntries, ...breedingData } = req.body;  
+
+    // Find the animal with the provided tagId  
+    const motherAnimal = await Animal.findOne({ tagId });  
+    if (!motherAnimal) {  
+        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);  
+        return next(error);  
+    }  
+
+    // Fetch the last mating record for the mother animal  
+    const lastMating = await Mating.findOne({ animalId: motherAnimal._id }).sort({ createdAt: -1 });  
+    const fatherId = lastMating ? lastMating.maleTag_id : null; // Get the father's tagId from the last mating record  
+
+    // Create the new Breeding document  
+    const newBreeding = new Breeding({ ...breedingData, owner: userId, tagId, animalId: motherAnimal._id });  
+    await newBreeding.save();  
+
+    // Insert each birth entry as a new Animal  
+    if (birthEntries && birthEntries.length > 0) {  
+        for (const entry of birthEntries) {  
+            const newAnimal = new Animal({  
+                tagId: entry.tagId,  
+                breed: motherAnimal.breed, // Mother's breed  
+                animalType: motherAnimal.animalType, // Assuming this is provided in each birth entry  
+                birthDate: new Date(), // Set birth date to current date or entry birth date  
+                gender: entry.gender,  
+                owner: userId,  
+                motherId: motherAnimal._id,  // Set the motherId  
+                fatherId: fatherId, // Set the fatherId from the last mating record 
+                locationShed: motherAnimal.locationShed,
+            });  
+
+            // Save the new animal document  
+            await newAnimal.save();  
+        }  
+    }  
+
+    res.json({ status: httpstatustext.SUCCESS, data: { breeding: newBreeding } });  
+});
 
 const deletebreeding= asyncwrapper(async(req,res,next)=>{
     const userId = req.userId;
