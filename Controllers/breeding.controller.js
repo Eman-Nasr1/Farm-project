@@ -90,7 +90,7 @@ const getsinglebreeding = asyncwrapper(async (req, res, next) => {
 //     res.json({ status: httpstatustext.SUCCESS, data: { breeding: newBreeding } });
 // })
 
-const addBreeding = asyncWrapper(async (req, res, next) => {  
+const addBreeding = asyncwrapper(async (req, res, next) => {  
     const userId = req.userId;  
 
     // Extract tagId from the request body along with the breeding data  
