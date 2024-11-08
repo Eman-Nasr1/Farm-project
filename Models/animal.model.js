@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const User = require('../Models/user.model');
-
+const Breeding = require('../Models/breeding.model');
+const Mating = require('../Models/mating.model');
+const Weight = require('../Models/weight.model');
+const Vaccine=require('../Models/vaccine.model');
 const Animalschema = new mongoose.Schema({
     tagId: {
         type: String,
@@ -86,6 +89,23 @@ Animalschema.pre('findOneAndUpdate', function (next) {
     }
 
     next();
+});
+
+// Cascade delete related documents in other collections
+Animalschema.pre('remove', async function (next) {
+    try {
+        // Delete related records in other collections (Breeding, Mating, Weight, etc.)
+        await Breeding.deleteMany({ animalId: this._id });
+        await Mating.deleteMany({ animalId: this._id });
+        await Weight.deleteMany({ animalId: this._id });
+        await Vaccine.deleteMany({ animalId: this._id });
+
+        // If you want to delete records from any other related collections, add them here
+
+        next();
+    } catch (err) {
+        next(err);
+    }
 });
 
 module.exports = mongoose.model('Animal', Animalschema);
