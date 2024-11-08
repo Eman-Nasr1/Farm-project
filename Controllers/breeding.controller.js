@@ -3,6 +3,7 @@ const httpstatustext=require('../utilits/httpstatustext');
 const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const Animal=require('../Models/animal.model');
+const Mating=require('../Models/mating.model');
 
 const getallBreeding =asyncwrapper(async(req,res)=>{
 
