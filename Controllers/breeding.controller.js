@@ -38,6 +38,87 @@ const getallBreeding =asyncwrapper(async(req,res)=>{
     res.json({status:httpstatustext.SUCCESS,data:{breeding}});
 })
 
+const importBreedingFromExcel = asyncWrapper(async (req, res, next) => {  
+    upload(req, res, async function (err) {  
+        if (err) {  
+            return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));  
+        }  
+
+        const fileBuffer = req.file.buffer;  
+        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });  
+        const sheetName = workbook.SheetNames[0];  
+        const worksheet = workbook.Sheets[sheetName];  
+
+        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });  
+
+        for (let i = 1; i < data.length; i++) {  
+            const row = data[i];  
+
+            // Skip empty rows  
+            if (!row || row.length === 0 || row.every(cell => cell === undefined || cell === null || cell === '')) {  
+                continue;  
+            }  
+
+            const breedingTagId = row[0]?.toString().trim(); // Main tag ID for the breeding  
+            const deliveryState = row[1]?.toString().trim();  
+            const deliveryDate = new Date(row[2]?.toString().trim());  
+            const numberOfBirths = parseInt(row[3]); // Number of births  
+
+            // Validate essential fields  
+            if (!breedingTagId || !deliveryDate || isNaN(numberOfBirths)) {  
+                return next(AppError.create(`Required fields are missing or invalid in row ${i + 1}`, 400, httpstatustext.FAIL));  
+            }  
+
+            // Validate delivery date  
+            if (isNaN(deliveryDate.getTime())) {  
+                return next(AppError.create(`Invalid date format in row ${i + 1}`, 400, httpstatustext.FAIL));  
+            }  
+
+            const birthEntries = []; // Array to hold birth entry objects  
+
+            // Process birth entries based on the number of births  
+            for (let j = 0; j < numberOfBirths; j++) {  
+                const weightColumnIndex = 4 + (j * 2); // Assuming weight is in columns 5, 7, 9, etc.  
+                const genderColumnIndex = 5 + (j * 2); // Assuming gender is in columns 6, 8, 10, etc.  
+
+                const birthWeight = row[weightColumnIndex];  
+                const birthGender = row[genderColumnIndex];  
+
+                // Ensure birth entries are valid  
+                if (birthWeight || birthGender) { // Only add valid entries  
+                    // Generate a unique tag ID for each birth (i.e., concatenate breeding tag with entry index)  
+                    const birthTagId = `${breedingTagId}-B${j + 1}`;  
+
+                    birthEntries.push({  
+                        tagId: birthTagId, // Assigning unique tag ID for each birth  
+                        birthweight: birthWeight ? parseFloat(birthWeight) : null,  
+                        gender: birthGender || null, // Default to null if gender is not provided  
+                    });  
+                }  
+            }  
+
+            // Create new breeding object  
+            const newBreeding = new Breeding({  
+                tagId: breedingTagId, // Main tag ID for the breeding  
+                deliveryState,  
+                deliveryDate,  
+                numberOfBirths,  
+                birthEntries,  
+                owner: req.userId // Assuming the owner is set from the request  
+            });  
+
+            // Save the new breeding document  
+            await newBreeding.save();  
+        }  
+
+        // Return success response  
+        res.json({  
+            status: httpstatustext.SUCCESS,  
+            message: 'Breeding data imported successfully',  
+        });  
+    });  
+});
+
 const getbreedingforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
     const animal = await Animal.findById(req.params.animalId);
@@ -214,6 +295,7 @@ module.exports={
     addBreeding,
     getbreedingforspacficanimal,
     getsinglebreeding,
-    getallBreeding
+    getallBreeding,
+    importBreedingFromExcel,
 
 }
