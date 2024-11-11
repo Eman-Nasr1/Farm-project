@@ -38,7 +38,7 @@ const getallBreeding =asyncwrapper(async(req,res)=>{
     res.json({status:httpstatustext.SUCCESS,data:{breeding}});
 })
 
-const importBreedingFromExcel = asyncWrapper(async (req, res, next) => {  
+const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {  
     upload(req, res, async function (err) {  
         if (err) {  
             return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));  
