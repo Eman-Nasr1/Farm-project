@@ -12,5 +12,6 @@ router.patch('/api/breeding/UpdateBreeding/:breedingId',verifytoken,breedingVali
 router.delete('/api/breeding/DeleteBreeding/:breedingId',verifytoken,breedingcontroller.deletebreeding);
 
 router.post('/api/breeding/import',verifytoken, breedingcontroller.importBreedingFromExcel);
+router.get('/api/breeding/exportbreedingToExcel',verifytoken,breedingcontroller.exportBreedingToExcel);
 
 module.exports=router;
