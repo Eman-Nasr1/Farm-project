@@ -83,19 +83,21 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
 
             // Process birth entries based on the number of births  
             for (let j = 0; j < numberOfBirths; j++) {  
-                const weightColumnIndex = 4 + (j * 2); // Assuming weight is in columns 5, 7, 9, etc.  
-                const genderColumnIndex = 5 + (j * 2); // Assuming gender is in columns 6, 8, 10, etc.  
+                const tagIdColumnIndex = 4 + (j * 3);
+                const weightColumnIndex = 5 + (j * 3); // Assuming weight is in columns 5, 7, 9, etc.  
+                const genderColumnIndex = 6 + (j * 3); // Assuming gender is in columns 6, 8, 10, etc.
 
+                const birthID = row[tagIdColumnIndex]; 
                 const birthWeight = row[weightColumnIndex];  
                 const birthGender = row[genderColumnIndex];  
 
                 // Ensure birth entries are valid  
-                if (birthWeight || birthGender) { // Only add valid entries  
+                if ( birthID||birthWeight || birthGender) { // Only add valid entries  
                     // Generate a unique tag ID for each birth (i.e., concatenate breeding tag with entry index)  
-                    const birthTagId = `${breedingTagId}-B${j + 1}`;  
+                    //const birthTagId = `${breedingTagId}-B${j + 1}`;  
 
                     birthEntries.push({  
-                        tagId: birthTagId, // Assigning unique tag ID for each birth  
+                        tagId: birthID, // Assigning unique tag ID for each birth  
                         birthweight: birthWeight ? parseFloat(birthWeight) : null,  
                         gender: birthGender || null, // Default to null if gender is not provided  
                     });  
