@@ -56,8 +56,8 @@ const Animalschema = new mongoose.Schema({
     },
     owner: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true  
+        ref: 'User'
+       
     },
     createdAt: {
         type: Date,
@@ -65,7 +65,7 @@ const Animalschema = new mongoose.Schema({
     }
 });
 // Compound index to ensure unique tagId per user  
-Animalschema.index({ tagId: 1, owner: 1 }, { unique: true });  
+Animalschema.index({ owner: 1, tagId: 1 }, { unique: true });  
 
 // Calculate age in days on save
 Animalschema.pre('save', function (next) {
