@@ -5,49 +5,95 @@ const Vaccine=require('../Models/vaccine.model');
 const Animal=require('../Models/animal.model');
 
 
-const getallVaccine =asyncwrapper(async(req,res)=>{
+// const getallVaccine =asyncwrapper(async(req,res)=>{
 
-    const userId = req.userId;
-    const query=req.query;
-    const limit=query.limit||10;
-    const page=query.page||1;
-    const skip=(page-1)*limit;
+//     const userId = req.userId;
+//     const query=req.query;
+//     const limit=query.limit||10;
+//     const page=query.page||1;
+//     const skip=(page-1)*limit;
 
-    const filter = { owner: userId };
-    const vaccinationLogFilter = {};
+//     const filter = { owner: userId };
+//     const vaccinationLogFilter = {};
 
-    if (query.tagId) {
-        vaccinationLogFilter["vaccinationLog.tagId"] = query.tagId; // e.g., filter by tagId
-    }
+//     if (query.tagId) {
+//         vaccinationLogFilter["vaccinationLog.tagId"] = query.tagId; // e.g., filter by tagId
+//     }
 
-    if (query.locationShed) {
-        vaccinationLogFilter["vaccinationLog.locationShed"] = query.locationShed; // e.g., filter by locationShed
-    }
+//     if (query.locationShed) {
+//         vaccinationLogFilter["vaccinationLog.locationShed"] = query.locationShed; // e.g., filter by locationShed
+//     }
 
-    if (query.DateGiven) {
-        vaccinationLogFilter["vaccinationLog.DateGiven"] = { $gte: new Date(query.DateGiven) }; // filter by DateGiven
-    }
+//     if (query.DateGiven) {
+//         vaccinationLogFilter["vaccinationLog.DateGiven"] = { $gte: new Date(query.DateGiven) }; // filter by DateGiven
+//     }
     
-    if (query.vaccineName) {
-        filter.vaccineName = query.vaccineName; // e.g., 
-    }
+//     if (query.vaccineName) {
+//         filter.vaccineName = query.vaccineName; // e.g., 
+//     }
+
+//     const vaccine = await Vaccine.find(filter, { "__v": false })  
+//     .populate({  
+//         path: 'animalId', // This is the field in the Mating schema that references Animal  
+//         select: 'animalType' // Select only the animalType field from the Animal model  
+//     })  
+//     .limit(limit)  
+//     .skip(skip);  
+
+//     if (query.animalType) {  
+//         const filteredvaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);  
+//         return res.json({ status: httpstatustext.SUCCESS, data: { vaccine: filteredvaccineData } });  
+//     }  
+
+//     res.json({status:httpstatustext.SUCCESS,data:{vaccine}});
+// })
+
+const getallVaccine = asyncwrapper(async (req, res) => {  
+    const userId = req.userId;  
+    const query = req.query;  
+    const limit = query.limit || 10;  
+    const page = query.page || 1;  
+    const skip = (page - 1) * limit;  
+
+    const filter = { owner: userId };  
+
+    // Create an array to hold the vaccination log filters  
+    const vaccinationLogFilters = {};  
+
+    if (query.tagId || query.locationShed || query.DateGiven) {  
+        vaccinationLogFilters.$elemMatch = {}; // Create an $elemMatch object for filtering  
+
+        if (query.tagId) {  
+            vaccinationLogFilters.$elemMatch.tagId = query.tagId; // Filter by tagId  
+        }  
+
+        if (query.locationShed) {  
+            vaccinationLogFilters.$elemMatch.locationShed = query.locationShed; // Filter by locationShed  
+        }  
+
+        if (query.DateGiven) {  
+            vaccinationLogFilters.$elemMatch.DateGiven = { $gte: new Date(query.DateGiven) }; // Filter by DateGiven  
+        }  
+
+        // Add the vaccinationLog filter to the main filter  
+        filter.vaccinationLog = vaccinationLogFilters;  
+    }  
 
     const vaccine = await Vaccine.find(filter, { "__v": false })  
-    .populate({  
-        path: 'animalId', // This is the field in the Mating schema that references Animal  
-        select: 'animalType' // Select only the animalType field from the Animal model  
-    })  
-    .limit(limit)  
-    .skip(skip);  
+        .populate({  
+            path: 'animalId',  
+            select: 'animalType'  
+        })  
+        .limit(limit)  
+        .skip(skip);  
 
     if (query.animalType) {  
         const filteredvaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);  
         return res.json({ status: httpstatustext.SUCCESS, data: { vaccine: filteredvaccineData } });  
     }  
 
-    res.json({status:httpstatustext.SUCCESS,data:{vaccine}});
-})
-
+    res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });  
+});
 
 const getVaccineforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
