@@ -83,32 +83,60 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
     ]);
 
     // Generate mating report for positive sonar results
-    const positiveSonarCount = await Mating.aggregate([
-        {
-            $match: {
-                owner: userId,
-                sonarRsult: 'positive',
-                matingDate: { $gte: fromDate, $lte: toDate }
-            }
-        },
-        {
-            $lookup: {
-                from: 'animals',
-                localField: 'animalId',
-                foreignField: '_id',
-                as: 'animal'
-            }
-        },
-        {
-            $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
-        },
-        {
-            $match: { 'animal.animalType': animalType }
-        },
-        {
-            $count: 'positiveSonarCount'
-        }
-    ]);
+    // const positiveSonarCount = await Mating.aggregate([
+    //     {
+    //         $match: {
+    //             owner: userId,
+    //             sonarRsult: 'positive',
+    //             matingDate: { $gte: fromDate, $lte: toDate }
+    //         }
+    //     },
+    //     {
+    //         $lookup: {
+    //             from: 'animals',
+    //             localField: 'animalId',
+    //             foreignField: '_id',
+    //             as: 'animal'
+    //         }
+    //     },
+    //     {
+    //         $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
+    //     },
+    //     {
+    //         $match: { 'animal.animalType': animalType }
+    //     },
+    //     {
+    //         $count: 'positiveSonarCount'
+    //     }
+    // ]);
+    // Generate mating report for positive sonar results  
+const positiveSonarCount = await Mating.aggregate([  
+    {  
+        $match: {  
+            owner: userId,  
+            sonarRsult: 'positive',  
+            matingDate: { $gte: fromDate, $lte: toDate },  
+            expectedDeliveryDate: { $gt: new Date() } // Check if expectedDeliveryDate is greater than today  
+        }  
+    },  
+    {  
+        $lookup: {  
+            from: 'animals',  
+            localField: 'animalId',  
+            foreignField: '_id',  
+            as: 'animal'  
+        }  
+    },  
+    {  
+        $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }  
+    },  
+    {  
+        $match: { 'animal.animalType': animalType }  
+    },  
+    {  
+        $count: 'positiveSonarCount'  
+    }  
+]);
 
     // Generate birth entries report from Breeding model
     const birthEntriesReport = await Breeding.aggregate([
