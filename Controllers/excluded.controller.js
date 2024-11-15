@@ -41,6 +41,16 @@ if (query.animalType) {
     res.json({status:httpstatustext.SUCCESS,data:{excluded}});
 })
 
+const getSingleExcluded = asyncwrapper(async (req, res, next) => {
+    const excludedId = req.params.excludedId;
+    const excluded = await Excluded.findById(excludedId);
+    if (!excluded) {
+        const error = AppError.create('Excluded information not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+    return res.json({ status: httpstatustext.SUCCESS, data: { excluded } });
+});
+
 const addexcluded = asyncwrapper(async (req, res,next) => {
 
     const userId = req.userId;
@@ -92,7 +102,8 @@ module.exports={
     deleteExcluded,
     updateExcluded,
     addexcluded ,
-    getallexcluded 
+    getallexcluded ,
+    getSingleExcluded 
 
 
 }
