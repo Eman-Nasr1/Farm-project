@@ -7,7 +7,6 @@ const Vaccine=require('../Models/vaccine.model');
 const Animalschema = new mongoose.Schema({
     tagId: {
         type: String,
-        unique: true,
         required: true
     },
     breed: {
@@ -57,13 +56,16 @@ const Animalschema = new mongoose.Schema({
     },
     owner: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        ref: 'User',
+        required: true  
     },
     createdAt: {
         type: Date,
         default: Date.now
     }
 });
+// Compound index to ensure unique tagId per user  
+Animalschema.index({ tagId: 1, owner: 1 }, { unique: true });  
 
 // Calculate age in days on save
 Animalschema.pre('save', function (next) {
