@@ -79,6 +79,11 @@ const getallVaccine = asyncwrapper(async (req, res) => {
         filter.vaccinationLog = vaccinationLogFilters;  
     }  
 
+    
+    if (query.vaccineName) {
+        filter.vaccineName = query.vaccineName; // e.g., 
+    }
+
     const vaccine = await Vaccine.find(filter, { "__v": false })  
         .populate({  
             path: 'animalId',  
