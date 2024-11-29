@@ -127,17 +127,27 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
 });
 
 const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {  
-    const animalId = req.params.animalId;  
+    const userId = req.userId;  
 
-    // Fetch the animal and breeding records  
-    const animal = await Animal.findById(animalId);  
-    if (!animal) {  
-        return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));  
-    }  
+    // Fetch filters from query  
+    const query = req.query;  
+    const filter = { owner: userId };  
 
-    const breedingRecords = await Breeding.find({ animalId: animal._id });  
+    // Apply filter conditions based on query parameters  
+    if (query.deliveryState) filter.deliveryState = query.deliveryState;  
+    if (query.deliveryDate) filter.deliveryDate = query.deliveryDate;  
+    if (query.tagId) filter.tagId = query.tagId;  
+
+    // Fetch breeding records based on filters  
+    const breedingRecords = await Breeding.find(filter)  
+        .populate({  
+            path: 'animalId',  
+            select: 'animalType', // Select only the animalType field from the Animal model  
+        });  
+
     if (!breedingRecords || breedingRecords.length === 0) {  
-        return next(AppError.create('Breeding information not found for this animal', 404, httpstatustext.FAIL));  
+        const error = AppError.create('No breeding information found for the specified filters.', 404, httpstatustext.FAIL);  
+        return next(error);  
     }  
 
     // Create a new workbook and worksheet data  
@@ -149,14 +159,14 @@ const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {
     // Populate worksheet data with breeding records  
     breedingRecords.forEach(breeding => {  
         const row = [  
-            animal.tagId,  
+            breeding.tagId, // Include tagId from the breeding record, assuming this field exists  
             breeding.deliveryState,  
             breeding.deliveryDate ? breeding.deliveryDate.toISOString().split('T')[0] : '',  
-            breeding.numberOfBriths || 0  
+            breeding.numberOfBirths || 0  
         ];  
 
         // Add birth entries (up to 3 for this example)  
-        breeding.birthEntries.slice(0, 3).forEach(birth => {  
+        breeding.birthEntries.slice(0, 3).forEach((birth) => {  
             row.push(  
                 birth.tagId || '',  
                 birth.birthweight || '',  
@@ -182,11 +192,10 @@ const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {
     // Set the proper headers for file download  
     res.setHeader('Content-Disposition', 'attachment; filename="Breeding.xlsx"');  
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');  
-    
+
     // Send the file as a response  
     res.send(buffer);  
 });
-
 const getbreedingforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
     const animal = await Animal.findById(req.params.animalId);
