@@ -157,6 +157,64 @@ const exportVaccinesToExcel = asyncwrapper(async (req, res, next) => {
     res.send(buffer);
 });
 
+const importVaccineFromExcel = asyncwrapper(async (req, res, next) => {
+    upload(req, res, async function (err) {
+        if (err) {
+            return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
+        }
+
+        const fileBuffer = req.file.buffer;
+        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Convert sheet to JSON format (array of objects)
+        const data = xlsx.utils.sheet_to_json(worksheet);
+
+        const createdVaccines = [];
+
+        // Iterate over the rows
+        for (const [index, row] of data.entries()) {
+            const { tagId, vaccineName, DateGiven, givenEvery, locationShed } = row;
+
+            // Validate required fields
+            if (!tagId || !vaccineName || !DateGiven || !givenEvery) {
+                return next(AppError.create(`Missing required fields in row ${index + 2}`, 400, httpstatustext.FAIL));
+            }
+
+            // Find the animal by tagId
+            const animal = await Animal.findOne({ tagId });
+            if (!animal) {
+                return next(AppError.create(`Animal not found for tagId: ${tagId} in row ${index + 2}`, 404, httpstatustext.FAIL));
+            }
+
+            // Create a new vaccine record
+            const newVaccine = new Vaccine({
+                vaccineName,
+                vaccinationLog: [{
+                    tagId,
+                    DateGiven: new Date(DateGiven),
+                    locationShed: locationShed || animal.locationShed,
+                    vallidTell: new Date(new Date(DateGiven).getTime() + (givenEvery * 24 * 60 * 60 * 1000)),
+                    createdAt: new Date()
+                }],
+                givenEvery,
+                owner: req.userId,
+                animalId: animal._id
+            });
+
+            await newVaccine.save();
+            createdVaccines.push(newVaccine);
+        }
+
+        res.json({
+            status: httpstatustext.SUCCESS,
+            message: 'Vaccines imported successfully',
+            data: createdVaccines,
+        });
+    });
+});
+
 const getVaccineforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
     const animal = await Animal.findById(req.params.animalId);
@@ -367,5 +425,6 @@ module.exports={
     getsinglevaccine,
     getallVaccine,
     exportVaccinesToExcel,
+    importVaccineFromExcel
 
 }

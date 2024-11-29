@@ -11,6 +11,8 @@ router.post('/api/vaccine/AddVaccine',verifytoken, vaccineValidationRules(), val
 router.post('/api/vaccine/AddVaccineForAnimal',verifytoken, vaccineValidationRules(), validateVaccine,vaccinecontroller.addvaccineforanimal);
 router.patch('/api/vaccine/UpdateVaccine/:vaccineId',verifytoken, vaccineValidationRules(), validateVaccine,vaccinecontroller.updateVaccine);
 router.delete('/api/vaccine/DeleteVaccine/:vaccineId',verifytoken,vaccinecontroller.deleteVaccine);
+router.post('/api/vaccine/import',verifytoken, vaccinecontroller.importVaccineFromExcel);
+router.get('/api/vaccine/exportmatingToExcel',verifytoken,vaccinecontroller.exportVaccinesToExcel);
 
 
 module.exports=router;
