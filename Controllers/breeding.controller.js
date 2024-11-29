@@ -126,67 +126,65 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
     });  
 });
 
-const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {
-    const animalId = req.params.animalId;
+const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {  
+    const animalId = req.params.animalId;  
 
-    // Fetch the animal and breeding records
-    const animal = await Animal.findById(animalId);
-    if (!animal) {
-        const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
-        return next(error);
-    }
+    // Fetch the animal and breeding records  
+    const animal = await Animal.findById(animalId);  
+    if (!animal) {  
+        return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));  
+    }  
 
-    const breedingRecords = await Breeding.find({ animalId: animal._id });
-    if (!breedingRecords || breedingRecords.length === 0) {
-        const error = AppError.create('Breeding information not found for this animal', 404, httpstatustext.FAIL);
-        return next(error);
-    }
+    const breedingRecords = await Breeding.find({ animalId: animal._id });  
+    if (!breedingRecords || breedingRecords.length === 0) {  
+        return next(AppError.create('Breeding information not found for this animal', 404, httpstatustext.FAIL));  
+    }  
 
-    // Create a new workbook and worksheet data
-    const workbook = xlsx.utils.book_new();
-    const worksheetData = [
-        ['Tag ID', 'Delivery State', 'Delivery Date', 'Number of Births', 'Birth 1 Tag ID', 'Birth 1 Weight', 'Birth 1 Gender', 'Birth 2 Tag ID', 'Birth 2 Weight', 'Birth 2 Gender', 'Birth 3 Tag ID', 'Birth 3 Weight', 'Birth 3 Gender']
-    ];
+    // Create a new workbook and worksheet data  
+    const workbook = xlsx.utils.book_new();  
+    const worksheetData = [  
+        ['Tag ID', 'Delivery State', 'Delivery Date', 'Number of Births', 'Birth 1 Tag ID', 'Birth 1 Weight', 'Birth 1 Gender', 'Birth 2 Tag ID', 'Birth 2 Weight', 'Birth 2 Gender', 'Birth 3 Tag ID', 'Birth 3 Weight', 'Birth 3 Gender']  
+    ];  
 
-    // Populate worksheet data with breeding records
-    breedingRecords.forEach(breeding => {
-        const row = [
-            animal.tagId,
-            breeding.deliveryState,
-            breeding.deliveryDate ? breeding.deliveryDate.toISOString().split('T')[0] : '',
-            breeding.numberOfBriths || 0
-        ];
+    // Populate worksheet data with breeding records  
+    breedingRecords.forEach(breeding => {  
+        const row = [  
+            animal.tagId,  
+            breeding.deliveryState,  
+            breeding.deliveryDate ? breeding.deliveryDate.toISOString().split('T')[0] : '',  
+            breeding.numberOfBriths || 0  
+        ];  
 
-        // Add birth entries (up to 3 for this example)
-        breeding.birthEntries.slice(0, 3).forEach((birth, index) => {
-            row.push(
-                birth.tagId || '',
-                birth.birthweight || '',
-                birth.gender || ''
-            );
-        });
+        // Add birth entries (up to 3 for this example)  
+        breeding.birthEntries.slice(0, 3).forEach(birth => {  
+            row.push(  
+                birth.tagId || '',  
+                birth.birthweight || '',  
+                birth.gender || ''  
+            );  
+        });  
 
-        // Fill empty cells if there are less than 3 birth entries
-        for (let i = breeding.birthEntries.length; i < 3; i++) {
-            row.push('', '', '');
-        }
+        // Fill empty cells if there are less than 3 birth entries  
+        for (let i = breeding.birthEntries.length; i < 3; i++) {  
+            row.push('', '', '');  
+        }  
 
-        worksheetData.push(row);
-    });
+        worksheetData.push(row);  
+    });  
 
-    // Create worksheet and add it to the workbook
-    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Breeding');
+    // Create worksheet and add it to the workbook  
+    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);  
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Breeding');  
 
-    // Write to buffer
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    // Write to buffer  
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });  
 
-    // Set the proper headers for file download
-    res.setHeader('Content-Disposition', 'attachment; filename="Breeding.xlsx"');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-
-    // Send the file as a response
-    res.send(buffer);
+    // Set the proper headers for file download  
+    res.setHeader('Content-Disposition', 'attachment; filename="Breeding.xlsx"');  
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');  
+    
+    // Send the file as a response  
+    res.send(buffer);  
 });
 
 const getbreedingforspacficanimal =asyncwrapper(async( req, res, next)=>{
