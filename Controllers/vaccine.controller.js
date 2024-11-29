@@ -3,6 +3,10 @@ const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const Vaccine=require('../Models/vaccine.model');
 const Animal=require('../Models/animal.model');
+const multer = require('multer');
+const xlsx = require('xlsx');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage }).single('file');
 
 
 // const getallVaccine =asyncwrapper(async(req,res)=>{
@@ -98,6 +102,59 @@ const getallVaccine = asyncwrapper(async (req, res) => {
     }  
 
     res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });  
+});
+
+
+const exportVaccinesToExcel = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;
+
+    // Fetch vaccines based on filter logic
+    const query = req.query;
+    const filter = { owner: userId };
+
+    if (query.vaccineName) filter.vaccineName = query.vaccineName;
+    if (query.DateGiven) filter['vaccinationLog.DateGiven'] = { $gte: new Date(query.DateGiven) };
+    if (query.locationShed) filter['vaccinationLog.locationShed'] = query.locationShed;
+
+    const vaccines = await Vaccine.find(filter).populate({
+        path: 'animalId',
+        select: 'tagId locationShed animalType'
+    });
+
+    if (!vaccines.length) {
+        return next(AppError.create('No vaccines found for the specified filters', 404, httpstatustext.FAIL));
+    }
+
+    // Prepare data for Excel
+    const data = [];
+    data.push(['Vaccine Name', 'Tag ID', 'Animal Type', 'Location Shed', 'Date Given', 'Valid Till']);
+
+    vaccines.forEach(vaccine => {
+        vaccine.vaccinationLog.forEach(log => {
+            data.push([
+                vaccine.vaccineName,
+                log.tagId || '',
+                vaccine.animalId?.animalType || '',
+                log.locationShed || '',
+                log.DateGiven ? new Date(log.DateGiven).toLocaleDateString() : '',
+                log.vallidTell ? new Date(log.vallidTell).toLocaleDateString() : ''
+            ]);
+        });
+    });
+
+    // Create a new workbook and add the data
+    const workbook = xlsx.utils.book_new();
+    const worksheet = xlsx.utils.aoa_to_sheet(data);
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Vaccines');
+
+    // Write the workbook to a buffer
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set headers and send the file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="vaccines.xlsx"');
+
+    res.send(buffer);
 });
 
 const getVaccineforspacficanimal =asyncwrapper(async( req, res, next)=>{
@@ -308,6 +365,7 @@ module.exports={
     addvaccineforanimal,
     getVaccineforspacficanimal,
     getsinglevaccine,
-    getallVaccine
+    getallVaccine,
+    exportVaccinesToExcel,
 
 }
