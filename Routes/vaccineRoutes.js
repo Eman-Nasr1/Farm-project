@@ -12,7 +12,7 @@ router.post('/api/vaccine/AddVaccineForAnimal',verifytoken, vaccineValidationRul
 router.patch('/api/vaccine/UpdateVaccine/:vaccineId',verifytoken, vaccineValidationRules(), validateVaccine,vaccinecontroller.updateVaccine);
 router.delete('/api/vaccine/DeleteVaccine/:vaccineId',verifytoken,vaccinecontroller.deleteVaccine);
 router.post('/api/vaccine/import',verifytoken, vaccinecontroller.importVaccineFromExcel);
-router.get('/api/vaccine/exportmatingToExcel',verifytoken,vaccinecontroller.exportVaccinesToExcel);
+router.get('/api/vaccine/exportvaccinToExcel',verifytoken,vaccinecontroller.exportVaccinesToExcel);
 
 
 module.exports=router;
