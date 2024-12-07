@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const User = require('../Models/user.model');
+const User = require('./user.model');
 const Feedschema = new mongoose.Schema({
     name: {
         type: String,
