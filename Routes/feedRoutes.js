@@ -1,7 +1,7 @@
 const express=require('express');
 const router=express.Router();
 const feedcontroller=require('../Controllers/feed.controller');
-
+const verifytoken=require('../middleware/verifytoken');
 
 router.get('/api/feed/getallfeedes',verifytoken,feedcontroller.getallfeeds);
 router.get('/api/feed/getsinglefeed/:feedId',verifytoken,feedcontroller.getsniglefeed);
