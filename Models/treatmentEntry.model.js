@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');  
-const Treatment = require('../Models/trreatment.model');  
+const Treatment = require('../Models/treatment.model');  
 const User = require('../Models/user.model');
 
 const TreatmentEntrySchema = new mongoose.Schema({  
