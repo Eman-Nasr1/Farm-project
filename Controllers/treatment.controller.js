@@ -80,7 +80,8 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
 
     // Check if treatmentName, locationShed, volume, and date are provided  
     if (!treatmentName || !locationShed || !volume || !date) {  
-        return next(new AppError('treatmentName, locationShed, volume, and date must be provided', 400, httpstatustext.FAIL));  
+        const error = AppError.create('treatmentName, locationShed, volume, and date must be provided', 400, httpstatustext.FAIL);  
+        return next(error);  
     }  
 
     // Find the treatment by name  
@@ -88,7 +89,8 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
 
     // If the treatment is not found, return an error  
     if (!treatment) {  
-        return next(new AppError('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL));  
+        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);  
+        return next(error); 
     }  
 
     // Find all animals in the specified location shed  
@@ -96,7 +98,8 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
 
     // If no animals are found for the provided locationShed  
     if (animals.length === 0) {  
-        return next(new AppError('No animals found for the provided locationShed', 404, httpstatustext.FAIL));  
+        const error = AppError.create('No animals found for the provided locationShed', 404, httpstatustext.FAIL);  
+        return next(error); 
     }  
 
     // Create and save a new treatment entry for each found animal  
@@ -123,16 +126,18 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     const { treatmentName, tagId, volume, date } = req.body; // Expecting treatmentName, tagId, volume, and date in the request body  
 
     // Check if treatmentName, tagId, volume, and date are provided  
-    if (!treatmentName || !tagId || !volume || !date) {  
-        return next(new AppError('treatmentName, tagId, volume, and date must be provided', 400, httpstatustext.FAIL));  
+    if (!treatmentName || !tagId || !volume || !date) {   
+        const error = AppError.create('treatmentName, tagId, volume, and date must be provided', 400, httpstatustext.FAIL);  
+        return next(error);  
     }  
 
     // Find the treatment by name  
     const treatment = await Treatment.findOne({ name: treatmentName });  
 
     // If the treatment is not found, return an error  
-    if (!treatment) {  
-        return next(new AppError('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL));  
+    if (!treatment) {   
+        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);  
+        return next(error);  
     }  
 
     // Find the animal by tag ID  
@@ -140,7 +145,8 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     // If the animal is not found, return an error  
     if (!animal) {  
-        return next(new AppError('Animal not found for the provided tagId', 404, httpstatustext.FAIL));  
+        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);  
+        return next(error); 
     }  
 
     // Create a new treatment entry for the single animal  
