@@ -47,6 +47,9 @@ app.use('/',excludedRoutes)
 const feedRoutes=require('./Routes/feedRoutes');
 app.use('/',feedRoutes)
 
+const treatmentRoutes=require('./Routes/treatmentRoutes');
+app.use('/',treatmentRoutes)
+
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
 })
