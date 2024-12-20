@@ -5,6 +5,7 @@ const AppError=require('../utilits/AppError');
 const User=require('../Models/user.model');
 const ShedEntry = require('../Models/shedFeed.model');
 const AnimalCost=require('../Models/animalCost.model');
+const Animal=require('../Models/animal.model');
 
 const getallfeeds = asyncwrapper(async (req, res) => {
     const userId = req.userId;
