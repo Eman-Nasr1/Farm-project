@@ -85,7 +85,17 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
         });
     }
 
+    const animals = await Animal.find({ locationShed });
+
+    if (animals.length === 0) {
+        return res.status(404).json({
+            status: "FAILURE",
+            message: `No animals found in shed "${locationShed}".`,
+        });
+    }
+
     const shedEntries = [];
+    const feedCosts = [];
 
     for (const feedItem of feeds) {
         const { feedName, quantity } = feedItem;
@@ -107,53 +117,52 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
         }
 
         const feedCost = feed.price * quantity;
+        feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
 
         const shedEntry = new ShedEntry({
             feed: feed._id,
             locationShed,
             quantity,
             owner: userId,
-            createdAt: Date.now(),
             date: date ? new Date(date) : Date.now(),
         });
 
         await shedEntry.save();
         shedEntries.push(shedEntry);
+    }
 
-        // Distribute feed cost across animals in the shed
-        const animals = await Animal.find({ locationShed });
+    // Distribute feed costs across animals
+    const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
+    const perAnimalFeedCost = totalFeedCost / animals.length;
 
-        for (const animal of animals) {
-            const animalFeedCost = feedCost / animals.length;
+    for (const animal of animals) {
+        let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
 
-            // Check if AnimalCost entry exists for the animal
-            let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
-
-            if (animalCostEntry) {
-                // Update feed cost
-                animalCostEntry.feedCost += animalFeedCost;
-            } else {
-                // Create a new AnimalCost entry
-                animalCostEntry = new AnimalCost({
-                    animalTagId: animal.tagId,
-                    feedCost: animalFeedCost,
-                    treatmentCost: 0, // Default treatment cost
-                    date: date,
-                    owner: userId,
-                });
-            }
-
-            await animalCostEntry.save();
+        if (animalCostEntry) {
+            animalCostEntry.feedCost += perAnimalFeedCost;
+        } else {
+            animalCostEntry = new AnimalCost({
+                animalTagId: animal.tagId,
+                feedCost: perAnimalFeedCost,
+                treatmentCost: 0, // Default treatment cost
+                date: date,
+                owner: userId,
+            });
         }
+
+        await animalCostEntry.save();
     }
 
     res.status(201).json({
         status: "SUCCESS",
         data: {
             shedEntries,
+            totalFeedCost,
+            perAnimalFeedCost,
         },
     });
 });
+
 
 
 
