@@ -3,6 +3,8 @@ const User = require('../Models/user.model');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
+const bcrypt=require('bcryptjs');
+const jwt =require('jsonwebtoken');
 
 const createEmployee = asyncwrapper(async (req, res, next) => {
     const { name, email, password, phone, role, permissions } = req.body;
