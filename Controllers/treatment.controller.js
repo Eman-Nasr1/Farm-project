@@ -82,6 +82,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
+    // Find the treatment by name
     const treatment = await Treatment.findOne({ name: treatmentName });
 
     if (!treatment) {
@@ -89,6 +90,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
+    // Find all animals in the specified location shed
     const animals = await Animal.find({ locationShed });
 
     if (animals.length === 0) {
@@ -98,9 +100,14 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
 
     const createdTreatments = [];
 
-    for (const animal of animals) {
-        const treatmentCost = treatment.price * volume;
+    // Calculate the price per ml
+    const pricePerMl = treatment.price / treatment.volume;
 
+    for (const animal of animals) {
+        // Calculate treatment cost for the animal
+        const treatmentCost = pricePerMl * volume;
+
+        // Create a treatment entry for the animal
         const newTreatmentEntry = new TreatmentEntry({
             treatment: treatment._id,
             tagId: animal.tagId,
@@ -113,7 +120,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
         await newTreatmentEntry.save();
         createdTreatments.push(newTreatmentEntry);
 
-        // Check if AnimalCost entry exists for the animal
+        // Check if an AnimalCost entry exists for the animal
         let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
 
         if (animalCostEntry) {
@@ -133,8 +140,10 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
         await animalCostEntry.save();
     }
 
+    // Respond with created treatment entries
     res.json({ status: httpstatustext.SUCCESS, data: { treatments: createdTreatments } });
 });
+
 
 
 const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
@@ -143,7 +152,11 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     // Check if treatmentName, tagId, volume, and date are provided
     if (!treatmentName || !tagId || !volume || !date) {
-        const error = AppError.create('treatmentName, tagId, volume, and date must be provided', 400, httpstatustext.FAIL);
+        const error = AppError.create(
+            'treatmentName, tagId, volume, and date must be provided',
+            400,
+            httpstatustext.FAIL
+        );
         return next(error);
     }
 
@@ -152,7 +165,11 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     // If the treatment is not found, return an error
     if (!treatment) {
-        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);
+        const error = AppError.create(
+            'Treatment not found for the provided treatment name',
+            404,
+            httpstatustext.FAIL
+        );
         return next(error);
     }
 
@@ -161,12 +178,19 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     // If the animal is not found, return an error
     if (!animal) {
-        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
+        const error = AppError.create(
+            'Animal not found for the provided tagId',
+            404,
+            httpstatustext.FAIL
+        );
         return next(error);
     }
 
-    // Calculate the treatment cost
-    const treatmentCost = treatment.price * volume;
+    // Calculate the price per milliliter (ml)
+    const pricePerMl = treatment.price / treatment.volume;
+
+    // Calculate the treatment cost based on the provided volume
+    const treatmentCost = pricePerMl * volume;
 
     // Create a new treatment entry for the single animal
     const newTreatmentEntry = new TreatmentEntry({
@@ -180,7 +204,7 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     await newTreatmentEntry.save(); // Save the new treatment entry
 
-    // Update or create the animal cost entry
+    // Check if an AnimalCost entry exists for the animal
     let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
 
     if (animalCostEntry) {
@@ -209,6 +233,7 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
         },
     });
 });
+
 
 
 module.exports={
