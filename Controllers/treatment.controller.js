@@ -5,6 +5,7 @@ const AppError=require('../utilits/AppError');
 const User=require('../Models/user.model');
 const Animal=require('../Models/animal.model');
 const TreatmentEntry=require('../Models/treatmentEntry.model');
+const AnimalCost=require('../Models/animalCost.model');
 
 const getallTreatments = asyncwrapper(async (req, res) => {
     const userId = req.userId;
@@ -31,7 +32,6 @@ const getallTreatments = asyncwrapper(async (req, res) => {
         data: { treatments }
     });
 });
-
 
 const getsnigleTreatment =asyncwrapper(async( req, res, next)=>{
 
@@ -73,97 +73,143 @@ const deleteTreatment= asyncwrapper(async(req,res)=>{
 
 })
 
-const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId;  
-    const { treatmentName, locationShed, volume, date } = req.body; // Expecting treatmentName, locationShed, volume, and date in the request body  
-    const createdTreatments = []; // Array to keep track of created treatment entries  
+const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;
+    const { treatmentName, locationShed, volume, date } = req.body;
 
-    // Check if treatmentName, locationShed, volume, and date are provided  
-    if (!treatmentName || !locationShed || !volume || !date) {  
-        const error = AppError.create('treatmentName, locationShed, volume, and date must be provided', 400, httpstatustext.FAIL);  
-        return next(error);  
-    }  
+    if (!treatmentName || !locationShed || !volume || !date) {
+        const error = AppError.create('treatmentName, locationShed, volume, and date must be provided', 400, httpstatustext.FAIL);
+        return next(error);
+    }
 
-    // Find the treatment by name  
-    const treatment = await Treatment.findOne({ name: treatmentName });  
+    const treatment = await Treatment.findOne({ name: treatmentName });
 
-    // If the treatment is not found, return an error  
-    if (!treatment) {  
-        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);  
-        return next(error); 
-    }  
+    if (!treatment) {
+        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);
+        return next(error);
+    }
 
-    // Find all animals in the specified location shed  
-    const animals = await Animal.find({ locationShed });  
+    const animals = await Animal.find({ locationShed });
 
-    // If no animals are found for the provided locationShed  
-    if (animals.length === 0) {  
-        const error = AppError.create('No animals found for the provided locationShed', 404, httpstatustext.FAIL);  
-        return next(error); 
-    }  
+    if (animals.length === 0) {
+        const error = AppError.create('No animals found for the provided locationShed', 404, httpstatustext.FAIL);
+        return next(error);
+    }
 
-    // Create and save a new treatment entry for each found animal  
-    for (const animal of animals) {  
-        const newTreatmentEntry = new TreatmentEntry({  
-            treatment: treatment._id, // Use the found treatment's ID  
-            tagId: animal.tagId, // Adding the tagId from the animal  
-            locationShed: locationShed, // Using the location shed from the request  
-            volume: volume, // Volume provided in the request  
-            date: date, // Date provided in the request  
-            owner: userId // The user who is adding the treatment  
-        });  
+    const createdTreatments = [];
 
-        await newTreatmentEntry.save(); // Save the new treatment entry  
-        createdTreatments.push(newTreatmentEntry); // Store the created treatment in the array  
-    }  
+    for (const animal of animals) {
+        const treatmentCost = treatment.price * volume;
 
-    // Send back the array of created treatment entries  
-    res.json({ status: httpstatustext.SUCCESS, data: { treatments: createdTreatments } });  
+        const newTreatmentEntry = new TreatmentEntry({
+            treatment: treatment._id,
+            tagId: animal.tagId,
+            locationShed,
+            volume,
+            date,
+            owner: userId,
+        });
+
+        await newTreatmentEntry.save();
+        createdTreatments.push(newTreatmentEntry);
+
+        // Check if AnimalCost entry exists for the animal
+        let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+
+        if (animalCostEntry) {
+            // Update treatment cost
+            animalCostEntry.treatmentCost += treatmentCost;
+        } else {
+            // Create a new AnimalCost entry
+            animalCostEntry = new AnimalCost({
+                animalTagId: animal.tagId,
+                treatmentCost: treatmentCost,
+                feedCost: 0, // Default feed cost
+                date: date,
+                owner: userId,
+            });
+        }
+
+        await animalCostEntry.save();
+    }
+
+    res.json({ status: httpstatustext.SUCCESS, data: { treatments: createdTreatments } });
 });
 
-const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId;  
-    const { treatmentName, tagId, volume, date } = req.body; // Expecting treatmentName, tagId, volume, and date in the request body  
 
-    // Check if treatmentName, tagId, volume, and date are provided  
-    if (!treatmentName || !tagId || !volume || !date) {   
-        const error = AppError.create('treatmentName, tagId, volume, and date must be provided', 400, httpstatustext.FAIL);  
-        return next(error);  
-    }  
+const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;
+    const { treatmentName, tagId, volume, date } = req.body; // Expecting treatmentName, tagId, volume, and date in the request body
 
-    // Find the treatment by name  
-    const treatment = await Treatment.findOne({ name: treatmentName });  
+    // Check if treatmentName, tagId, volume, and date are provided
+    if (!treatmentName || !tagId || !volume || !date) {
+        const error = AppError.create('treatmentName, tagId, volume, and date must be provided', 400, httpstatustext.FAIL);
+        return next(error);
+    }
 
-    // If the treatment is not found, return an error  
-    if (!treatment) {   
-        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);  
-        return next(error);  
-    }  
+    // Find the treatment by name
+    const treatment = await Treatment.findOne({ name: treatmentName });
 
-    // Find the animal by tag ID  
-    const animal = await Animal.findOne({ tagId });  
+    // If the treatment is not found, return an error
+    if (!treatment) {
+        const error = AppError.create('Treatment not found for the provided treatment name', 404, httpstatustext.FAIL);
+        return next(error);
+    }
 
-    // If the animal is not found, return an error  
-    if (!animal) {  
-        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);  
-        return next(error); 
-    }  
+    // Find the animal by tag ID
+    const animal = await Animal.findOne({ tagId });
 
-    // Create a new treatment entry for the single animal  
-    const newTreatmentEntry = new TreatmentEntry({  
-        treatment: treatment._id, // Use the found treatment's ID  
-        tagId: animal.tagId, // The tagId of the animal  
-        locationShed: animal.locationShed, // Taking locationShed from the animal record  
-        volume: volume, // Volume provided in the request  
-        date: date, // Date provided in the request  
-        owner: userId // The user who is adding the treatment  
-    });  
+    // If the animal is not found, return an error
+    if (!animal) {
+        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
+        return next(error);
+    }
 
-    await newTreatmentEntry.save(); // Save the new treatment entry  
+    // Calculate the treatment cost
+    const treatmentCost = treatment.price * volume;
 
-    // Send back the created treatment entry  
-    res.json({ status: httpstatustext.SUCCESS, data: { treatment: newTreatmentEntry } });  
+    // Create a new treatment entry for the single animal
+    const newTreatmentEntry = new TreatmentEntry({
+        treatment: treatment._id, // Use the found treatment's ID
+        tagId: animal.tagId, // The tagId of the animal
+        locationShed: animal.locationShed, // Taking locationShed from the animal record
+        volume: volume, // Volume provided in the request
+        date: date, // Date provided in the request
+        owner: userId, // The user who is adding the treatment
+    });
+
+    await newTreatmentEntry.save(); // Save the new treatment entry
+
+    // Update or create the animal cost entry
+    let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+
+    if (animalCostEntry) {
+        // If an entry exists, update the treatment cost
+        animalCostEntry.treatmentCost += treatmentCost;
+    } else {
+        // If no entry exists, create a new one
+        animalCostEntry = new AnimalCost({
+            animalTagId: animal.tagId,
+            treatmentCost: treatmentCost,
+            feedCost: 0, // Default feed cost if none is recorded yet
+            date: date,
+            owner: userId,
+        });
+    }
+
+    // Save the updated or new AnimalCost entry
+    await animalCostEntry.save();
+
+    // Send back the created treatment entry and updated cost details
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: {
+            treatment: newTreatmentEntry,
+            animalCost: animalCostEntry,
+        },
+    });
 });
+
 
 module.exports={
     getallTreatments,

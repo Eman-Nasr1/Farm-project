@@ -4,6 +4,7 @@ const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const User=require('../Models/user.model');
 const ShedEntry = require('../Models/shedFeed.model');
+const AnimalCost=require('../Models/animalCost.model');
 
 const getallfeeds = asyncwrapper(async (req, res) => {
     const userId = req.userId;
@@ -72,68 +73,88 @@ const deletefeed= asyncwrapper(async(req,res)=>{
 
 })
 
-const addFeedToShed = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId; // Obtain user ID from request context  
+const addFeedToShed = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId;
+    const { locationShed, feeds, date } = req.body;
 
-    // Validate request body  
-    const { locationShed, feeds, date } = req.body;  
-    if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {  
-        return res.status(400).json({  
-            status: "FAILURE",  
-            message: "locationShed and feeds (array) are required.",  
-        });  
-    }  
+    if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
+        return res.status(400).json({
+            status: "FAILURE",
+            message: "locationShed and feeds (array) are required.",
+        });
+    }
 
-    try {  
-        const shedEntries = []; // Array to store created entries  
+    const shedEntries = [];
 
-        // Loop through the feeds array  
-        for (const feedItem of feeds) {  
-            const { feedName, quantity } = feedItem;  
+    for (const feedItem of feeds) {
+        const { feedName, quantity } = feedItem;
 
-            // Validate feed item structure  
-            if (!feedName || !quantity) {  
-                return res.status(400).json({  
-                    status: "FAILURE",  
-                    message: "Each feed must have feedName and quantity.",  
-                });  
-            }  
+        if (!feedName || !quantity) {
+            return res.status(400).json({
+                status: "FAILURE",
+                message: "Each feed must have feedName and quantity.",
+            });
+        }
 
-            // Look for the feed by name  
-            const feed = await Feed.findOne({ name: feedName });  
-            if (!feed) {  
-                return res.status(404).json({  
-                    status: "FAILURE",  
-                    message: `Feed with name "${feedName}" not found.`,  
-                });  
-            }  
+        const feed = await Feed.findOne({ name: feedName });
 
-            // Create a new shed entry  
-            const shedEntry = new ShedEntry({  
-                feed: feed._id,  
-                locationShed,  
-                quantity,  
-                owner: userId,  
-                createdAt: Date.now(), // Set the creation date  
-                date: date ? new Date(date) : Date.now(), // Use provided date or current date  
-            });  
+        if (!feed) {
+            return res.status(404).json({
+                status: "FAILURE",
+                message: `Feed with name "${feedName}" not found.`,
+            });
+        }
 
-            // Save the shed entry  
-            const addedEntry = await shedEntry.save();  
-            shedEntries.push(addedEntry); // Add to the entries array  
-        }  
+        const feedCost = feed.price * quantity;
 
-        // Return successfully created entries  
-        res.status(201).json({  
-            status: "SUCCESS",  
-            data: {  
-                shedEntries, // Return all created shed entries  
-            },  
-        });  
-    } catch (error) {  
-        next(error); // Forward error to the error handling middleware  
-    }  
+        const shedEntry = new ShedEntry({
+            feed: feed._id,
+            locationShed,
+            quantity,
+            owner: userId,
+            createdAt: Date.now(),
+            date: date ? new Date(date) : Date.now(),
+        });
+
+        await shedEntry.save();
+        shedEntries.push(shedEntry);
+
+        // Distribute feed cost across animals in the shed
+        const animals = await Animal.find({ locationShed });
+
+        for (const animal of animals) {
+            const animalFeedCost = feedCost / animals.length;
+
+            // Check if AnimalCost entry exists for the animal
+            let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+
+            if (animalCostEntry) {
+                // Update feed cost
+                animalCostEntry.feedCost += animalFeedCost;
+            } else {
+                // Create a new AnimalCost entry
+                animalCostEntry = new AnimalCost({
+                    animalTagId: animal.tagId,
+                    feedCost: animalFeedCost,
+                    treatmentCost: 0, // Default treatment cost
+                    date: date,
+                    owner: userId,
+                });
+            }
+
+            await animalCostEntry.save();
+        }
+    }
+
+    res.status(201).json({
+        status: "SUCCESS",
+        data: {
+            shedEntries,
+        },
+    });
 });
+
+
 
 module.exports={
     getallfeeds,
