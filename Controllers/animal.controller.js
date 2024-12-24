@@ -166,6 +166,10 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
 // })
 
 const getallanimals = asyncwrapper(async (req, res) => {
+    if (req.role === 'employee' && !req.permissions.includes('view_animals')) {
+        return next(AppError.create('Permission denied', 403, httpstatustext.FAIL));
+      }
+    
     const userId = req.userId;
     const query = req.query;
     const limit = query.limit || 10;

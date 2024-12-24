@@ -65,7 +65,7 @@ const employeeLogin = asyncwrapper(async (req, res, next) => {
 
     // Create a JWT token for both the employee and the parent user
     const token = jwt.sign(
-        { id: employee._id, role: employee.role, userId: employee.user._id }, // Include both employee and user info
+        { id: employee._id, role: employee.role, userId: employee.user._id ,permissions: employee.permissions}, // Include both employee and user info
         process.env.JWT_SECRET_KEY,
         { expiresIn: '30d' }
     );

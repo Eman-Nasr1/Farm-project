@@ -19,10 +19,12 @@ const verifytoken = (req, res, next) => {
       // Employee token: Extract userId from employee's token
       req.userId = decoded.userId; // Parent user's ID
       req.role = 'employee';
+      req.permissions = decoded.permissions || []; 
     } else {
       // User token: Use the user ID directly
       req.userId = decoded.id;
       req.role = 'user';
+      req.permissions = []; 
     }
 
     req.currentuser = decoded;
