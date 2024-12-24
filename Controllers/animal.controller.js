@@ -165,7 +165,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
 //     res.json({status:httpstatustext.SUCCESS,data:{animals}});
 // })
 
-const getallanimals = asyncwrapper(async (req, res) => {
+const getallanimals = asyncwrapper(async (req, res,next) => {
     if (req.role === 'employee' && !req.permissions.includes('view_animals')) {
         return next(AppError.create('Permission denied', 403, httpstatustext.FAIL));
       }
