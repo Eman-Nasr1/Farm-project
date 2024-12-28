@@ -11,5 +11,11 @@ router.delete('/api/feed/deletefeed/:feedId',verifytoken,feedcontroller.deletefe
 router.post('/api/feed/addfeedbylocationshed',verifytoken, feedcontroller.addFeedToShed);
 
 
+router.get('/api/feed/getAllFeedByShed',verifytoken,feedcontroller.getallfeedsbyshed);
+router.get('/api/feed/getsingleFeedByShed/:feedShedId',verifytoken,feedcontroller.getsniglefeedShed);
+router.patch('/api/feed/updatefeedByShed/:feedShedId',verifytoken,feedcontroller.updateFeedToShed);
+router.delete('/api/feed/deletefeedByShed/:feedShedId',verifytoken,feedcontroller.deletefeedshed);
+
+
 
 module.exports=router;

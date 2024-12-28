@@ -74,6 +74,8 @@ const deletefeed= asyncwrapper(async(req,res)=>{
 
 })
 
+// --------------------------------------feed by shed ------------------------
+
 const addFeedToShed = asyncwrapper(async (req, res, next) => {
     const userId = req.userId;
     const { locationShed, feeds, date } = req.body;
@@ -164,6 +166,108 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 
+const updateFeedToShed = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId; // Get the user ID from the token
+    const shedEntryId = req.params.shedEntryId; // ID of the ShedEntry to update
+    const updatedData = req.body; // Data to update
+
+    // Find the existing shed entry document
+    let shedEntry = await ShedEntry.findOne({ _id: shedEntryId, owner: userId });
+    if (!shedEntry) {
+        const error = AppError.create('Shed entry not found or unauthorized to update', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Update top-level fields in the shed entry
+    Object.assign(shedEntry, updatedData);
+
+    // If `quantity` or `feed` is updated, recalculate costs
+    if (updatedData.quantity || updatedData.feed) {
+        const feed = await Feed.findById(shedEntry.feed);
+        if (!feed) {
+            const error = AppError.create(`Feed with ID "${shedEntry.feed}" not found`, 404, httpstatustext.FAIL);
+            return next(error);
+        }
+
+        shedEntry.quantity = updatedData.quantity || shedEntry.quantity;
+        shedEntry.feedCost = feed.price * shedEntry.quantity;
+    }
+
+    // Save the updated shed entry document
+    await shedEntry.save();
+
+    // Update associated animal costs if necessary
+    const animals = await Animal.find({ locationShed: shedEntry.locationShed });
+    const totalFeedCost = await ShedEntry.aggregate([
+        { $match: { locationShed: shedEntry.locationShed, owner: userId } },
+        { $group: { _id: null, total: { $sum: '$feedCost' } } },
+    ]);
+
+    const perAnimalFeedCost = (totalFeedCost[0]?.total || 0) / animals.length;
+
+    for (const animal of animals) {
+        let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+
+        if (animalCostEntry) {
+            animalCostEntry.feedCost = perAnimalFeedCost;
+        } else {
+            animalCostEntry = new AnimalCost({
+                animalTagId: animal.tagId,
+                feedCost: perAnimalFeedCost,
+                treatmentCost: 0,
+                date: shedEntry.date,
+                owner: userId,
+            });
+        }
+
+        await animalCostEntry.save();
+    }
+
+    res.json({ status: httpstatustext.SUCCESS, data: { shedEntry } });
+});
+
+
+const getallfeedsbyshed = asyncwrapper(async (req, res) => {
+    const userId = req.userId;
+    const query = req.query;
+    const limit = query.limit || 10;
+    const page = query.page || 1;
+    const skip = (page - 1) * limit;
+    const filter = { owner: userId };
+
+    if (query.locationShed) {
+        filter.locationShed = query.locationShed;
+    }
+
+    if (query.date) {
+        filter.date = query.date; 
+    }
+
+    const feedShed = await ShedEntry.find(filter, { "__v": false })
+        .limit(limit)
+        .skip(skip);
+
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: { feedShed }
+    });
+});
+
+const getsniglefeedShed =asyncwrapper(async( req, res, next)=>{
+
+    const feedShed=await ShedEntry.findById(req.params.feedShedId);
+    if (!feedShed) {
+      const error=AppError.create('feed not found', 404, httpstatustext.FAIL)
+      return next(error);
+  }
+     return res.json({status:httpstatustext.SUCCESS,data:{feedShed}});
+})
+
+const deletefeedshed= asyncwrapper(async(req,res)=>{
+    await ShedEntry.deleteOne({_id:req.params.feedShedId});
+   res.status(200).json({status:httpstatustext.SUCCESS,data:null});
+
+})
 
 
 module.exports={
@@ -172,7 +276,11 @@ module.exports={
     addfeed,
     updatefeed,
     deletefeed,
-    addFeedToShed
+    addFeedToShed,
+    getallfeedsbyshed,
+    deletefeedshed,
+    getsniglefeedShed,
+    updateFeedToShed,
     
 }
 
