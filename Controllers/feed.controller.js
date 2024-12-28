@@ -233,6 +233,7 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
     const limit = query.limit || 10;
     const page = query.page || 1;
     const skip = (page - 1) * limit;
+
     const filter = { owner: userId };
 
     if (query.locationShed) {
@@ -240,18 +241,33 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
     }
 
     if (query.date) {
-        filter.date = query.date; 
+        filter.date = query.date;
     }
 
     const feedShed = await ShedEntry.find(filter, { "__v": false })
+        .populate({
+            path: 'feed', // Populate the feed field
+            select: 'name price', // Select only the name and price fields
+        })
         .limit(limit)
         .skip(skip);
 
+    // Map the populated data for a cleaner response
+    const response = feedShed.map(entry => ({
+        _id: entry._id,
+        locationShed: entry.locationShed,
+        quantity: entry.quantity,
+        date: entry.date,
+        feedName: entry.feed?.name, // Feed name from the populated data
+        feedPrice: entry.feed?.price, // Feed price from the populated data
+    }));
+
     res.json({
         status: httpstatustext.SUCCESS,
-        data: { feedShed }
+        data: { feedShed: response },
     });
 });
+
 
 const getsniglefeedShed =asyncwrapper(async( req, res, next)=>{
 
