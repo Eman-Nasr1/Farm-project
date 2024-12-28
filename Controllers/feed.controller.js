@@ -201,7 +201,10 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         }
 
         shedEntry.quantity = updatedData.quantity || shedEntry.quantity;
-        shedEntry.feedCost = feed.price * shedEntry.quantity; // Calculate the correct feed cost
+        shedEntry.feedCost = feed.price * shedEntry.quantity;
+
+        // Debug: Log calculation process
+        console.log(`Updated feed cost: ${shedEntry.feedCost} (Price: ${feed.price}, Quantity: ${shedEntry.quantity})`);
     }
 
     // Save the updated shed entry document
@@ -242,7 +245,6 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
     res.json({ status: httpstatustext.SUCCESS, data: { shedEntry: updatedShedEntry } });
 });
-
 
 
 
