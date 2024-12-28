@@ -269,15 +269,34 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
 });
 
 
-const getsniglefeedShed =asyncwrapper(async( req, res, next)=>{
+const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
+    const feedShed = await ShedEntry.findById(req.params.feedShedId)
+        .populate({
+            path: 'feed', // Populate the feed field
+            select: 'name price', // Select only the name and price fields
+        });
 
-    const feedShed=await ShedEntry.findById(req.params.feedShedId);
     if (!feedShed) {
-      const error=AppError.create('feed not found', 404, httpstatustext.FAIL)
-      return next(error);
-  }
-     return res.json({status:httpstatustext.SUCCESS,data:{feedShed}});
-})
+        const error = AppError.create('Feed shed entry not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Format the response to include feed name and price
+    const response = {
+        _id: feedShed._id,
+        locationShed: feedShed.locationShed,
+        quantity: feedShed.quantity,
+        date: feedShed.date,
+        feedName: feedShed.feed?.name, // Feed name from the populated data
+        feedPrice: feedShed.feed?.price, // Feed price from the populated data
+    };
+
+    return res.json({
+        status: httpstatustext.SUCCESS,
+        data: { feedShed: response },
+    });
+});
+
 
 const deletefeedshed= asyncwrapper(async(req,res)=>{
     await ShedEntry.deleteOne({_id:req.params.feedShedId});
