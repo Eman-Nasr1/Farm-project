@@ -247,10 +247,20 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
         .limit(limit)
         .skip(skip);
 
-    res.json({
-        status: httpstatustext.SUCCESS,
-        data: { feedShed }
-    });
+
+        const transformedData = feedShed.map(entry => ({
+            _id: entry._id,
+            feedName: entry.feed.name,
+            feedPrice: entry.feed.price,
+            locationShed: entry.locationShed,
+            quantity: entry.quantity,
+            date: entry.date,
+        }));
+    
+        res.json({
+            status: httpstatustext.SUCCESS,
+            data: { feedShed: transformedData },
+        });
 });
 
 const getsniglefeedShed =asyncwrapper(async( req, res, next)=>{
