@@ -178,6 +178,16 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
+    // Check if feed name is provided and replace it with the corresponding feed ID
+    if (updatedData.feedName) {
+        const feed = await Feed.findOne({ name: updatedData.feedName });
+        if (!feed) {
+            const error = AppError.create(`Feed with name "${updatedData.feedName}" not found`, 404, httpstatustext.FAIL);
+            return next(error);
+        }
+        updatedData.feed = feed._id; // Replace feedName with feed ID
+    }
+
     // Update top-level fields in the shed entry
     Object.assign(shedEntry, updatedData);
 
@@ -223,8 +233,15 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         await animalCostEntry.save();
     }
 
-    res.json({ status: httpstatustext.SUCCESS, data: { shedEntry } });
+    // Populate the response to include feed name and price
+    const updatedShedEntry = await ShedEntry.findById(shedEntry._id).populate({
+        path: 'feed',
+        select: 'name price',
+    });
+
+    res.json({ status: httpstatustext.SUCCESS, data: { shedEntry: updatedShedEntry } });
 });
+
 
 
 const getallfeedsbyshed = asyncwrapper(async (req, res) => {
