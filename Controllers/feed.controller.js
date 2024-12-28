@@ -173,7 +173,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
     // Find the existing shed entry document
     
-    let shedEntry = await ShedEntry.findOne({ _id: feedShedId, owner: userId });
+    let shedEntry = await ShedEntry.findOne({ _id: shedEntryId, owner: userId });
     //console.log(shedEntryId,updatedData,shedEntry);
     if (!shedEntry) {
         const error = AppError.create('Shed entry not found or unauthorized to update', 404, httpstatustext.FAIL);
