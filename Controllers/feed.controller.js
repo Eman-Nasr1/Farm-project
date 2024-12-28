@@ -172,9 +172,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
     const updatedData = req.body; // Data to update
 
     // Find the existing shed entry document
-    
     let shedEntry = await ShedEntry.findOne({ _id: shedEntryId, owner: userId });
-    //console.log(shedEntryId,updatedData,shedEntry);
     if (!shedEntry) {
         const error = AppError.create('Shed entry not found or unauthorized to update', 404, httpstatustext.FAIL);
         return next(error);
@@ -188,6 +186,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
             return next(error);
         }
         updatedData.feed = feed._id; // Replace feedName with feed ID
+        shedEntry.feed = feed._id; // Update the feed in the ShedEntry document
     }
 
     // Update top-level fields in the shed entry
@@ -202,7 +201,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         }
 
         shedEntry.quantity = updatedData.quantity || shedEntry.quantity;
-        shedEntry.feedCost = feed.price * shedEntry.quantity;
+        shedEntry.feedCost = feed.price * shedEntry.quantity; // Calculate the correct feed cost
     }
 
     // Save the updated shed entry document
@@ -215,7 +214,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         { $group: { _id: null, total: { $sum: '$feedCost' } } },
     ]);
 
-    const perAnimalFeedCost = (totalFeedCost[0]?.total || 0) / animals.length;
+    const perAnimalFeedCost = (totalFeedCost[0]?.total || 0) / (animals.length || 1);
 
     for (const animal of animals) {
         let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
@@ -243,6 +242,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
     res.json({ status: httpstatustext.SUCCESS, data: { shedEntry: updatedShedEntry } });
 });
+
 
 
 
