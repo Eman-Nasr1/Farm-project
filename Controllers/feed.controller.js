@@ -216,9 +216,9 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         { $match: { locationShed: shedEntry.locationShed, owner: userId } },
         { $group: { _id: null, total: { $sum: '$feedCost' } } },
     ]);
-
+    console.log('Aggregation Result:', totalFeedCost);
     const perAnimalFeedCost = (totalFeedCost[0]?.total || 0) / (animals.length || 1);
-
+    console.log(`Total Feed Cost: ${totalCost}, Animals Count: ${animals.length}, Per Animal Cost: ${perAnimalFeedCost}`);
     for (const animal of animals) {
         let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
 
