@@ -6,6 +6,7 @@ const User=require('../Models/user.model');
 const ShedEntry = require('../Models/shedFeed.model');
 const AnimalCost=require('../Models/animalCost.model');
 const Animal=require('../Models/animal.model');
+const { ConsoleMessage } = require('puppeteer');
 
 const getallfeeds = asyncwrapper(async (req, res) => {
     const userId = req.userId;
@@ -214,7 +215,8 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
     const animals = await Animal.find({ locationShed: shedEntry.locationShed });  
     
     // Calculate total feed cost manually  
-    const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId });  
+    const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId }); 
+    Console.log(shedEntries) ;
     const totalFeedCost = shedEntries.reduce((total, entry) => total + (entry.feedCost || 0), 0);  
 
     // Calculate per animal feed cost  
