@@ -216,7 +216,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
     
     // Calculate total feed cost manually  
     const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId }); 
-    Console.log(shedEntries) ;
+    console.log(shedEntries) ;
     const totalFeedCost = shedEntries.reduce((total, entry) => total + (entry.feedCost || 0), 0);  
 
     // Calculate per animal feed cost  
