@@ -167,7 +167,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 
-const updateFeedToShed = asyncWrapper(async (req, res, next) => {  
+const updateFeedToShed = asyncwrapper(async (req, res, next) => {  
     const userId = req.userId; // Get the user ID from the token  
     const shedEntryId = req.params.feedShedId; // ID of the ShedEntry to update  
     const updatedData = req.body; // Data to update  
