@@ -212,20 +212,26 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
     await shedEntry.save();  
 
     // Instead of aggregation, calculate total feed cost directly from shed entries  
-    const animals = await Animal.find({ locationShed: shedEntry.locationShed });  
+const animals = await Animal.find({ locationShed: shedEntry.locationShed });  
+const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId });  
 
-    // Calculate total feed cost manually  
-    const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId });  
-    
-    // Ensure we are summing the correct field and that it is a valid number  
-    console.log(shedEntries); // Log the shed entries for debugging  
-    const totalFeedCost = shedEntries.reduce((sum, entry) => {  
-        // Ensure feedCost is a number and safely add it to sum  
-        const cost = entry.feedCost || 0; // Default to 0 if feedCost is missing  
-        return sum + (typeof cost === 'number' ? cost : 0);  
-    }, 0);  
+// Fetch all feeds in one go to avoid multiple DB calls  
+const feedIds = shedEntries.map(entry => entry.feed);  
+const feeds = await Feed.find({ _id: { $in: feedIds } }).select('price _id');  
 
-    console.log(totalFeedCost); // Log the total feed cost for debugging  
+const feedMap = feeds.reduce((map, feed) => {  
+    map[feed._id] = feed.price; // Create a mapping of feed ID to its price  
+    return map;  
+}, {});  
+
+// Calculate total feed cost manually based on quantity and price  
+const totalFeedCost = shedEntries.reduce((sum, entry) => {  
+    const feedPrice = feedMap[entry.feed]; // Get the price of the current feed  
+    const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry  
+    return sum + cost; // Add to total  
+}, 0);  
+
+console.log('Total Feed Cost:', totalFeedCost);  // Log the total feed cost for debugging  
 
     // Calculate per animal feed cost  
     const perAnimalFeedCost = animals.length > 0 ? totalFeedCost / animals.length : 0; // Handle case when no animals are present  
