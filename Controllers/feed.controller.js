@@ -167,7 +167,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 
-const updateFeedToShed = asyncwrapper(async (req, res, next) => {  
+const updateFeedToShed = asyncWrapper(async (req, res, next) => {  
     const userId = req.userId; // Get the user ID from the token  
     const shedEntryId = req.params.feedShedId; // ID of the ShedEntry to update  
     const updatedData = req.body; // Data to update  
@@ -213,15 +213,22 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
     // Instead of aggregation, calculate total feed cost directly from shed entries  
     const animals = await Animal.find({ locationShed: shedEntry.locationShed });  
-    
+
     // Calculate total feed cost manually  
-    const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId }); 
-    console.log(shedEntries) ;
-   // const totalFeedCost = shedEntries.reduce((total, entry) => total + (entry.feedCost || 0), 0); 
-    const totalFeedCost = shedEntries.reduce((sum, feedCost) => sum + feedCost.cost, 0); 
-    console.log(totalFeedCost) ;
+    const shedEntries = await ShedEntry.find({ locationShed: shedEntry.locationShed, owner: userId });  
+    
+    // Ensure we are summing the correct field and that it is a valid number  
+    console.log(shedEntries); // Log the shed entries for debugging  
+    const totalFeedCost = shedEntries.reduce((sum, entry) => {  
+        // Ensure feedCost is a number and safely add it to sum  
+        const cost = entry.feedCost || 0; // Default to 0 if feedCost is missing  
+        return sum + (typeof cost === 'number' ? cost : 0);  
+    }, 0);  
+
+    console.log(totalFeedCost); // Log the total feed cost for debugging  
+
     // Calculate per animal feed cost  
-    const perAnimalFeedCost = totalFeedCost / (animals.length || 1);  
+    const perAnimalFeedCost = animals.length > 0 ? totalFeedCost / animals.length : 0; // Handle case when no animals are present  
 
     for (const animal of animals) {  
         let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });  
@@ -236,6 +243,12 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
                 date: shedEntry.date,  
                 owner: userId,  
             });  
+        }  
+
+        // Validate feedCost before saving  
+        if (typeof animalCostEntry.feedCost !== 'number') {  
+            const error = AppError.create('Invalid feedCost calculated', 400, httpstatustext.FAIL);  
+            return next(error);  
         }  
 
         await animalCostEntry.save();  
