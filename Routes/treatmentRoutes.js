@@ -12,5 +12,11 @@ router.post('/api/treatment/addtreatmentbylocationshed',verifytoken, treatmentCo
 router.post('/api/treatment/addtreatmentbyanimal',verifytoken, treatmentController.addTreatmentForAnimal);
 
 
+router.get('/api/treatment/getAlltreatmentforAnimals',verifytoken,treatmentController.getAllTreatmentsByShed);
+router.get('/api/treatment/getsingletreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.getsingleTreatmentShed);
+router.patch('/api/treatment/updatetreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.updateTreatmentForAnimal);
+router.delete('/api/treatment/deletetreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.deleteTreatmentShed);
+
+
 
 module.exports=router;
