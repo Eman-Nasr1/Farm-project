@@ -273,111 +273,115 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
   });
   
 
-const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId; // User ID from token  
-    const treatmentEntryId = req.params.treatmentEntryId; // ID of the TreatmentEntry to update  
-    const updatedData = req.body; // Updated data from the request body  
+  const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
+    const userId = req.userId; // User ID from token
+    const treatmentEntryId = req.params.treatmentEntryId; // ID of the TreatmentEntry to update
+    const updatedData = req.body; // Updated data from the request body
 
-    // Find the existing treatment entry document  
-    let treatmentEntry = await TreatmentEntry.findOne({  
-        _id: treatmentEntryId,  
-        owner: userId,  
-    });  
+    // Find the existing treatment entry document
+    let treatmentEntry = await TreatmentEntry.findOne({
+        _id: treatmentEntryId,
+        owner: userId,
+    });
 
-    if (!treatmentEntry) {  
-        const error = AppError.create(  
-            "Treatment entry not found or unauthorized to update",  
-            404,  
-            httpstatustext.FAIL  
-        );  
-        return next(error);  
-    }  
+    if (!treatmentEntry) {
+        const error = AppError.create(
+            "Treatment entry not found or unauthorized to update",
+            404,
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
 
-    // Check if treatment name is provided and replace it with the corresponding treatment ID  
-    if (updatedData.treatmentName) {  
-        const treatment = await Treatment.findOne({ name: updatedData.treatmentName });  
-        if (!treatment) {  
-            const error = AppError.create(  
-                `Treatment with name "${updatedData.treatmentName}" not found`,  
-                404,  
-                httpstatustext.FAIL  
-            );  
-            return next(error);  
-        }  
-        updatedData.treatment = treatment._id; // Replace treatmentName with treatment ID  
-        treatmentEntry.treatment = treatment._id; // Update the treatment in the TreatmentEntry document  
-    }  
+    let treatment; // Declare treatment globally for the function
 
-    // Validate and process the date  
-    if (updatedData.date) {  
-        const parsedDate = new Date(updatedData.date);  
-        if (isNaN(parsedDate.getTime())) {  
-            return next(AppError.create('Invalid date format', 400, httpstatustext.FAIL));  
-        }  
-        treatmentEntry.date = parsedDate; // Assign the validated date  
-    }  
+    // Check if treatment name is provided and replace it with the corresponding treatment ID
+    if (updatedData.treatmentName) {
+        treatment = await Treatment.findOne({ name: updatedData.treatmentName });
+        if (!treatment) {
+            const error = AppError.create(
+                `Treatment with name "${updatedData.treatmentName}" not found`,
+                404,
+                httpstatustext.FAIL
+            );
+            return next(error);
+        }
+        updatedData.treatment = treatment._id; // Replace treatmentName with treatment ID
+        treatmentEntry.treatment = treatment._id; // Update the treatment in the TreatmentEntry document
+    }
 
-    // Update top-level fields in the treatment entry  
-    Object.assign(treatmentEntry, updatedData);  
+    // Validate and process the date
+    if (updatedData.date) {
+        const parsedDate = new Date(updatedData.date);
+        if (isNaN(parsedDate.getTime())) {
+            return next(AppError.create("Invalid date format", 400, httpstatustext.FAIL));
+        }
+        treatmentEntry.date = parsedDate; // Assign the validated date
+    }
 
-    // If `volume` or `treatment` is updated, recalculate costs  
-    if (updatedData.volume || updatedData.treatment) {  
-        const treatment = await Treatment.findById(treatmentEntry.treatment);  
-        if (!treatment) {  
-            const error = AppError.create(  
-                `Treatment with ID "${treatmentEntry.treatment}" not found`,  
-                404,  
-                httpstatustext.FAIL  
-            );  
-            return next(error);  
-        }  
+    // Update top-level fields in the treatment entry
+    Object.assign(treatmentEntry, updatedData);
 
-        treatmentEntry.volume = updatedData.volume || treatmentEntry.volume;  
-        const pricePerMl = treatment.price / treatment.volume;  
-        const treatmentCost = pricePerMl * treatmentEntry.volume;  
-        treatmentEntry.treatmentCost = treatmentCost; // Store treatment cost inside entry if needed  
-    }  
+    // If `volume` or `treatment` is updated, recalculate costs
+    if (updatedData.volume || updatedData.treatment) {
+        treatment = treatment || (await Treatment.findById(treatmentEntry.treatment)); // Fetch treatment if not already fetched
+        if (!treatment) {
+            const error = AppError.create(
+                `Treatment with ID "${treatmentEntry.treatment}" not found`,
+                404,
+                httpstatustext.FAIL
+            );
+            return next(error);
+        }
 
-    // Save the updated treatment entry document  
-    await treatmentEntry.save();  
+        treatmentEntry.volume = updatedData.volume || treatmentEntry.volume;
+        const pricePerMl = treatment.price / treatment.volume;
+        const treatmentCost = pricePerMl * treatmentEntry.volume;
+        treatmentEntry.treatmentCost = treatmentCost; // Store treatment cost inside entry if needed
+    }
 
-    // Find all animals in the same shed as this treatment entry  
-    const animals = await Animal.find({ locationShed: treatmentEntry.locationShed });  
+    // Save the updated treatment entry document
+    await treatmentEntry.save();
 
-    // Update or create AnimalCost entries for each animal  
-    for (const animal of animals) {  
-        let animalCostEntry = await AnimalCost.findOne({  
-            animalTagId: animal.tagId,  
-        });  
+    // Find all animals in the same shed as this treatment entry
+    const animals = await Animal.find({ locationShed: treatmentEntry.locationShed });
 
-        const treatmentCostPerAnimal = treatmentEntry.volume * (treatment.price / treatment.volume);  
+    // Update or create AnimalCost entries for each animal
+    const pricePerMl = treatment.price / treatment.volume; // Calculate outside loop for efficiency
+    for (const animal of animals) {
+        let animalCostEntry = await AnimalCost.findOne({
+            animalTagId: animal.tagId,
+        });
 
-        if (animalCostEntry) {  
-            animalCostEntry.treatmentCost += treatmentCostPerAnimal;  
-        } else {  
-            animalCostEntry = new AnimalCost({  
-                animalTagId: animal.tagId,  
-                feedCost: 0, // Default feed cost if none recorded yet  
-                treatmentCost: treatmentCostPerAnimal,  
-                date: treatmentEntry.date,  
-                owner: userId,  
-            });  
-        }  
+        const treatmentCostPerAnimal = treatmentEntry.volume * pricePerMl;
 
-        await animalCostEntry.save();  
-    }  
+        if (animalCostEntry) {
+            animalCostEntry.treatmentCost += treatmentCostPerAnimal;
+        } else {
+            animalCostEntry = new AnimalCost({
+                animalTagId: animal.tagId,
+                feedCost: 0, // Default feed cost if none recorded yet
+                treatmentCost: treatmentCostPerAnimal,
+                date: treatmentEntry.date,
+                owner: userId,
+            });
+        }
 
-    // Populate the response to include treatment name and price  
-    const updatedTreatmentEntry = await TreatmentEntry.findById(treatmentEntry._id).populate({  
-        path: "treatment",  
-        select: "name price volume",  
-    });  
+        await animalCostEntry.save();
+    }
 
-    res.json({  
-        status: httpstatustext.SUCCESS,  
-        data: { treatmentEntry: updatedTreatmentEntry },  
-    });  
+    // Populate the response to include treatment name and price
+    const updatedTreatmentEntry = await TreatmentEntry.findById(treatmentEntry._id).populate({
+        path: "treatment",
+        select: "name price volume",
+    });
+
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: { treatmentEntry: updatedTreatmentEntry },
+    });
 });
+
 
   const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
     const userId = req.userId;
