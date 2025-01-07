@@ -402,11 +402,11 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
     const response = treatmentShed.map((entry) => ({
       _id: entry._id,
       locationShed: entry.locationShed,
+      tagId: entry.tagId,
       volume: entry.volume,
       date: entry.date,
       treatmentName: entry.treatment?.name, // Treatment name from the populated data
-      treatmentPrice: entry.treatment?.price, // Treatment price from the populated data
-      treatmentVolume: entry.treatment?.volume, // Treatment volume from the populated data
+  
     }));
   
     res.json({
