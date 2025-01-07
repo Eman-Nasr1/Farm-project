@@ -14,7 +14,7 @@ router.post('/api/treatment/addtreatmentbyanimal',verifytoken, treatmentControll
 
 router.get('/api/treatment/getAlltreatmentforAnimals',verifytoken,treatmentController.getAllTreatmentsByShed);
 router.get('/api/treatment/getsingletreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.getsingleTreatmentShed);
-router.patch('/api/treatment/updatetreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.updateTreatmentForAnimal);
+router.patch('/api/treatment/updatetreatmentforAnimals/:treatmentEntryId',verifytoken,treatmentController.updateTreatmentForAnimal);
 router.delete('/api/treatment/deletetreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.deleteTreatmentShed);
 
 
