@@ -273,7 +273,7 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
   });
   
 
-const updateTreatmentForAnimal = asyncWrapper(async (req, res, next) => {  
+const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {  
     const userId = req.userId; // User ID from token  
     const treatmentEntryId = req.params.treatmentEntryId; // ID of the TreatmentEntry to update  
     const updatedData = req.body; // Updated data from the request body  
