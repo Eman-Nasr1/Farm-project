@@ -263,8 +263,7 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
       volume: treatmentShed.volume,
       date: treatmentShed.date,
       treatmentName: treatmentShed.treatment?.name, // Treatment name from populated data
-      treatmentPrice: treatmentShed.treatment?.price, // Treatment price from populated data
-      treatmentVolume: treatmentShed.treatment?.volume, // Treatment volume from populated data
+     
     };
   
     return res.json({
