@@ -28,6 +28,13 @@ const verifytoken = (req, res, next) => {
     }
 
     req.currentuser = decoded;
+
+    if (req.role === 'admin') {  
+      req.isAdmin = true; // Set a flag for admin users  
+    } else {  
+      req.isAdmin = false; // Set a flag for non-admin users  
+    } 
+
     next();
   } catch (err) {
     const error = AppError.create('Token is invalid', 401, httpstatustext.ERROR);

@@ -18,6 +18,95 @@ const getallusers=asyncwrapper(async(req,res)=>{
      res.json({status:httpstatustext.SUCCESS,data:{users}});
  })
 
+ const getsnigleuser =asyncwrapper(async( req, res, next)=>{
+ 
+ 
+    const user=await User.findById(req.params.userId);
+    if (!user) {
+      
+      const error=AppError.create('User not found', 404, httpstatustext.FAIL)
+      return next(error);
+  }
+     return res.json({status:httpstatustext.SUCCESS,data:{user}});
+})
+
+const updateUser = asyncwrapper(async (req, res, next) => {
+  const { userId } = req.params;
+  const { name, email, phone, country, role, usertype, password } = req.body;
+
+  // Find the user by ID
+  const user = await User.findById(userId);
+  if (!user) {
+      const error = AppError.create('User not found', 404, httpstatustext.FAIL);
+      return next(error);
+  }
+
+  // Validate email uniqueness if being updated
+  if (email && email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+          const error = AppError.create('Email already in use', 400, httpstatustext.FAIL);
+          return next(error);
+      }
+  }
+
+  // Handle password update if provided
+  if (password) {
+      const hashedPassword = await bcrypt.hash(password, 7);
+      user.password = hashedPassword;
+  }
+
+  // Update other user details
+  if (name) user.name = name;
+  if (email) user.email = email;
+  if (phone) user.phone = phone;
+  if (country) user.country = country;
+  if (role) user.role = role;
+  if (usertype) user.usertype = usertype;
+
+  // Save the updated user
+  await user.save();
+
+  res.status(200).json({
+      status: httpstatustext.SUCCESS,
+      data: { user },
+  });
+});
+
+
+const deleteUser= asyncwrapper(async(req,res)=>{
+  await User.deleteOne({_id:req.params.userId});
+ res.status(200).json({status:httpstatustext.SUCCESS,data:null});
+
+})
+
+const loginAsUser = asyncwrapper(async (req, res, next) => {  
+  const { userId } = req.params; // Get the user ID from the request parameters  
+
+  // Find the user by ID  
+  const user = await User.findById(userId);  
+  if (!user) {  
+      const error = AppError.create('User not found', 404, httpstatustext.FAIL);  
+      return next(error);  
+  }  
+
+  // Check if the requester is an admin (assumed you have an admin user check)  
+  if (!req.user || req.user.role !== 'admin') {  
+      const error = AppError.create('Not authorized', 403, httpstatustext.FAIL);  
+      return next(error);  
+  }  
+
+  // Create a token for the user  
+  const token = await jwt.sign(  
+      { email: user.email, id: user._id, role: user.role }, // Include user info in the payload  
+      process.env.JWT_SECRET_KEY,  
+      { expiresIn: '30d' }  
+  );  
+
+  // Send the token back to the admin  
+  return res.json({ status: httpstatustext.SUCCESS, data: { token } });  
+});
+
  const register=asyncwrapper(async(req,res,next)=>{
     const {name,email,password,confirmpassword,phone,country,role,usertype}=req.body;
 
@@ -153,9 +242,6 @@ const verifyCode = asyncwrapper(async (req, res, next) => {
   res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Verification code is valid', token });
 });
 
-
-
-
 // Function to handle password reset  
 const resetPassword = asyncwrapper(async (req, res, next) => {
   const { newPassword } = req.body;
@@ -204,5 +290,8 @@ const resetPassword = asyncwrapper(async (req, res, next) => {
     resetPassword ,
     forgotPassword,
     verifyCode,
-
+    getsnigleuser,
+    deleteUser,
+    updateUser,
+    loginAsUser
 }
