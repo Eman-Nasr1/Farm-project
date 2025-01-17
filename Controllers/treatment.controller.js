@@ -395,6 +395,10 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
     if (query.locationShed) {
       filter.locationShed = query.locationShed;
     }
+
+    if (query.tagId) {
+      filter.tagId = query.tagId;
+    }
   
     if (query.date) {
       filter.date = query.date;
