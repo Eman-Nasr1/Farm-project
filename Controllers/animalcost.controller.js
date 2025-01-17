@@ -18,8 +18,8 @@ const getallanimalscost = asyncwrapper(async (req, res,next) => {
     const filter = { owner: userId };
 
 
-    if (query.tagId) {
-        filter.tagId = query.tagId; // e.g., 
+    if (query.animalTagId) {
+        filter.animalTagId = query.animalTagId; // e.g., 
     }
 
     // Find animals with applied filters
