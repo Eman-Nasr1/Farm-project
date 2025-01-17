@@ -7,10 +7,10 @@ const { userValidationRules, validateUser,loginValidationRules } = require('../m
 
 
 router.post('/admin/login-as/:userId', verifytoken, usercontroller.loginAsUser);  
-router.get ('/api/getusers',usercontroller.getallusers);
-router.get ('/api/getSingleUser/:userId',usercontroller.getsnigleuser);
-router.patch('/api/updateUser/:userId',usercontroller.updateUser);
-router.delete('/api/deleteUser/:userId',usercontroller.deleteUser);
+router.get ('/api/getusers',verifytoken,usercontroller.getallusers);
+router.get ('/api/getSingleUser/:userId',verifytoken,usercontroller.getsnigleuser);
+router.patch('/api/updateUser/:userId',verifytoken,usercontroller.updateUser);
+router.delete('/api/deleteUser/:userId',verifytoken,usercontroller.deleteUser);
 
 router.post('/api/register', userValidationRules(), validateUser, usercontroller.register);
 

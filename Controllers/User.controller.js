@@ -7,7 +7,11 @@ const jwt =require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer'); 
 
-const getallusers=asyncwrapper(async(req,res)=>{
+const getallusers=asyncwrapper(async(req,res,next)=>{
+  if (req.role !== 'admin') {
+    const error = AppError.create('Admin access only', 403, httpstatustext.ERROR);
+    return next(error);
+  }
     // console.log(req.headers);
      const query=req.query;
      const limit=query.limit||10;
@@ -74,7 +78,11 @@ const updateUser = asyncwrapper(async (req, res, next) => {
 });
 
 
-const deleteUser= asyncwrapper(async(req,res)=>{
+const deleteUser= asyncwrapper(async(req,res,next)=>{
+  if (req.role !== 'admin') {
+    const error = AppError.create('Admin access only', 403, httpstatustext.ERROR);
+    return next(error);
+  }
   await User.deleteOne({_id:req.params.userId});
  res.status(200).json({status:httpstatustext.SUCCESS,data:null});
 
@@ -106,7 +114,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
   // Send the token back to the admin  
   return res.json({ status: httpstatustext.SUCCESS, data: { token } });  
 });
-
+ 
  const register=asyncwrapper(async(req,res,next)=>{
     const {name,email,password,confirmpassword,phone,country,role,usertype}=req.body;
 
