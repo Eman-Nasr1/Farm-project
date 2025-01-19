@@ -1,16 +1,5 @@
 const mongoose = require("mongoose");
 
-const feedSchema = new mongoose.Schema({
-  feedName: {
-    type: String,
-    required: true,
-  },
-  quantity: {
-    type: Number,
-    required: true,
-  },
-});
-
 const shedEntrySchema = new mongoose.Schema({
   locationShed: {
     type: String,
@@ -21,10 +10,19 @@ const shedEntrySchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-  feeds: {
-    type: [feedSchema],
-    required: true,
-  },
+  feeds: [
+    {
+      feedId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Feed", // Reference to the Feed model
+        required: true,
+      },
+      quantity: {
+        type: Number,
+        required: true,
+      },
+    },
+  ],
   date: {
     type: Date,
     default: Date.now,
