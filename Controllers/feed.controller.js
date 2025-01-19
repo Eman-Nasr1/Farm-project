@@ -169,20 +169,18 @@ const deletefeed = asyncwrapper(async (req, res) => {
 // });
 
 const addFeedToShed = asyncwrapper(async (req, res, next) => {  
-  // Same initial checks and user retrieval  
-  const userId = req.userId;
-    const { locationShed, feeds, date } = req.body;
-  
-    if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: "locationShed and feeds (array) are required.",
-      });
-    }
+  const userId = req.userId;  
+  const { locationShed, feeds, date } = req.body;  
+
+  if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {  
+    return res.status(400).json({  
+      status: "FAILURE",  
+      message: "locationShed and feeds (array) are required.",  
+    });  
+  }  
+
   // Fetch animals at the shed  
   const animals = await Animal.find({ locationShed });  
-
-  // Check for existing animals  
   if (animals.length === 0) {  
     return res.status(404).json({  
       status: "FAILURE",  
@@ -190,8 +188,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });  
   }  
 
-  // Prepare to aggregate feeds and calculate feed costs  
-  const feedCosts = {};  
+  const feedCosts = [];  
   const allFeeds = [];  
 
   for (const feedItem of feeds) {  
@@ -205,7 +202,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     }  
 
     const feed = await Feed.findOne({ name: feedName });  
-
     if (!feed) {  
       return res.status(404).json({  
         status: "FAILURE",  
@@ -213,29 +209,32 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       });  
     }  
 
-    const totalQuantity = (feedCosts[feedName]?.quantity || 0) + quantity;  
-    feedCosts[feedName] = { feedId: feed._id, quantity: totalQuantity, cost: feed.price * totalQuantity };  
-    
-    allFeeds.push({ feedName, quantity });  
+    const feedCost = feed.price * quantity;  
+    feedCosts.push({ feed: feed._id, quantity, cost: feedCost });  
+
+    // Include feedId in the allFeeds array  
+    allFeeds.push({  
+      feedId: feed._id, // Add feedId  
+      feedName: feedName,  
+      quantity: quantity,  
+    });  
   }  
 
-  // Calculate total feed cost and per animal feed cost  
-  let totalFeedCost = 0;  
-  for (let costObj of Object.values(feedCosts)) {  
-    totalFeedCost += costObj.cost;  
-  }  
+  // Total feed cost calculations  
+  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);  
   const perAnimalFeedCost = totalFeedCost / animals.length;  
 
-  // Create a single shed entry  
+  // Create a single shed entry with the modified feeds array  
   const shedEntry = new ShedEntry({  
     locationShed,  
     owner: userId,  
-    feeds: allFeeds,  
+    feeds: allFeeds, // Use the new array with feedId  
     date: date ? new Date(date) : Date.now(),  
   });  
+
   await shedEntry.save();  
 
-  // Updating animal costs  
+  // Cost entry updates for each animal  
   for (const animal of animals) {  
     let animalCostEntry = await AnimalCost.findOne({  
       animalTagId: animal.tagId,  
@@ -247,7 +246,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       animalCostEntry = new AnimalCost({  
         animalTagId: animal.tagId,  
         feedCost: perAnimalFeedCost,  
-        treatmentCost: 0,  
+        treatmentCost: 0, // Default treatment cost  
         date: date,  
         owner: userId,  
       });  
@@ -256,7 +255,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     await animalCostEntry.save();  
   }  
 
-  // Response with created shed entry and costs  
   res.status(201).json({  
     status: "SUCCESS",  
     data: {  
