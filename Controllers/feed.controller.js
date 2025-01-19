@@ -170,7 +170,15 @@ const deletefeed = asyncwrapper(async (req, res) => {
 
 const addFeedToShed = asyncwrapper(async (req, res, next) => {  
   // Same initial checks and user retrieval  
-
+  const userId = req.userId;
+    const { locationShed, feeds, date } = req.body;
+  
+    if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "locationShed and feeds (array) are required.",
+      });
+    }
   // Fetch animals at the shed  
   const animals = await Animal.find({ locationShed });  
 
