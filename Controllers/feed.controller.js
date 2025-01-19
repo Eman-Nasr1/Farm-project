@@ -168,101 +168,102 @@ const deletefeed = asyncwrapper(async (req, res) => {
 //   });
 // });
 
-const addFeedToShed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
-  const { locationShed, feeds, date } = req.body;
+const addFeedToShed = asyncwrapper(async (req, res, next) => {  
+  // Same initial checks and user retrieval  
 
-  if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
-    return res.status(400).json({
-      status: "FAILURE",
-      message: "locationShed and feeds (array) are required.",
-    });
-  }
+  // Fetch animals at the shed  
+  const animals = await Animal.find({ locationShed });  
 
-  const animals = await Animal.find({ locationShed });
+  // Check for existing animals  
+  if (animals.length === 0) {  
+    return res.status(404).json({  
+      status: "FAILURE",  
+      message: `No animals found in shed "${locationShed}".`,  
+    });  
+  }  
 
-  if (animals.length === 0) {
-    return res.status(404).json({
-      status: "FAILURE",
-      message: `No animals found in shed "${locationShed}".`,
-    });
-  }
+  // Prepare to aggregate feeds and calculate feed costs  
+  const feedCosts = {};  
+  const allFeeds = [];  
 
-  const shedEntries = [];
-  const feedCosts = [];
+  for (const feedItem of feeds) {  
+    const { feedName, quantity } = feedItem;  
 
-  for (const feedItem of feeds) {
-    const { feedName, quantity } = feedItem;
+    if (!feedName || !quantity) {  
+      return res.status(400).json({  
+        status: "FAILURE",  
+        message: "Each feed must have feedName and quantity.",  
+      });  
+    }  
 
-    if (!feedName || !quantity) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: "Each feed must have feedName and quantity.",
-      });
-    }
+    const feed = await Feed.findOne({ name: feedName });  
 
-    const feed = await Feed.findOne({ name: feedName });
+    if (!feed) {  
+      return res.status(404).json({  
+        status: "FAILURE",  
+        message: `Feed with name "${feedName}" not found.`,  
+      });  
+    }  
 
-    if (!feed) {
-      return res.status(404).json({
-        status: "FAILURE",
-        message: `Feed with name "${feedName}" not found.`,
-      });
-    }
+    const totalQuantity = (feedCosts[feedName]?.quantity || 0) + quantity;  
+    feedCosts[feedName] = { feedId: feed._id, quantity: totalQuantity, cost: feed.price * totalQuantity };  
+    
+    allFeeds.push({ feedName, quantity });  
+  }  
 
-    const feedCost = feed.price * quantity;
-    feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
+  // Calculate total feed cost and per animal feed cost  
+  let totalFeedCost = 0;  
+  for (let costObj of Object.values(feedCosts)) {  
+    totalFeedCost += costObj.cost;  
+  }  
+  const perAnimalFeedCost = totalFeedCost / animals.length;  
 
-    const shedEntry = new ShedEntry({
-      locationShed,
-      owner: userId,
-      feeds: feeds.map((item) => ({ feedName: item.feedName, quantity: item.quantity })),
-      date: date ? new Date(date) : Date.now(),
-    });
+  // Create a single shed entry  
+  const shedEntry = new ShedEntry({  
+    locationShed,  
+    owner: userId,  
+    feeds: allFeeds,  
+    date: date ? new Date(date) : Date.now(),  
+  });  
+  await shedEntry.save();  
 
-    await shedEntry.save();
-    shedEntries.push(shedEntry);
-  }
+  // Updating animal costs  
+  for (const animal of animals) {  
+    let animalCostEntry = await AnimalCost.findOne({  
+      animalTagId: animal.tagId,  
+    });  
 
-  // Distribute feed costs across animals
-  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
-  const perAnimalFeedCost = totalFeedCost / animals.length;
+    if (animalCostEntry) {  
+      animalCostEntry.feedCost += perAnimalFeedCost;  
+    } else {  
+      animalCostEntry = new AnimalCost({  
+        animalTagId: animal.tagId,  
+        feedCost: perAnimalFeedCost,  
+        treatmentCost: 0,  
+        date: date,  
+        owner: userId,  
+      });  
+    }  
 
-  for (const animal of animals) {
-    let animalCostEntry = await AnimalCost.findOne({
-      animalTagId: animal.tagId,
-    });
+    await animalCostEntry.save();  
+  }  
 
-    if (animalCostEntry) {
-      animalCostEntry.feedCost += perAnimalFeedCost;
-    } else {
-      animalCostEntry = new AnimalCost({
-        animalTagId: animal.tagId,
-        feedCost: perAnimalFeedCost,
-        treatmentCost: 0, // Default treatment cost
-        date: date,
-        owner: userId,
-      });
-    }
-
-    await animalCostEntry.save();
-  }
-
-  res.status(201).json({
-    status: "SUCCESS",
-    data: {
-      shedEntries: shedEntries.map((entry) => ({
-        _id: entry._id,
-        locationShed: entry.locationShed,
-        owner: entry.owner,
-        feeds: entry.feeds, // Include feeds here
-        createdAt: entry.createdAt,
-        __v: entry.__v,
-      })),
-      totalFeedCost,
-      perAnimalFeedCost,
-    },
-  });
+  // Response with created shed entry and costs  
+  res.status(201).json({  
+    status: "SUCCESS",  
+    data: {  
+      shedEntry: {  
+        _id: shedEntry._id,  
+        locationShed: shedEntry.locationShed,  
+        owner: shedEntry.owner,  
+        feeds: shedEntry.feeds,  
+        createdAt: shedEntry.createdAt,  
+        __v: shedEntry.__v,  
+      },  
+      totalFeedCost,  
+      perAnimalFeedCost,  
+    },  
+  });  
 });
 
 
@@ -393,11 +394,53 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   });
 });
 
+// const getallfeedsbyshed = asyncwrapper(async (req, res) => {
+
+//   const userId = req.userId;
+//   const query = req.query;
+//   const limit = query.limit || 10;
+//   const page = query.page || 1;
+//   const skip = (page - 1) * limit;
+
+//   const filter = { owner: userId };
+
+//   if (query.locationShed) {
+//     filter.locationShed = query.locationShed;
+//   }
+
+//   if (query.date) {
+//     filter.date = query.date;
+//   }
+
+//   const feedShed = await ShedEntry.find(filter, { __v: false })
+//     .populate({
+//       path: "feed", // Populate the feed field
+//       select: "name price", // Select only the name and price fields
+//     })
+//     .limit(limit)
+//     .skip(skip);
+
+//   // Map the populated data for a cleaner response
+//   const response = feedShed.map((entry) => ({
+//     _id: entry._id,
+//     locationShed: entry.locationShed,
+//     quantity: entry.quantity,
+//     date: entry.date,
+//     feedName: entry.feed?.name, // Feed name from the populated data
+//     feedPrice: entry.feed?.price, // Feed price from the populated data
+//   }));
+
+//   res.json({
+//     status: httpstatustext.SUCCESS,
+//     data: { feedShed: response },
+//   });
+// });
+
 const getallfeedsbyshed = asyncwrapper(async (req, res) => {
   const userId = req.userId;
   const query = req.query;
-  const limit = query.limit || 10;
-  const page = query.page || 1;
+  const limit = parseInt(query.limit, 10) || 10;
+  const page = parseInt(query.page, 10) || 1;
   const skip = (page - 1) * limit;
 
   const filter = { owner: userId };
@@ -410,22 +453,25 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
     filter.date = query.date;
   }
 
+  // Find ShedEntries with pagination
   const feedShed = await ShedEntry.find(filter, { __v: false })
     .populate({
-      path: "feed", // Populate the feed field
-      select: "name price", // Select only the name and price fields
+      path: "feeds.feedId", // Populate feedId in the feeds array
+      select: "name price", // Select only the name and price fields from Feed
     })
     .limit(limit)
     .skip(skip);
 
-  // Map the populated data for a cleaner response
+  // Transform the data for a cleaner response
   const response = feedShed.map((entry) => ({
     _id: entry._id,
     locationShed: entry.locationShed,
-    quantity: entry.quantity,
     date: entry.date,
-    feedName: entry.feed?.name, // Feed name from the populated data
-    feedPrice: entry.feed?.price, // Feed price from the populated data
+    feeds: entry.feeds.map((feed) => ({
+      feedName: feed.feedId?.name, // Feed name from populated data
+      feedPrice: feed.feedId?.price, // Feed price from populated data
+      quantity: feed.quantity, // Quantity specific to this ShedEntry
+    })),
   }));
 
   res.json({
