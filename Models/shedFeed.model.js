@@ -1,15 +1,9 @@
-const mongoose = require('mongoose');  
-const Feed = require('../Models/feed.model');  
-const User = require('../Models/user.model');
+const mongoose = require('mongoose');
 
-const ShedFeedSchema = new mongoose.Schema({  
+const FeedSchema = new mongoose.Schema({
     feed: {  
         type: mongoose.Schema.Types.ObjectId,  
         ref: 'Feed',  
-        required: true  
-    },  
-    locationShed: {  
-        type: String,  
         required: true  
     },  
     quantity: {  
@@ -20,16 +14,24 @@ const ShedFeedSchema = new mongoose.Schema({
         type: Date,  
         default: Date.now,  
         required: true  
-    },
-    owner: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-       
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
     }
-});  
+});
+
+const ShedFeedSchema = new mongoose.Schema({
+    locationShed: {  
+        type: String,  
+        required: true  
+    },  
+    feeds: [FeedSchema], // Embed multiple feeds for the location
+    owner: {  
+        type: mongoose.Schema.Types.ObjectId,  
+        ref: 'User',  
+        required: true  
+    },
+    createdAt: {  
+        type: Date,  
+        default: Date.now  
+    }
+});
 
 module.exports = mongoose.model('ShedEntry', ShedFeedSchema);

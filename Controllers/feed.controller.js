@@ -77,6 +77,97 @@ const deletefeed = asyncwrapper(async (req, res) => {
 
 // --------------------------------------feed by shed ------------------------
 
+// const addFeedToShed = asyncwrapper(async (req, res, next) => {
+//   const userId = req.userId;
+//   const { locationShed, feeds, date } = req.body;
+
+//   if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
+//     return res.status(400).json({
+//       status: "FAILURE",
+//       message: "locationShed and feeds (array) are required.",
+//     });
+//   }
+
+//   const animals = await Animal.find({ locationShed });
+
+//   if (animals.length === 0) {
+//     return res.status(404).json({
+//       status: "FAILURE",
+//       message: `No animals found in shed "${locationShed}".`,
+//     });
+//   }
+
+//   const shedEntries = [];
+//   const feedCosts = [];
+
+//   for (const feedItem of feeds) {
+//     const { feedName, quantity } = feedItem;
+
+//     if (!feedName || !quantity) {
+//       return res.status(400).json({
+//         status: "FAILURE",
+//         message: "Each feed must have feedName and quantity.",
+//       });
+//     }
+
+//     const feed = await Feed.findOne({ name: feedName });
+
+//     if (!feed) {
+//       return res.status(404).json({
+//         status: "FAILURE",
+//         message: `Feed with name "${feedName}" not found.`,
+//       });
+//     }
+
+//     const feedCost = feed.price * quantity;
+//     feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
+
+//     const shedEntry = new ShedEntry({
+//       feed: feed._id,
+//       locationShed,
+//       quantity,
+//       owner: userId,
+//       date: date ? new Date(date) : Date.now(),
+//     });
+
+//     await shedEntry.save();
+//     shedEntries.push(shedEntry);
+//   }
+
+//   // Distribute feed costs across animals
+//   const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
+//   const perAnimalFeedCost = totalFeedCost / animals.length;
+
+//   for (const animal of animals) {
+//     let animalCostEntry = await AnimalCost.findOne({
+//       animalTagId: animal.tagId,
+//     });
+
+//     if (animalCostEntry) {
+//       animalCostEntry.feedCost += perAnimalFeedCost;
+//     } else {
+//       animalCostEntry = new AnimalCost({
+//         animalTagId: animal.tagId,
+//         feedCost: perAnimalFeedCost,
+//         treatmentCost: 0, // Default treatment cost
+//         date: date,
+//         owner: userId,
+//       });
+//     }
+
+//     await animalCostEntry.save();
+//   }
+
+//   res.status(201).json({
+//     status: "SUCCESS",
+//     data: {
+//       shedEntries,
+//       totalFeedCost,
+//       perAnimalFeedCost,
+//     },
+//   });
+// });
+
 const addFeedToShed = asyncwrapper(async (req, res, next) => {
   const userId = req.userId;
   const { locationShed, feeds, date } = req.body;
@@ -89,7 +180,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
   }
 
   const animals = await Animal.find({ locationShed });
-
   if (animals.length === 0) {
     return res.status(404).json({
       status: "FAILURE",
@@ -97,21 +187,19 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });
   }
 
+  const feedNames = feeds.map(feed => feed.feedName);
+  const foundFeeds = await Feed.find({ name: { $in: feedNames } });
+
+  const feedMap = foundFeeds.reduce((map, feed) => {
+    map[feed.name] = feed; // Create a map of feedName to feed object
+    return map;
+  }, {});
+
   const shedEntries = [];
-  const feedCosts = [];
+  let totalFeedCost = 0;
 
-  for (const feedItem of feeds) {
-    const { feedName, quantity } = feedItem;
-
-    if (!feedName || !quantity) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: "Each feed must have feedName and quantity.",
-      });
-    }
-
-    const feed = await Feed.findOne({ name: feedName });
-
+  for (const { feedName, quantity } of feeds) {
+    const feed = feedMap[feedName];
     if (!feed) {
       return res.status(404).json({
         status: "FAILURE",
@@ -120,7 +208,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     }
 
     const feedCost = feed.price * quantity;
-    feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
+    totalFeedCost += feedCost;
 
     const shedEntry = new ShedEntry({
       feed: feed._id,
@@ -134,14 +222,10 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     shedEntries.push(shedEntry);
   }
 
-  // Distribute feed costs across animals
-  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
   const perAnimalFeedCost = totalFeedCost / animals.length;
 
   for (const animal of animals) {
-    let animalCostEntry = await AnimalCost.findOne({
-      animalTagId: animal.tagId,
-    });
+    let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
 
     if (animalCostEntry) {
       animalCostEntry.feedCost += perAnimalFeedCost;
@@ -149,8 +233,8 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       animalCostEntry = new AnimalCost({
         animalTagId: animal.tagId,
         feedCost: perAnimalFeedCost,
-        treatmentCost: 0, // Default treatment cost
-        date: date,
+        treatmentCost: 0,
+        date,
         owner: userId,
       });
     }
@@ -160,13 +244,10 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 
   res.status(201).json({
     status: "SUCCESS",
-    data: {
-      shedEntries,
-      totalFeedCost,
-      perAnimalFeedCost,
-    },
+    data: { shedEntries, totalFeedCost, perAnimalFeedCost },
   });
 });
+
 
 const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   const userId = req.userId; // Get the user ID from the token
