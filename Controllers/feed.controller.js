@@ -1,4 +1,5 @@
 const Feed = require("../Models/feed.model");
+const Fodder=require("../Models/fodder.model");
 const httpstatustext = require("../utilits/httpstatustext");
 const asyncwrapper = require("../middleware/asyncwrapper");
 const AppError = require("../utilits/AppError");
