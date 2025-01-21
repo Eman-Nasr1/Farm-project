@@ -16,6 +16,6 @@ router.get('/api/feed/getsingleFeedByShed/:feedShedId',verifytoken,feedcontrolle
 router.patch('/api/feed/updatefeedByShed/:shedEntryId',verifytoken,feedcontroller.updateFeedToShed);
 router.delete('/api/feed/deletefeedByShed/:feedShedId',verifytoken,feedcontroller.deletefeedshed);
 
-
+router.post('/api/feed/addfodder',verifytoken,feedcontroller.manufactureFodder);
 
 module.exports=router;
