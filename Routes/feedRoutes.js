@@ -13,7 +13,7 @@ router.post('/api/feed/addfeedbylocationshed',verifytoken, feedcontroller.addFee
 
 router.get('/api/feed/getAllFeedByShed',verifytoken,feedcontroller.getallfeedsbyshed);
 router.get('/api/feed/getsingleFeedByShed/:feedShedId',verifytoken,feedcontroller.getsniglefeedShed);
-router.patch('/api/feed/updatefeedByShed/:feedShedId',verifytoken,feedcontroller.updateFeedToShed);
+router.patch('/api/feed/updatefeedByShed/:shedEntryId',verifytoken,feedcontroller.updateFeedToShed);
 router.delete('/api/feed/deletefeedByShed/:feedShedId',verifytoken,feedcontroller.deletefeedshed);
 
 
