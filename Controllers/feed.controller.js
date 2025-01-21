@@ -630,44 +630,55 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   }, {});
 
   // Calculate total feed cost manually based on quantity and price
-  const totalFeedCost = shedEntries.reduce((sum, entry) => {
-    const feedPrice = feedMap[entry.feed]; // Get the price of the current feed
-    const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry
-    return sum + cost; // Add to total
-  }, 0);
+ // Calculate total feed cost
+const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
 
-  // Calculate per animal feed cost
-  const perAnimalFeedCost =
-    animals.length > 0 ? totalFeedCost / animals.length : 0;
+// Ensure animals exist in the shed
+if (animals.length === 0) {
+  return res.status(400).json({
+    status: "FAILURE",
+    message: "No animals found in the specified shed.",
+  });
+}
 
-  for (const animal of animals) {
-    let animalCostEntry = await AnimalCost.findOne({
+// Calculate per-animal feed cost
+const perAnimalFeedCost =
+  animals.length > 0 ? totalFeedCost / animals.length : 0;
+
+// Validate feed cost before proceeding
+if (isNaN(perAnimalFeedCost)) {
+  return res.status(400).json({
+    status: "FAILURE",
+    message: "Invalid feed cost calculation. Check feed data and animals in the shed.",
+  });
+}
+
+// Process AnimalCost entries
+for (const animal of animals) {
+  let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+
+  if (animalCostEntry) {
+    animalCostEntry.feedCost = perAnimalFeedCost;
+  } else {
+    animalCostEntry = new AnimalCost({
       animalTagId: animal.tagId,
+      feedCost: perAnimalFeedCost,
+      treatmentCost: 0,
+      date: date ? new Date(date) : Date.now(),
+      owner: userId,
     });
-
-    if (animalCostEntry) {
-      animalCostEntry.feedCost = perAnimalFeedCost;
-    } else {
-      animalCostEntry = new AnimalCost({
-        animalTagId: animal.tagId,
-        feedCost: perAnimalFeedCost,
-        treatmentCost: 0,
-        date: shedEntry.date,
-        owner: userId,
-      });
-    }
-
-    if (typeof animalCostEntry.feedCost !== "number") {
-      const error = AppError.create(
-        "Invalid feedCost calculated",
-        400,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
-
-    await animalCostEntry.save();
   }
+
+  if (isNaN(animalCostEntry.feedCost)) {
+    return res.status(400).json({
+      status: "FAILURE",
+      message: `Invalid feedCost for animal with tagId: ${animal.tagId}`,
+    });
+  }
+
+  await animalCostEntry.save();
+}
+
 
   // Populate the response to include feed name and price
   const updatedShedEntry = await ShedEntry.findById(shedEntry._id).populate({
