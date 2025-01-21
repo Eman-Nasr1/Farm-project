@@ -826,6 +826,67 @@ const deletefeedshed = asyncwrapper(async (req, res) => {
 // --------------------------------------fodder ------------------------
 
 
+// const manufactureFodder = asyncwrapper(async (req, res, next) => {
+//   const userId = req.userId;
+//   const { feeds, name } = req.body;  // Expecting an array of feed IDs and their quantities
+
+//   // Validate the inputs
+//   if (!Array.isArray(feeds) || feeds.length === 0) {
+//     return next(AppError.create("You must provide at least one feed", 400, httpstatustext.FAIL));
+//   }
+
+//   let totalQuantity = 0;
+//   let totalPrice = 0; // Initialize total price
+//   const fodderComponents = [];
+
+//   // Loop through each feed to create fodder, subtract the stock, and calculate price
+//   for (let i = 0; i < feeds.length; i++) {
+//     const feed = await Feed.findById(feeds[i].feedId);
+//     if (!feed) {
+//       return next(AppError.create(`Feed with ID ${feeds[i].feedId} not found`, 404, httpstatustext.FAIL));
+//     }
+
+//     if (feed.owner.toString() !== userId.toString()) {
+//       return next(AppError.create("You are not authorized to use this feed", 403, httpstatustext.FAIL));
+//     }
+
+//     const quantityToUse = feeds[i].quantity;
+    
+//     // Ensure there is enough quantity in stock
+//     if (feed.quantity < quantityToUse) {
+//       return next(AppError.create(`Not enough stock for feed ${feed.name}`, 400, httpstatustext.FAIL));
+//     }
+
+//     // Update feed stock by subtracting the quantity used
+//     feed.quantity -= quantityToUse;
+//     await feed.save();
+
+//     // Calculate price for this feed (quantity * price)
+//     const feedPrice = feed.price || 0; // If price is not set, default to 0
+//     totalPrice += feedPrice * quantityToUse;
+
+//     // Add the feed to fodder components
+//     fodderComponents.push({ feedId: feed._id, quantity: quantityToUse });
+//     totalQuantity += quantityToUse;
+//   }
+
+//   // Create a new fodder document with the components, total quantity, and price
+//   const newFodder = new Fodder({
+//     name,
+//     components: fodderComponents,
+//     totalQuantity,
+//     totalPrice, // Store the calculated price in the fodder document
+//     owner: userId
+//   });
+
+//   await newFodder.save();
+
+//   res.json({
+//     status: httpstatustext.SUCCESS,
+//     data: { fodder: newFodder },
+//   });
+// });
+
 const manufactureFodder = asyncwrapper(async (req, res, next) => {
   const userId = req.userId;
   const { feeds, name } = req.body;  // Expecting an array of feed IDs and their quantities
@@ -870,22 +931,38 @@ const manufactureFodder = asyncwrapper(async (req, res, next) => {
     totalQuantity += quantityToUse;
   }
 
-  // Create a new fodder document with the components, total quantity, and price
+  // Create the new Fodder document
   const newFodder = new Fodder({
     name,
     components: fodderComponents,
     totalQuantity,
-    totalPrice, // Store the calculated price in the fodder document
+    totalPrice,
     owner: userId
   });
 
+  // Save the new fodder to the Fodder collection
   await newFodder.save();
+
+  // Create a new feed (treated as fodder) with the calculated total quantity and price
+  const newFeed = new Feed({
+    name,  // Name of the new fodder
+    type: 'fodder',  // You can set the type to 'fodder' or any other classification you prefer
+    quantity: totalQuantity,  // The total quantity of the fodder created
+    price: totalPrice,  // The total price of the fodder
+    concentrationOfDryMatter: 0,  // You can set this if needed
+    owner: userId,  // Owner is the same as the user making the fodder
+    fodders: fodderComponents,  // Add the components of the original feeds
+  });
+
+  // Save the new feed to the Feed collection
+  await newFeed.save();
 
   res.json({
     status: httpstatustext.SUCCESS,
-    data: { fodder: newFodder },
+    data: { feed: newFeed, fodder: newFodder },  // Return both the new feed (treated as fodder) and the new fodder document
   });
 });
+
 
 
 module.exports = {
