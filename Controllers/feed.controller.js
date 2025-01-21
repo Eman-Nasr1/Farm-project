@@ -613,7 +613,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   // Save the updated shed entry document
   await shedEntry.save();
 
-  // Instead of aggregation, calculate total feed cost directly from shed entries
+  // Calculate total feed costs for all shed entries in the same shed
   const animals = await Animal.find({ locationShed: shedEntry.locationShed });
   const shedEntries = await ShedEntry.find({
     locationShed: shedEntry.locationShed,
@@ -624,61 +624,66 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   const feedIds = shedEntries.map((entry) => entry.feed);
   const feeds = await Feed.find({ _id: { $in: feedIds } }).select("price _id");
 
+  // Map feed prices by feed ID
   const feedMap = feeds.reduce((map, feed) => {
-    map[feed._id] = feed.price; // Create a mapping of feed ID to its price
+    map[feed._id] = feed.price;
     return map;
   }, {});
 
-  // Calculate total feed cost manually based on quantity and price
- // Calculate total feed cost
-const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
-
-// Ensure animals exist in the shed
-if (animals.length === 0) {
-  return res.status(400).json({
-    status: "FAILURE",
-    message: "No animals found in the specified shed.",
+  // Calculate feed costs for each shed entry
+  const feedCosts = shedEntries.map((entry) => {
+    const feedPrice = feedMap[entry.feed]; // Get the price of the current feed
+    const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry
+    return { feed: entry.feed, cost }; // Return the feed and its cost
   });
-}
 
-// Calculate per-animal feed cost
-const perAnimalFeedCost =
-  animals.length > 0 ? totalFeedCost / animals.length : 0;
+  // Calculate total feed cost
+  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
 
-// Validate feed cost before proceeding
-if (isNaN(perAnimalFeedCost)) {
-  return res.status(400).json({
-    status: "FAILURE",
-    message: "Invalid feed cost calculation. Check feed data and animals in the shed.",
-  });
-}
-
-// Process AnimalCost entries
-for (const animal of animals) {
-  let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
-
-  if (animalCostEntry) {
-    animalCostEntry.feedCost = perAnimalFeedCost;
-  } else {
-    animalCostEntry = new AnimalCost({
-      animalTagId: animal.tagId,
-      feedCost: perAnimalFeedCost,
-      treatmentCost: 0,
-      date: date ? new Date(date) : Date.now(),
-      owner: userId,
-    });
-  }
-
-  if (isNaN(animalCostEntry.feedCost)) {
+  // Ensure animals exist in the shed
+  if (animals.length === 0) {
     return res.status(400).json({
       status: "FAILURE",
-      message: `Invalid feedCost for animal with tagId: ${animal.tagId}`,
+      message: "No animals found in the specified shed.",
     });
   }
 
-  await animalCostEntry.save();
-}
+  // Calculate per-animal feed cost
+  const perAnimalFeedCost = totalFeedCost / animals.length;
 
+  // Validate feed cost before proceeding
+  if (isNaN(perAnimalFeedCost)) {
+    return res.status(400).json({
+      status: "FAILURE",
+      message: "Invalid feed cost calculation. Check feed data and animals in the shed.",
+    });
+  }
+
+  // Process AnimalCost entries
+  for (const animal of animals) {
+    let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+
+    if (animalCostEntry) {
+      animalCostEntry.feedCost = perAnimalFeedCost;
+    } else {
+      animalCostEntry = new AnimalCost({
+        animalTagId: animal.tagId,
+        feedCost: perAnimalFeedCost,
+        treatmentCost: 0,
+        date: new Date(updatedData.date) || Date.now(),
+        owner: userId,
+      });
+    }
+
+    if (isNaN(animalCostEntry.feedCost)) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: `Invalid feedCost for animal with tagId: ${animal.tagId}`,
+      });
+    }
+
+    await animalCostEntry.save();
+  }
 
   // Populate the response to include feed name and price
   const updatedShedEntry = await ShedEntry.findById(shedEntry._id).populate({
@@ -691,6 +696,7 @@ for (const animal of animals) {
     data: { shedEntry: updatedShedEntry },
   });
 });
+
 
 
 const getallfeedsbyshed = asyncwrapper(async (req, res) => {
