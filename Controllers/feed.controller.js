@@ -273,132 +273,132 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 
-const updateFeedToShed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId; // Get the user ID from the token
-  const shedEntryId = req.params.feedShedId; // ID of the ShedEntry to update
-  const updatedData = req.body; // Data to update
+// const updateFeedToShed = asyncwrapper(async (req, res, next) => {
+//   const userId = req.userId; // Get the user ID from the token
+//   const shedEntryId = req.params.feedShedId; // ID of the ShedEntry to update
+//   const updatedData = req.body; // Data to update
 
-  // Find the existing shed entry document
-  let shedEntry = await ShedEntry.findOne({ _id: shedEntryId, owner: userId });
-  if (!shedEntry) {
-    const error = AppError.create(
-      "Shed entry not found or unauthorized to update",
-      404,
-      httpstatustext.FAIL
-    );
-    return next(error);
-  }
+//   // Find the existing shed entry document
+//   let shedEntry = await ShedEntry.findOne({ _id: shedEntryId, owner: userId });
+//   if (!shedEntry) {
+//     const error = AppError.create(
+//       "Shed entry not found or unauthorized to update",
+//       404,
+//       httpstatustext.FAIL
+//     );
+//     return next(error);
+//   }
 
-  // Check if feed name is provided and replace it with the corresponding feed ID
-  if (updatedData.feedName) {
-    const feed = await Feed.findOne({ name: updatedData.feedName });
-    if (!feed) {
-      const error = AppError.create(
-        `Feed with name "${updatedData.feedName}" not found`,
-        404,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
-    updatedData.feed = feed._id; // Replace feedName with feed ID
-    shedEntry.feed = feed._id; // Update the feed in the ShedEntry document
-  }
+//   // Check if feed name is provided and replace it with the corresponding feed ID
+//   if (updatedData.feedName) {
+//     const feed = await Feed.findOne({ name: updatedData.feedName });
+//     if (!feed) {
+//       const error = AppError.create(
+//         `Feed with name "${updatedData.feedName}" not found`,
+//         404,
+//         httpstatustext.FAIL
+//       );
+//       return next(error);
+//     }
+//     updatedData.feed = feed._id; // Replace feedName with feed ID
+//     shedEntry.feed = feed._id; // Update the feed in the ShedEntry document
+//   }
 
-  // Update top-level fields in the shed entry
-  Object.assign(shedEntry, updatedData);
+//   // Update top-level fields in the shed entry
+//   Object.assign(shedEntry, updatedData);
 
-  // If `quantity` or `feed` is updated, recalculate costs
-  if (updatedData.quantity || updatedData.feed) {
-    const feed = await Feed.findById(shedEntry.feed);
-    if (!feed) {
-      const error = AppError.create(
-        `Feed with ID "${shedEntry.feed}" not found`,
-        404,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
+//   // If `quantity` or `feed` is updated, recalculate costs
+//   if (updatedData.quantity || updatedData.feed) {
+//     const feed = await Feed.findById(shedEntry.feed);
+//     if (!feed) {
+//       const error = AppError.create(
+//         `Feed with ID "${shedEntry.feed}" not found`,
+//         404,
+//         httpstatustext.FAIL
+//       );
+//       return next(error);
+//     }
 
-    shedEntry.quantity = updatedData.quantity || shedEntry.quantity;
-    shedEntry.feedCost = feed.price * shedEntry.quantity;
+//     shedEntry.quantity = updatedData.quantity || shedEntry.quantity;
+//     shedEntry.feedCost = feed.price * shedEntry.quantity;
 
-    // Debug: Log calculation process
-    //  console.log(`Updated feed cost: ${shedEntry.feedCost} (Price: ${feed.price}, Quantity: ${shedEntry.quantity})`);
-  }
+//     // Debug: Log calculation process
+//     //  console.log(`Updated feed cost: ${shedEntry.feedCost} (Price: ${feed.price}, Quantity: ${shedEntry.quantity})`);
+//   }
 
-  // Save the updated shed entry document
-  await shedEntry.save();
+//   // Save the updated shed entry document
+//   await shedEntry.save();
 
-  // Instead of aggregation, calculate total feed cost directly from shed entries
-  const animals = await Animal.find({ locationShed: shedEntry.locationShed });
-  const shedEntries = await ShedEntry.find({
-    locationShed: shedEntry.locationShed,
-    owner: userId,
-  });
+//   // Instead of aggregation, calculate total feed cost directly from shed entries
+//   const animals = await Animal.find({ locationShed: shedEntry.locationShed });
+//   const shedEntries = await ShedEntry.find({
+//     locationShed: shedEntry.locationShed,
+//     owner: userId,
+//   });
 
-  // Fetch all feeds in one go to avoid multiple DB calls
-  const feedIds = shedEntries.map((entry) => entry.feed);
-  const feeds = await Feed.find({ _id: { $in: feedIds } }).select("price _id");
+//   // Fetch all feeds in one go to avoid multiple DB calls
+//   const feedIds = shedEntries.map((entry) => entry.feed);
+//   const feeds = await Feed.find({ _id: { $in: feedIds } }).select("price _id");
 
-  const feedMap = feeds.reduce((map, feed) => {
-    map[feed._id] = feed.price; // Create a mapping of feed ID to its price
-    return map;
-  }, {});
+//   const feedMap = feeds.reduce((map, feed) => {
+//     map[feed._id] = feed.price; // Create a mapping of feed ID to its price
+//     return map;
+//   }, {});
 
-  // Calculate total feed cost manually based on quantity and price
-  const totalFeedCost = shedEntries.reduce((sum, entry) => {
-    const feedPrice = feedMap[entry.feed]; // Get the price of the current feed
-    const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry
-    return sum + cost; // Add to total
-  }, 0);
+//   // Calculate total feed cost manually based on quantity and price
+//   const totalFeedCost = shedEntries.reduce((sum, entry) => {
+//     const feedPrice = feedMap[entry.feed]; // Get the price of the current feed
+//     const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry
+//     return sum + cost; // Add to total
+//   }, 0);
 
-  // console.log('Total Feed Cost:', totalFeedCost);  // Log the total feed cost for debugging
+//   // console.log('Total Feed Cost:', totalFeedCost);  // Log the total feed cost for debugging
 
-  // Calculate per animal feed cost
-  const perAnimalFeedCost =
-    animals.length > 0 ? totalFeedCost / animals.length : 0; // Handle case when no animals are present
+//   // Calculate per animal feed cost
+//   const perAnimalFeedCost =
+//     animals.length > 0 ? totalFeedCost / animals.length : 0; // Handle case when no animals are present
 
-  for (const animal of animals) {
-    let animalCostEntry = await AnimalCost.findOne({
-      animalTagId: animal.tagId,
-    });
+//   for (const animal of animals) {
+//     let animalCostEntry = await AnimalCost.findOne({
+//       animalTagId: animal.tagId,
+//     });
 
-    if (animalCostEntry) {
-      animalCostEntry.feedCost = perAnimalFeedCost;
-    } else {
-      animalCostEntry = new AnimalCost({
-        animalTagId: animal.tagId,
-        feedCost: perAnimalFeedCost,
-        treatmentCost: 0,
-        date: shedEntry.date,
-        owner: userId,
-      });
-    }
+//     if (animalCostEntry) {
+//       animalCostEntry.feedCost = perAnimalFeedCost;
+//     } else {
+//       animalCostEntry = new AnimalCost({
+//         animalTagId: animal.tagId,
+//         feedCost: perAnimalFeedCost,
+//         treatmentCost: 0,
+//         date: shedEntry.date,
+//         owner: userId,
+//       });
+//     }
 
-    // Validate feedCost before saving
-    if (typeof animalCostEntry.feedCost !== "number") {
-      const error = AppError.create(
-        "Invalid feedCost calculated",
-        400,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
+//     // Validate feedCost before saving
+//     if (typeof animalCostEntry.feedCost !== "number") {
+//       const error = AppError.create(
+//         "Invalid feedCost calculated",
+//         400,
+//         httpstatustext.FAIL
+//       );
+//       return next(error);
+//     }
 
-    await animalCostEntry.save();
-  }
+//     await animalCostEntry.save();
+//   }
 
-  // Populate the response to include feed name and price
-  const updatedShedEntry = await ShedEntry.findById(shedEntry._id).populate({
-    path: "feed",
-    select: "name price",
-  });
+//   // Populate the response to include feed name and price
+//   const updatedShedEntry = await ShedEntry.findById(shedEntry._id).populate({
+//     path: "feed",
+//     select: "name price",
+//   });
 
-  res.json({
-    status: httpstatustext.SUCCESS,
-    data: { shedEntry: updatedShedEntry },
-  });
-});
+//   res.json({
+//     status: httpstatustext.SUCCESS,
+//     data: { shedEntry: updatedShedEntry },
+//   });
+// });
 
 // const getallfeedsbyshed1 = asyncwrapper(async (req, res) => {
 
@@ -560,142 +560,121 @@ const updateFeedToShed1 = asyncwrapper(async (req, res, next) => {
   });
 });
 
-const updateFeedToShed2 = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId; // Get the user ID from the token
-  const shedEntryId = req.params.feedShedId; // ID of the ShedEntry to update
-  const updatedData = req.body; // Data to update
+const updateFeedToShed = asyncwrapper(async (req, res, next) => {
+  const userId = req.userId;
+  const { feeds, date, locationShed } = req.body;
+  const { shedEntryId } = req.params;  // Fetch shedEntryId from params
 
-  // Find the existing shed entry document
-  let shedEntry = await ShedEntry.findOne({ _id: shedEntryId, owner: userId });
-  if (!shedEntry) {
-    const error = AppError.create(
-      "Shed entry not found or unauthorized to update",
-      404,
-      httpstatustext.FAIL
-    );
-    return next(error);
-  }
-
-  // Check if feedName is provided and replace it with the corresponding feed ID
-  if (updatedData.feedName) {
-    const feed = await Feed.findOne({ name: updatedData.feedName });
-    if (!feed) {
-      const error = AppError.create(
-        `Feed with name "${updatedData.feedName}" not found`,
-        404,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
-    updatedData.feed = feed._id; // Replace feedName with feed ID
-    shedEntry.feed = feed._id; // Update the feed in the ShedEntry document
-  }
-
-  // Update top-level fields in the shed entry
-  Object.assign(shedEntry, updatedData);
-
-  // If `quantity` or `feed` is updated, recalculate costs
-  if (updatedData.quantity || updatedData.feed) {
-    const feed = await Feed.findById(shedEntry.feed);
-    if (!feed) {
-      const error = AppError.create(
-        `Feed with ID "${shedEntry.feed}" not found`,
-        404,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
-
-    shedEntry.quantity = updatedData.quantity || shedEntry.quantity;
-    shedEntry.feedCost = feed.price * shedEntry.quantity;
-  }
-
-  // Save the updated shed entry document
-  await shedEntry.save();
-
-  // Calculate total feed costs for all shed entries in the same shed
-  const animals = await Animal.find({ locationShed: shedEntry.locationShed });
-  const shedEntries = await ShedEntry.find({
-    locationShed: shedEntry.locationShed,
-    owner: userId,
-  });
-
-  // Fetch all feeds in one go to avoid multiple DB calls
-  const feedIds = shedEntries.map((entry) => entry.feed);
-  const feeds = await Feed.find({ _id: { $in: feedIds } }).select("price _id");
-
-  // Map feed prices by feed ID
-  const feedMap = feeds.reduce((map, feed) => {
-    map[feed._id] = feed.price;
-    return map;
-  }, {});
-
-  // Calculate feed costs for each shed entry
-  const feedCosts = shedEntries.map((entry) => {
-    const feedPrice = feedMap[entry.feed]; // Get the price of the current feed
-    const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry
-    return { feed: entry.feed, cost }; // Return the feed and its cost
-  });
-
-  // Calculate total feed cost
-  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
-
-  // Ensure animals exist in the shed
-  if (animals.length === 0) {
+  if (!shedEntryId || !Array.isArray(feeds) || feeds.length === 0) {
     return res.status(400).json({
       status: "FAILURE",
-      message: "No animals found in the specified shed.",
+      message: "shedEntryId and feeds (array) are required.",
     });
   }
 
-  // Calculate per-animal feed cost
+  // Fetch the shed entry using shedEntryId from params
+  const shedEntry = await ShedEntry.findById(shedEntryId);
+  if (!shedEntry) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: `Shed entry with ID "${shedEntryId}" not found.`,
+    });
+  }
+
+  // Optionally update locationShed if provided
+  if (locationShed) {
+    shedEntry.locationShed = locationShed;
+  }
+
+  // Fetch animals at the shed location
+  const animals = await Animal.find({ locationShed: shedEntry.locationShed });
+  if (animals.length === 0) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: `No animals found in shed "${shedEntry.locationShed}".`,
+    });
+  }
+
+  const feedCosts = [];
+  const allFeeds = [];
+
+  for (const feedItem of feeds) {
+    const { feedName, quantity } = feedItem;
+
+    if (!feedName || !quantity) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "Each feed must have feedName and quantity.",
+      });
+    }
+
+    const feed = await Feed.findOne({ name: feedName });
+    if (!feed) {
+      return res.status(404).json({
+        status: "FAILURE",
+        message: `Feed with name "${feedName}" not found.`,
+      });
+    }
+
+    const feedCost = feed.price * quantity;
+    feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
+
+    // Include feedId in the allFeeds array
+    allFeeds.push({
+      feedId: feed._id,
+      feedName: feedName,
+      quantity: quantity,
+    });
+  }
+
+  // Total feed cost calculations
+  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
   const perAnimalFeedCost = totalFeedCost / animals.length;
 
-  // Validate feed cost before proceeding
-  if (isNaN(perAnimalFeedCost)) {
-    return res.status(400).json({
-      status: "FAILURE",
-      message: "Invalid feed cost calculation. Check feed data and animals in the shed.",
-    });
-  }
+  // Update the shed entry feeds, date, and locationShed if provided
+  shedEntry.feeds = allFeeds;
+  if (date) shedEntry.date = new Date(date);
 
-  // Process AnimalCost entries
+  await shedEntry.save();
+
+  // Update the feed costs for each animal
   for (const animal of animals) {
-    let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
+    let animalCostEntry = await AnimalCost.findOne({
+      animalTagId: animal.tagId,
+    });
 
     if (animalCostEntry) {
-      animalCostEntry.feedCost = perAnimalFeedCost;
+      animalCostEntry.feedCost = perAnimalFeedCost; // Replace old cost with new
     } else {
       animalCostEntry = new AnimalCost({
         animalTagId: animal.tagId,
         feedCost: perAnimalFeedCost,
-        treatmentCost: 0,
-        date: new Date(updatedData.date) || Date.now(),
+        treatmentCost: 0, // Default treatment cost
+        date: date || Date.now(),
         owner: userId,
-      });
-    }
-
-    if (isNaN(animalCostEntry.feedCost)) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Invalid feedCost for animal with tagId: ${animal.tagId}`,
       });
     }
 
     await animalCostEntry.save();
   }
 
-  // Populate the response to include feed name and price
-  const updatedShedEntry = await ShedEntry.findById(shedEntry._id).populate({
-    path: "feed",
-    select: "name price",
-  });
-
-  res.json({
-    status: httpstatustext.SUCCESS,
-    data: { shedEntry: updatedShedEntry },
+  res.status(200).json({
+    status: "SUCCESS",
+    data: {
+      shedEntry: {
+        _id: shedEntry._id,
+        locationShed: shedEntry.locationShed,
+        owner: shedEntry.owner,
+        feeds: shedEntry.feeds,
+        createdAt: shedEntry.createdAt,
+        __v: shedEntry.__v,
+      },
+      totalFeedCost,
+      perAnimalFeedCost,
+    },
   });
 });
+
 
 
 
