@@ -886,6 +886,37 @@ const deletefeedshed = asyncwrapper(async (req, res) => {
 //     data: { fodder: newFodder },
 //   });
 // });
+const getAllFodders = asyncwrapper(async (req, res) => {
+  const userId = req.userId;
+  const query = req.query;
+  const limit = query.limit || 10;
+  const page = query.page || 1;
+  const skip = (page - 1) * limit;
+  const filter = { owner: userId };
+
+  if (query.name) {
+    filter.name = query.name;
+  }
+  const fodders = await Fodder.find(filter, { __v: false }).limit(limit).skip(skip);
+
+
+  res.json({
+    status: httpstatustext.SUCCESS,
+    data: { fodders },
+  });
+});
+
+
+const getSingleFodder = asyncwrapper(async (req, res, next) => {
+  const fodder = await Feed.findById(req.params.feedId);
+  if (!fodder) {
+    return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
+  }
+  res.json({
+    status: httpstatustext.SUCCESS,
+    data: { fodder },
+  });
+});
 
 const manufactureFodder = asyncwrapper(async (req, res, next) => {
   const userId = req.userId;
@@ -946,7 +977,7 @@ const manufactureFodder = asyncwrapper(async (req, res, next) => {
   // Create a new feed (treated as fodder) with the calculated total quantity and price
   const newFeed = new Feed({
     name,  // Name of the new fodder
-    type: 'fodder',  // You can set the type to 'fodder' or any other classification you prefer
+    type: 'mixed fodder',  // You can set the type to 'fodder' or any other classification you prefer
     quantity: totalQuantity,  // The total quantity of the fodder created
     price: totalPrice,  // The total price of the fodder
     concentrationOfDryMatter: 0,  // You can set this if needed
@@ -960,6 +991,87 @@ const manufactureFodder = asyncwrapper(async (req, res, next) => {
   res.json({
     status: httpstatustext.SUCCESS,
     data: { feed: newFeed, fodder: newFodder },  // Return both the new feed (treated as fodder) and the new fodder document
+  });
+});
+
+const updateFodder = asyncwrapper(async (req, res, next) => {
+  const { fodderId } = req.params;
+  const { name, components } = req.body; // Accepting updated name or components
+  const userId = req.userId;
+
+  const fodder = await Fodder.findById(fodderId);
+  if (!fodder) {
+    return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
+  }
+
+  if (fodder.owner.toString() !== userId.toString()) {
+    return next(AppError.create("You are not authorized to update this fodder", 403, httpstatustext.FAIL));
+  }
+
+  // Update name if provided
+  if (name) fodder.name = name;
+
+  let totalQuantity = 0;
+  let totalPrice = 0;
+
+  // Recalculate totals if components are updated
+  if (components && Array.isArray(components)) {
+    const updatedComponents = [];
+
+    for (const component of components) {
+      const { feedId, quantity } = component;
+
+      if (!feedId || !quantity) {
+        return next(AppError.create("Each component must have a feedId and quantity", 400, httpstatustext.FAIL));
+      }
+
+      const feed = await Feed.findById(feedId);
+      if (!feed) {
+        return next(AppError.create(`Feed with ID ${feedId} not found`, 404, httpstatustext.FAIL));
+      }
+
+      if (feed.owner.toString() !== userId.toString()) {
+        return next(AppError.create(`You are not authorized to use feed ${feed.name}`, 403, httpstatustext.FAIL));
+      }
+
+      updatedComponents.push({ feedId: feed._id, quantity });
+      totalQuantity += quantity;
+      totalPrice += feed.price * quantity;
+    }
+
+    fodder.components = updatedComponents; // Update components
+  }
+
+  // Update total quantity and price
+  fodder.totalQuantity = totalQuantity;
+  fodder.totalPrice = totalPrice;
+
+  await fodder.save();
+
+  res.json({
+    status: httpstatustext.SUCCESS,
+    data: { fodder },
+  });
+});
+
+const deleteFodder = asyncwrapper(async (req, res, next) => {
+  const { fodderId } = req.params;
+  const userId = req.userId;
+
+  const fodder = await Fodder.findById(fodderId);
+  if (!fodder) {
+    return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
+  }
+
+  if (fodder.owner.toString() !== userId.toString()) {
+    return next(AppError.create("You are not authorized to delete this fodder", 403, httpstatustext.FAIL));
+  }
+
+  await fodder.remove();
+
+  res.json({
+    status: httpstatustext.SUCCESS,
+    message: "Fodder deleted successfully",
   });
 });
 
@@ -977,4 +1089,8 @@ module.exports = {
   getsniglefeedShed,
   updateFeedToShed,
   manufactureFodder,
+  getSingleFodder,
+  getAllFodders,
+  deleteFodder,
+  updateFodder
 };
