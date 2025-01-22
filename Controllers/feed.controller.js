@@ -908,7 +908,7 @@ const getAllFodders = asyncwrapper(async (req, res) => {
 
 
 const getSingleFodder = asyncwrapper(async (req, res, next) => {
-  const fodder = await Feed.findById(req.params.feedId);
+  const fodder = await Feed.findById(req.params.fodderId);
   if (!fodder) {
     return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
   }
