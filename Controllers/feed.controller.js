@@ -284,7 +284,7 @@ await feed.save();
   });  
 });
 
-const addFeedToShed = asyncwrapper(async (req, res, next) => {
+const addFeedToShed33 = asyncwrapper(async (req, res, next) => {
   const userId = req.userId;
   const { locationShed, feeds, date } = req.body;
 
@@ -336,6 +336,144 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       return res.status(404).json({
         status: "FAILURE",
         message: `Feed with name "${feedName}" not found.`,
+      });
+    }
+
+    if (feed.owner.toString() !== userId.toString()) {
+      return res.status(403).json({
+        status: "FAILURE",
+        message: "You are not authorized to use this feed.",
+      });
+    }
+
+    // Ensure there is enough quantity in stock
+    if (feed.quantity < quantity) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Requested: ${quantity}.`,
+      });
+    }
+    console.log("Updating feed quantity:", feed.quantity);
+    // Subtract the quantity used from stock
+    feed.quantity -= quantity;
+    console.log("New feed quantity:", feed.quantity);
+    await feed.save();
+
+    // Calculate feed cost and push it to the array
+    const feedCost = feed.price * quantity;
+    feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
+
+    // Include feedId in the allFeeds array
+    allFeeds.push({
+      feedId: feed._id,
+      feedName: feed.name,
+      quantity: quantity,
+    });
+  }
+
+  // Total feed cost calculations
+  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
+  const perAnimalFeedCost = totalFeedCost / animals.length;
+
+  // Create a single shed entry with the modified feeds array
+  const shedEntry = new ShedEntry({
+    locationShed,
+    owner: userId,
+    feeds: allFeeds, // Use the new array with feedId
+    date: date ? new Date(date) : Date.now(),
+  });
+
+  await shedEntry.save();
+
+  // Cost entry updates for each animal
+  for (const animal of animals) {
+    let animalCostEntry = await AnimalCost.findOne({
+      animalTagId: animal.tagId,
+    });
+
+    if (animalCostEntry) {
+      animalCostEntry.feedCost += perAnimalFeedCost;
+    } else {
+      animalCostEntry = new AnimalCost({
+        animalTagId: animal.tagId,
+        feedCost: perAnimalFeedCost,
+        treatmentCost: 0, // Default treatment cost
+        date: date,
+        owner: userId,
+      });
+    }
+
+    await animalCostEntry.save();
+  }
+
+  res.status(201).json({
+    status: "SUCCESS",
+    data: {
+      shedEntry: {
+        _id: shedEntry._id,
+        locationShed: shedEntry.locationShed,
+        owner: shedEntry.owner,
+        feeds: shedEntry.feeds,
+        createdAt: shedEntry.createdAt,
+        __v: shedEntry.__v,
+      },
+      totalFeedCost,
+      perAnimalFeedCost,
+    },
+  });
+});
+const addFeedToShed = asyncwrapper(async (req, res, next) => {
+  const userId = req.userId;
+  const { locationShed, feeds, date } = req.body;
+
+  if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
+    return res.status(400).json({
+      status: "FAILURE",
+      message: "locationShed and feeds (array) are required.",
+    });
+  }
+
+  // Log feeds to see the incoming data structure
+  console.log("Incoming feeds:", feeds);
+
+  // Fetch animals at the shed
+  const animals = await Animal.find({ locationShed });
+  if (animals.length === 0) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: `No animals found in shed "${locationShed}".`,
+    });
+  }
+
+  const feedCosts = [];
+  const allFeeds = [];
+
+  for (const feedItem of feeds) {
+    const { feedId, quantity } = feedItem;
+
+    // Log the quantity to see if it's NaN
+    console.log("Processing feed:", feedId, "with quantity:", quantity);
+
+    if (!feedId || !quantity) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "Each feed must have feedId and quantity.",
+      });
+    }
+
+    // Validate quantity to ensure it's a valid number
+    if (isNaN(quantity) || quantity <= 0) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: `Invalid quantity: "${quantity}". It must be a positive number.`,
+      });
+    }
+
+    const feed = await Feed.findById(feedId);
+    if (!feed) {
+      return res.status(404).json({
+        status: "FAILURE",
+        message: `Feed with ID "${feedId}" not found.`,
       });
     }
 
