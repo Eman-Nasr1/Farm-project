@@ -1511,18 +1511,9 @@ const updateFodder = asyncwrapper(async (req, res, next) => {
 
 const deleteFodder = asyncwrapper(async (req, res, next) => {
   const { fodderId } = req.params;
-  const userId = req.userId;
 
-  const fodder = await Fodder.findById(fodderId);
-  if (!fodder) {
-    return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
-  }
+  const fodder = await Fodder.findByIdAndDelete(fodderId);
 
-  if (fodder.owner.toString() !== userId.toString()) {
-    return next(AppError.create("You are not authorized to delete this fodder", 403, httpstatustext.FAIL));
-  }
-
-  await fodder.remove();
 
   res.json({
     status: httpstatustext.SUCCESS,

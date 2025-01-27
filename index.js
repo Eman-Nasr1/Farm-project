@@ -3,7 +3,7 @@ const app = express();
 const mongoose = require('mongoose');
 const httpstatustext=require('./utilits/httpstatustext');
 
-
+const notificationCron = require('./middleware/notificationCron');
 
 
 const cors=require('cors');
@@ -20,7 +20,7 @@ app.use (express.json());
 const authrouter=require('./Routes/authRoutes');
 app.use('/',authrouter)
 
-
+notificationCron;
 const animalRoutes=require('./Routes/animalRoutes');
 app.use('/',animalRoutes)
 
