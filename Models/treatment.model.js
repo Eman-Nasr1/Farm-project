@@ -18,6 +18,12 @@ const TreatmentSchema = new mongoose.Schema({
         type: Number,  
         required: true // Make it required to ensure every treatment has a price  
     },  
+    expireDate:{
+        type: Date 
+    },
+    pricePerMl: {  
+        type: Number  
+    },
     owner: {  
         type: mongoose.Schema.Types.ObjectId,  
         ref: 'User'  

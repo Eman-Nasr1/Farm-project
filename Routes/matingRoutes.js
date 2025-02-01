@@ -4,7 +4,7 @@ const matingcontroller=require('../Controllers/mating.controller');
 const verifytoken=require('../middleware/verifytoken');
 const { matingValidationRules, validateMating } = require('../middleware/mating.validation')
 
-router.get('/api/mating/GetAllMating',verifytoken,matingcontroller.getallamating);
+router.get('/api/mating/GetAllMating',verifytoken,matingcontroller.getAllMating);
 router.get('/api/mating/GetSingleAnimalMating/:animalId',verifytoken,matingcontroller.getmatingforspacficanimal);
 router.get('/api/mating/GetSingleMating/:matingId',verifytoken,matingcontroller.getsinglemating);
 router.post('/api/mating/AddMating',verifytoken, matingValidationRules(), validateMating,matingcontroller.addmating);

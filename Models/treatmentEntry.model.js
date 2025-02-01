@@ -1,38 +1,37 @@
-const mongoose = require('mongoose');  
-const Treatment = require('../Models/treatment.model');  
-const User = require('../Models/user.model');
+const mongoose = require("mongoose");  
 
-const TreatmentEntrySchema = new mongoose.Schema({  
-    treatment: {  
-        type: mongoose.Schema.Types.ObjectId,  
-        ref: 'Treatment',  
-        required: true  
-    }, 
-    tagId: {
-        type: String 
-    }, 
+const treatmentEntrySchema = new mongoose.Schema({  
     locationShed: {  
         type: String,  
-        required: true  
+        required: true,  
     },  
-    volume: {  
-        type: Number,  
-        required: true 
-    }, 
+    owner: {  
+        type: mongoose.Schema.Types.ObjectId,  
+        ref: "User",  
+        required: true,  
+    },  
+    treatments: [  
+        {  
+            treatmentId: {  
+                type: mongoose.Schema.Types.ObjectId,  
+                ref: "Treatment", // Reference to the Treatment model  
+                required: true,  
+            },  
+            volume: {  
+                type: Number,  
+                required: true,  
+            },  
+        },  
+    ],  
+    tagId: {  
+        type: String, // Optional field for tag identifier  
+    },  
     date: {  
         type: Date,  
         default: Date.now,  
-        required: true  
-    },
-    owner: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-       
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
-});  
+    },  
+}, { timestamps: true });  
 
-module.exports = mongoose.model('TreatmentEntry', TreatmentEntrySchema);
+const TreatmentEntry = mongoose.model("TreatmentEntry", treatmentEntrySchema);  
+
+module.exports = TreatmentEntry;

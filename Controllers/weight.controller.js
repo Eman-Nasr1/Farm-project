@@ -19,7 +19,19 @@ const getallweight =asyncwrapper(async(req,res)=>{
     }
 
     const weight= await Weight.find(filter,{"__v":false}).limit(limit).skip(skip);
-    res.json({status:httpstatustext.SUCCESS,data:{weight}});
+    const total = await Weight.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
+    res.json({
+        status:httpstatustext.SUCCESS,
+        pagination: {
+            page:page,
+            limit: limit,
+            total: total,
+            totalPages:totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1
+            },
+        data:{weight}});
 })
 
 const getWeightforspacficanimal =asyncwrapper(async( req, res, next)=>{

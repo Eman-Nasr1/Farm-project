@@ -26,10 +26,19 @@ const getallanimalscost = asyncwrapper(async (req, res,next) => {
     const animalCost = await AnimalCost.find(filter, { "__v": false })
         .limit(limit)
         .skip(skip);
-
+    const total = await AnimalCost.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
     // Return response
     res.json({
         status: httpstatustext.SUCCESS,
+        pagination: {
+            page:page,
+            limit: limit,
+            total: total,
+            totalPages:totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1
+            },
         data: { animalCost }
     });
 });

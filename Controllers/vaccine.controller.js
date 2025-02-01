@@ -52,56 +52,83 @@ const upload = multer({ storage: storage }).single('file');
 //     res.json({status:httpstatustext.SUCCESS,data:{vaccine}});
 // })
 
-const getallVaccine = asyncwrapper(async (req, res) => {  
-    const userId = req.userId;  
-    const query = req.query;  
-    const limit = query.limit || 10;  
-    const page = query.page || 1;  
-    const skip = (page - 1) * limit;  
+const getAllVaccine = asyncwrapper(async (req, res) => {
+    const userId = req.userId;
+    const query = req.query;
+    const limit = parseInt(query.limit) || 10;
+    const page = parseInt(query.page) || 1;
+    const skip = (page - 1) * limit;
 
-    const filter = { owner: userId };  
+    const filter = { owner: userId };
 
     // Create an array to hold the vaccination log filters  
-    const vaccinationLogFilters = {};  
+    const vaccinationLogFilters = {};
 
-    if (query.tagId || query.locationShed || query.DateGiven) {  
+    if (query.tagId || query.locationShed || query.DateGiven) {
         vaccinationLogFilters.$elemMatch = {}; // Create an $elemMatch object for filtering  
 
-        if (query.tagId) {  
+        if (query.tagId) {
             vaccinationLogFilters.$elemMatch.tagId = query.tagId; // Filter by tagId  
-        }  
+        }
 
-        if (query.locationShed) {  
+        if (query.locationShed) {
             vaccinationLogFilters.$elemMatch.locationShed = query.locationShed; // Filter by locationShed  
-        }  
+        }
 
-        if (query.DateGiven) {  
+        if (query.DateGiven) {
             vaccinationLogFilters.$elemMatch.DateGiven = { $gte: new Date(query.DateGiven) }; // Filter by DateGiven  
-        }  
+        }
 
         // Add the vaccinationLog filter to the main filter  
-        filter.vaccinationLog = vaccinationLogFilters;  
-    }  
+        filter.vaccinationLog = vaccinationLogFilters;
+    }
 
-    
     if (query.vaccineName) {
         filter.vaccineName = query.vaccineName; // e.g., 
     }
 
-    const vaccine = await Vaccine.find(filter, { "__v": false })  
-        .populate({  
-            path: 'animalId',  
-            select: 'animalType'  
-        })  
-        .limit(limit)  
-        .skip(skip);  
+    // Get the total count of documents that match the filter
+    const totalCount = await Vaccine.countDocuments(filter);
 
-    if (query.animalType) {  
-        const filteredvaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);  
-        return res.json({ status: httpstatustext.SUCCESS, data: { vaccine: filteredvaccineData } });  
-    }  
+    // Find the paginated results
+    const vaccine = await Vaccine.find(filter, { "__v": false })
+        .populate({
+            path: 'animalId',
+            select: 'animalType'
+        })
+        .limit(limit)
+        .skip(skip);
 
-    res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });  
+    // If animalType is provided in the query, filter the results
+    if (query.animalType) {
+        const filteredVaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);
+        return res.json({
+            status: httpstatustext.SUCCESS,
+            data: {
+                vaccine: filteredVaccineData,
+                pagination: {
+                    total: filteredVaccineData.length,
+                    page: page,
+                    limit: limit,
+                    totalPages: Math.ceil(filteredVaccineData.length / limit)
+                }
+            }
+        });
+    }
+
+    // If no animalType filter is applied, return all vaccine data with pagination metadata
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: {
+            vaccine,
+            pagination: {
+                total: totalCount,
+                page: page,
+                limit: limit,
+                totalPages: Math.ceil(totalCount / limit)
+            }
+        }
+    });
 });
 
 
@@ -423,7 +450,7 @@ module.exports={
     addvaccineforanimal,
     getVaccineforspacficanimal,
     getsinglevaccine,
-    getallVaccine,
+    getAllVaccine,
     exportVaccinesToExcel,
     importVaccineFromExcel
 

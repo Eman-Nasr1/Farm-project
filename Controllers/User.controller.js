@@ -19,7 +19,19 @@ const getallusers=asyncwrapper(async(req,res,next)=>{
      const skip=(page-1)*limit;
  
      const users= await User.find({},{"__v":false,"password":false,"confirmpassword":false}).limit(limit).skip(skip);
-     res.json({status:httpstatustext.SUCCESS,data:{users}});
+     const total = await User.countDocuments(filter);
+     const totalPages = Math.ceil(total / limit);
+     res.json({
+      status:httpstatustext.SUCCESS,
+      pagination: {
+        page:page,
+        limit: limit,
+        total: total,
+        totalPages:totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+        },
+      data:{users}});
  })
 
  const getsnigleuser =asyncwrapper(async( req, res, next)=>{

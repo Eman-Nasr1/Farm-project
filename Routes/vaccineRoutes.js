@@ -4,7 +4,7 @@ const vaccinecontroller=require('../Controllers/vaccine.controller');
 const verifytoken=require('../middleware/verifytoken');
 const { vaccineValidationRules, validateVaccine } = require('../middleware/vaccine.validation');
 
-router.get('/api/vaccine/GetAllVaccine',verifytoken,vaccinecontroller.getallVaccine);
+router.get('/api/vaccine/GetAllVaccine',verifytoken,vaccinecontroller.getAllVaccine);
 router.get('/api/vaccine/GetSingleAnimalGaccine/:animalId',verifytoken,vaccinecontroller.getVaccineforspacficanimal);
 router.get('/api/vaccine/GetSingleVaccine/:vaccineId',verifytoken,vaccinecontroller.getsinglevaccine);
 router.post('/api/vaccine/AddVaccine',verifytoken, vaccineValidationRules(), validateVaccine,vaccinecontroller.addvaccine);

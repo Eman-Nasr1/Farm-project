@@ -9,48 +9,73 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 
 
-const getallamating = asyncwrapper(async (req, res) => {  
-    const userId = req.userId;  
-    const query = req.query;  
-    const limit = query.limit || 10;  
-    const page = query.page || 1;  
-    const skip = (page - 1) * limit;  
+const getAllMating = asyncwrapper(async (req, res) => {
+    const userId = req.userId;
+    const query = req.query;
+    const limit = parseInt(query.limit) || 10;
+    const page = parseInt(query.page) || 1;
+    const skip = (page - 1) * limit;
 
-    const filter = { owner: userId };  
+    const filter = { owner: userId };
 
-    if (query.tagId) {  
-        filter.tagId = query.tagId; // e.g.,   
-    }  
+    if (query.tagId) {
+        filter.tagId = query.tagId;
+    }
 
-    if (query.matingDate) {  
-        filter.matingDate = query.matingDate; // e.g.,   
-    }  
+    if (query.matingDate) {
+        filter.matingDate = query.matingDate;
+    }
 
-    if (query.sonarDate) {  
-        filter.sonarDate = query.sonarDate; // e.g.,   
-    }  
+    if (query.sonarDate) {
+        filter.sonarDate = query.sonarDate;
+    }
 
-    if (query.sonarRsult) {  
-        filter.sonarRsult = query.sonarRsult; // e.g.,   
-    }  
+    if (query.sonarResult) {
+        filter.sonarResult = query.sonarResult;
+    }
 
-    // Create a query for mating that includes animalType  
-    const matingData = await Mating.find(filter, { "__v": false })  
-        .populate({  
-            path: 'animalId', // This is the field in the Mating schema that references Animal  
-            select: 'animalType' // Select only the animalType field from the Animal model  
-        })  
-        .limit(limit)  
-        .skip(skip);  
+    // Get the total count of documents that match the filter
+    const totalCount = await Mating.countDocuments(filter);
 
-    // If animalType is provided in the query, filter the results  
-    if (query.animalType) {  
-        const filteredMatingData = matingData.filter(mating => mating.animalId && mating.animalId.animalType === query.animalType);  
-        return res.json({ status: httpstatustext.SUCCESS, data: { mating: filteredMatingData } });  
-    }  
+    // Find the paginated results
+    const matingData = await Mating.find(filter, { "__v": false })
+        .populate({
+            path: 'animalId', // This is the field in the Mating schema that references Animal
+            select: 'animalType' // Select only the animalType field from the Animal model
+        })
+        .limit(limit)
+        .skip(skip);
 
-    // If no animalType filter is applied, return all mating data  
-    res.json({ status: httpstatustext.SUCCESS, data: { mating: matingData } });  
+    // If animalType is provided in the query, filter the results
+    if (query.animalType) {
+        const filteredMatingData = matingData.filter(mating => mating.animalId && mating.animalId.animalType === query.animalType);
+        return res.json({
+            status: httpstatustext.SUCCESS,
+            data: {
+                mating: filteredMatingData,
+                pagination: {
+                    total: filteredMatingData.length,
+                    page: page,
+                    limit: limit,
+                    totalPages: Math.ceil(filteredMatingData.length / limit)
+                }
+            }
+        });
+    }
+
+    // If no animalType filter is applied, return all mating data with pagination metadata
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: {
+            mating: matingData,
+            pagination: {
+                total: totalCount,
+                page: page,
+                limit: limit,
+                totalPages: Math.ceil(totalCount / limit)
+            }
+        }
+    });
 }); 
 
 // in this function getmatingforspacficanimal it will get animal data and mating data 
@@ -260,7 +285,7 @@ const updatemating = asyncwrapper(async (req,res,next)=>{
 })
 
 module.exports={
-    getallamating,
+    getAllMating,
     updatemating,
     deletemating,
     addmating,

@@ -2,6 +2,10 @@ const Animal = require('../Models/animal.model');
 const Excluded = require('../Models/excluded.model');
 const Mating = require('../Models/mating.model');
 const Breeding = require('../Models/breeding.model');
+const Feed = require('../Models/feed.model'); // Path to the Feed model  
+const ShedEntry = require('../Models/shedFeed.model'); // Path to the ShedEntry model  
+const Treatment = require('../Models/treatment.model'); // Path to the Treatment model  
+const TreatmentEntry = require('../Models/treatmentEntry.model'); 
 const asyncwrapper = require('../middleware/asyncwrapper');
 const mongoose = require('mongoose');
 
@@ -14,6 +18,98 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
     fromDate.setUTCHours(0, 0, 0, 0);
     const toDate = new Date(dateTo);
     toDate.setUTCHours(23, 59, 59, 999);
+
+     // Calculate feed consumption  
+     const feedConsumption = await ShedEntry.aggregate([  
+        {  
+            $match: {  
+                owner: userId,  
+                date: { $gte: fromDate, $lte: toDate }  
+            }  
+        },  
+        {  
+            $unwind: '$feeds' // Unwind the feeds array  
+        },  
+        {  
+            $lookup: {  
+                from: 'feeds',  
+                localField: 'feeds.feedId',  
+                foreignField: '_id',  
+                as: 'feedDetails'  
+            }  
+        },  
+        {  
+            $unwind: '$feedDetails' // Unwind feed details  
+        },  
+        {  
+            $group: {  
+                _id: '$feedDetails.name', // Group by feed name  
+                totalConsumed: { $sum: '$feeds.quantity' } // Sum the quantities consumed  
+            }  
+        },  
+        {  
+            $project: {  
+                _id: 0,  
+                feedName: '$_id',  
+                totalConsumed: 1  
+            }  
+        }  
+    ]);  
+
+    // Fetch remaining stock for feeds  
+    const remainingFeedStock = await Feed.aggregate([  
+        {  
+            $match: {  
+                owner: userId  
+            }  
+        }  
+    ]);  
+
+    // Calculate treatment consumption  
+    const treatmentConsumption = await TreatmentEntry.aggregate([  
+        {  
+            $match: {  
+                owner: userId,  
+                date: { $gte: fromDate, $lte: toDate }  
+            }  
+        },  
+        {  
+            $unwind: '$treatments' // Unwind the treatments array  
+        },  
+        {  
+            $lookup: {  
+                from: 'treatments',  
+                localField: 'treatments.treatmentId',  
+                foreignField: '_id',  
+                as: 'treatmentDetails'  
+            }  
+        },  
+        {  
+            $unwind: '$treatmentDetails' // Unwind treatment details  
+        },  
+        {  
+            $group: {  
+                _id: '$treatmentDetails.name', // Group by treatment name  
+                totalConsumed: { $sum: '$treatments.volume' } // Sum the volumes consumed  
+            }  
+        },  
+        {  
+            $project: {  
+                _id: 0,  
+                treatmentName: '$_id',  
+                totalConsumed: 1  
+            }  
+        }  
+    ]);  
+
+    // Fetch remaining stock for treatments  
+    const remainingTreatmentStock = await Treatment.aggregate([  
+        {  
+            $match: {  
+                owner: userId  
+            }  
+        }  
+    ]);  
 
     // Generate animal report
     const animalReport = await Animal.aggregate([
@@ -39,10 +135,7 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
             }
         }
     ]);
-    
-   
-
-    // Generate excluded animal report
+ // Generate excluded animal report
     const excludedReport = await Excluded.aggregate([
         {
             $match: {
@@ -81,35 +174,7 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
             }
         }
     ]);
-
-    // Generate mating report for positive sonar results
-    // const positiveSonarCount = await Mating.aggregate([
-    //     {
-    //         $match: {
-    //             owner: userId,
-    //             sonarRsult: 'positive',
-    //             matingDate: { $gte: fromDate, $lte: toDate }
-    //         }
-    //     },
-    //     {
-    //         $lookup: {
-    //             from: 'animals',
-    //             localField: 'animalId',
-    //             foreignField: '_id',
-    //             as: 'animal'
-    //         }
-    //     },
-    //     {
-    //         $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
-    //     },
-    //     {
-    //         $match: { 'animal.animalType': animalType }
-    //     },
-    //     {
-    //         $count: 'positiveSonarCount'
-    //     }
-    // ]);
-    // Generate mating report for positive sonar results  
+   
 const positiveSonarCount = await Mating.aggregate([  
     {  
         $match: {  
@@ -189,7 +254,11 @@ const positiveSonarCount = await Mating.aggregate([
                 totalBirthEntries,
                 totalMales,
                 totalFemales
-            }
+            },
+            feedConsumption,  
+            remainingFeedStock,  
+            treatmentConsumption,  
+            remainingTreatmentStock 
         }
     });
 });

@@ -10,38 +10,66 @@ const storage = multer.memoryStorage(); // Use memory storage to get the file bu
 const upload = multer({ storage: storage }).single('file');
 
 
-const getallBreeding =asyncwrapper(async(req,res)=>{
-
+const getAllBreeding = asyncwrapper(async (req, res) => {
     const userId = req.userId;
-    const query=req.query;
-    const limit=query.limit||10;
-    const page=query.page||1;
-    const skip=(page-1)*limit;
+    const query = req.query;
+    const limit = parseInt(query.limit) || 10;
+    const page = parseInt(query.page) || 1;
+    const skip = (page - 1) * limit;
 
     const filter = { owner: userId };
 
     if (query.tagId) {
-        filter.tagId = query.tagId; // e.g., 
+        filter.tagId = query.tagId;
     }
 
     if (query.deliveryDate) {
-        filter.deliveryDate = query.deliveryDate; // e.g., 
+        filter.deliveryDate = query.deliveryDate;
     }
 
-    const breeding= await Breeding.find(filter,{"__v":false})
-    .populate({  
-        path: 'animalId', // This is the field in the Mating schema that references Animal  
-        select: 'animalType' // Select only the animalType field from the Animal model  
-    })  
-    .limit(limit).skip(skip);
+    // Get the total count of documents that match the filter
+    const totalCount = await Breeding.countDocuments(filter);
 
-    if (query.animalType) {  
-        const filteredbreedingData = breeding.filter(breeding => breeding.animalId && breeding.animalId.animalType === query.animalType);  
-        return res.json({ status: httpstatustext.SUCCESS, data: { breeding: filteredbreedingData } });  
-    }  
+    // Find the paginated results
+    const breeding = await Breeding.find(filter, { "__v": false })
+        .populate({
+            path: 'animalId', // This is the field in the Mating schema that references Animal  
+            select: 'animalType' // Select only the animalType field from the Animal model  
+        })
+        .limit(limit)
+        .skip(skip);
 
-    res.json({status:httpstatustext.SUCCESS,data:{breeding}});
-})
+    // Filter by animalType if the query parameter is provided
+    if (query.animalType) {
+        const filteredBreedingData = breeding.filter(breeding => breeding.animalId && breeding.animalId.animalType === query.animalType);
+        return res.json({
+            status: httpstatustext.SUCCESS,
+            data: {
+                breeding: filteredBreedingData,
+                pagination: {
+                    total: filteredBreedingData.length,
+                    page: page,
+                    limit: limit,
+                    totalPages: Math.ceil(filteredBreedingData.length / limit)
+                }
+            }
+        });
+    }
+
+    // Return the paginated results along with pagination metadata
+    res.json({
+        status: httpstatustext.SUCCESS,
+        data: {
+            breeding,
+            pagination: {
+                total: totalCount,
+                page: page,
+                limit: limit,
+                totalPages: Math.ceil(totalCount / limit)
+            }
+        }
+    });
+});
 
 const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {  
     upload(req, res, async function (err) {  
@@ -372,7 +400,7 @@ module.exports={
     addBreeding,
     getbreedingforspacficanimal,
     getsinglebreeding,
-    getallBreeding,
+    getAllBreeding,
     importBreedingFromExcel,
     exportBreedingToExcel,
 

@@ -26,13 +26,32 @@ const getallfeeds = asyncwrapper(async (req, res) => {
   }
 
   const feeds = await Feed.find(filter, { __v: false }).limit(limit).skip(skip);
-
+  const total = await Feed.countDocuments(filter);
+  const totalPages = Math.ceil(total / limit);
   res.json({
     status: httpstatustext.SUCCESS,
+    pagination: {
+      page:page,
+      limit: limit,
+      total: total,
+      totalPages:totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1
+      },
     data: { feeds },
   });
 });
 
+const getfeeds=asyncwrapper(async (req, res)=>{
+  const userId = req.userId;
+  const query = req.query;
+  const filter = { owner: userId };
+  const feeds = await Feed.find(filter, { "__v": false }).sort({ createdAt: -1 });
+  res.json({
+      status: 'success',
+      data: feeds
+  });
+});
 const getsniglefeed = asyncwrapper(async (req, res, next) => {
   const feed = await Feed.findById(req.params.feedId);
   if (!feed) {
@@ -1098,8 +1117,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 
-
-const getallfeedsbyshed = asyncwrapper(async (req, res) => {
+const getAllFeedsByShed = asyncwrapper(async (req, res) => {
   const userId = req.userId;
   const query = req.query;
   const limit = parseInt(query.limit, 10) || 10;
@@ -1115,6 +1133,9 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
   if (query.date) {
     filter.date = query.date;
   }
+
+  // Get the total count of documents that match the filter
+  const totalCount = await ShedEntry.countDocuments(filter);
 
   // Find ShedEntries with pagination
   const feedShed = await ShedEntry.find(filter, { __v: false })
@@ -1139,7 +1160,15 @@ const getallfeedsbyshed = asyncwrapper(async (req, res) => {
 
   res.json({
     status: httpstatustext.SUCCESS,
-    data: { feedShed: response },
+    data: {
+      feedShed: response,
+      pagination: {
+        total: totalCount,
+        page: page,
+        limit: limit,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    },
   });
 });
 
@@ -1318,10 +1347,19 @@ const getAllFodders = asyncwrapper(async (req, res) => {
     filter.name = query.name;
   }
   const fodders = await Fodder.find(filter, { __v: false }).limit(limit).skip(skip);
-
+  const total = await Fodder.countDocuments(filter);
+   const totalPages = Math.ceil(total / limit);
 
   res.json({
     status: httpstatustext.SUCCESS,
+    pagination: {
+      page:page,
+      limit: limit,
+      total: total,
+      totalPages:totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1
+      },
     data: { fodders },
   });
 });
@@ -1530,7 +1568,7 @@ module.exports = {
   updatefeed,
   deletefeed,
   addFeedToShed,
-  getallfeedsbyshed,
+  getAllFeedsByShed,
   deletefeedshed,
   getsniglefeedShed,
   updateFeedToShed,
@@ -1538,5 +1576,6 @@ module.exports = {
   getSingleFodder,
   getAllFodders,
   deleteFodder,
-  updateFodder
+  updateFodder,
+  getfeeds
 };
