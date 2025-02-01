@@ -16,6 +16,8 @@ const birthEntrySchema = new mongoose.Schema({
     expectedWeaningDate: {
         type: Date
     },
+    isEmailSent: { type: Boolean, default: false },
+
     createdAt: {  
         type: Date,  
         default: Date.now  // Automatically set to the current date/time when created  

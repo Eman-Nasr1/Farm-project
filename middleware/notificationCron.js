@@ -1,64 +1,71 @@
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
-const Breeding = require('../Models/breeding.model'); // Adjust path to your Breeding model
+const Breeding = require('../Models/breeding.model'); // تأكدي أن المسار صحيح
 
-// Configure email transporter
+// إعداد البريد الإلكتروني
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'emannasr2001@gmail.com', // Replace with your email
-        pass: 'oabb urgv ohae btvu'  // Replace with your app-specific password
+        user: 'emannasr2001@gmail.com', // بريدك
+        pass: 'oabb urgv ohae btvu'  // كلمة مرور التطبيق
     }
 });
 
-// Function to send email notifications
-async function sendNotification(userEmail, birthEntry) {
+// وظيفة إرسال الإشعار
+async function sendNotification(userEmail, birthEntry, breedingId) {
     const mailOptions = {
         from: 'emannasr2001@gmail.com',
         to: userEmail,
-        subject: 'Weaning Date Reminder',
-        text: `Dear User,\n\nThis is a reminder that the weaning date for animal ${birthEntry.tagId} is coming up on ${birthEntry.expectedWeaningDate.toDateString()}. Please take necessary actions.\n\nThank you!`
+        subject: 'تذكير بموعد الفطام',
+        text: `عزيزي المستخدم،\n\nهذا تذكير بأن موعد فطام الحيوان ${birthEntry.tagId} سيكون في ${birthEntry.expectedWeaningDate.toDateString()}.\n\nشكراً لك!`
     };
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Notification sent to ${userEmail}`);
+        console.log(`تم إرسال الإشعار إلى ${userEmail}`);
+
+        // تحديث قاعدة البيانات لتحديد أن الإيميل قد أُرسل
+        await Breeding.updateOne(
+            { _id: breedingId, 'birthEntries._id': birthEntry._id },
+            { $set: { 'birthEntries.$.isEmailSent': true } }
+        );
+
     } catch (error) {
-        console.error('Error sending email:', error);
+        console.error('خطأ أثناء إرسال البريد:', error);
     }
 }
 
-// Scheduled task to check for upcoming weaning dates
+// مهمة الجدولة: تعمل مرة يوميًا عند منتصف الليل
 cron.schedule('0 0 * * *', async () => {
-    console.log('Checking for upcoming weaning dates...');
+    console.log('جاري التحقق من تواريخ الفطام القادمة...');
 
     try {
-        // Find birth entries with weaning dates one week away
         const today = new Date();
         const oneWeekLater = new Date();
         oneWeekLater.setDate(today.getDate() + 7);
 
+        // جلب الولادات التي موعد فطامها قريب ولم يتم إرسال الإيميل لها بعد
         const breedings = await Breeding.find({
-            'birthEntries.expectedWeaningDate': {
-                $gte: today,
-                $lte: oneWeekLater
-            }
-        }).populate('owner'); // Populate owner to get email
+            'birthEntries.expectedWeaningDate': { $gte: today, $lte: oneWeekLater },
+            'birthEntries.isEmailSent': false  // شرط التأكد من عدم إرسال الإيميل سابقًا
+        }).populate('owner'); 
 
-        // Send notifications for each relevant birth entry
+        // إرسال الإيميل فقط للمواليد التي لم يُرسل لها من قبل
         for (const breeding of breedings) {
             for (const entry of breeding.birthEntries) {
                 if (
                     entry.expectedWeaningDate >= today &&
-                    entry.expectedWeaningDate <= oneWeekLater
+                    entry.expectedWeaningDate <= oneWeekLater &&
+                    !entry.isEmailSent  // التأكد من أن الإيميل لم يُرسل سابقًا
                 ) {
-                    const userEmail = breeding.owner.email; // Replace with the actual email field in your User model
-                    await sendNotification(userEmail, entry);
+                    const userEmail = breeding.owner.email;
+                    await sendNotification(userEmail, entry, breeding._id);
                 }
             }
         }
     } catch (error) {
-        console.error('Error checking for weaning dates:', error);
+        console.error('خطأ أثناء التحقق من تواريخ الفطام:', error);
     }
 });
+
 module.exports = cron;
