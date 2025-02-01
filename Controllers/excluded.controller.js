@@ -31,14 +31,25 @@ const getallexcluded =asyncwrapper(async(req,res)=>{
     })  
     .limit(limit)  
     .skip(skip);  
-
+    const total = await Excluded.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
 // If animalType is provided in the query, filter the results  
 if (query.animalType) {  
     const filteredexcludedData = excluded.filter(excluded => excluded.animalId && excluded.animalId.animalType === query.animalType);  
     return res.json({ status: httpstatustext.SUCCESS, data: { excluded: filteredexcludedData } });  
 }  
 
-    res.json({status:httpstatustext.SUCCESS,data:{excluded}});
+    res.json({
+        status:httpstatustext.SUCCESS,
+        pagination: {
+            page:page,
+            limit: limit,
+            total: total,
+            totalPages:totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1
+            },
+        data:{excluded}});
 })
 
 const getSingleExcluded = asyncwrapper(async (req, res, next) => {

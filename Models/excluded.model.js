@@ -6,25 +6,22 @@ const Excludedschema=new mongoose.Schema(
             type: String,
             required: true
         },
-
         weight:{
             type: Number
         },
-      
         excludedType:{
             type:String,
             enum:["death","sweep","sale"],
-            required: true
-            
+            required: true   
         },
         Date:{
-            type: Date
-            
+            type: Date 
         },
-       
         price:{
             type: Number
-            
+        },
+        reasoneOfDeath:{
+            type: String
         },
         createdAt: {  
             type: Date,  
@@ -34,10 +31,10 @@ const Excludedschema=new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
              },
-             animalId: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Animal'
-                 },
+        animalId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Animal'
+             },
          
     }
 )
