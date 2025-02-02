@@ -638,7 +638,7 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   // Find treatment entries with pagination
   const treatmentShed = await TreatmentEntry.find(filter, { __v: false })
     .populate({
-      path: "treatment", // Populate the treatment field
+      path: "treatments.treatmentId", // Correct path to populate
       select: "name price volume", // Select only relevant fields
     })
     .limit(limit)
@@ -649,11 +649,14 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
     _id: entry._id,
     locationShed: entry.locationShed,
     tagId: entry.tagId,
-    volume: entry.volume,
     date: entry.date,
-    treatmentName: entry.treatment?.name, // Treatment name from the populated data
-    treatmentPrice: entry.treatment?.price, // Treatment price from the populated data
-    treatmentVolume: entry.treatment?.volume, // Treatment volume from the populated data
+    treatments: entry.treatments.map((treatment) => ({
+      treatmentId: treatment.treatmentId?._id, // Treatment ID
+      treatmentName: treatment.treatmentId?.name, // Treatment name from the populated data
+      treatmentPrice: treatment.treatmentId?.price, // Treatment price from the populated data
+      treatmentVolume: treatment.treatmentId?.volume, // Treatment volume from the populated data
+      volume: treatment.volume, // Volume specific to this treatment entry
+    })),
   }));
 
   res.json({

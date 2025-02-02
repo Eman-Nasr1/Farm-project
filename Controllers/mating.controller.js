@@ -23,15 +23,15 @@ const getAllMating = asyncwrapper(async (req, res) => {
     }
 
     if (query.matingDate) {
-        filter.matingDate = query.matingDate;
-    }
+        filter.matingDate = new Date(query.matingDate); // Convert to Date object
+      }
+    
+      if (query.sonarDate) {
+        filter.sonarDate = new Date(query.sonarDate); // Convert to Date object
+      }
 
-    if (query.sonarDate) {
-        filter.sonarDate = query.sonarDate;
-    }
-
-    if (query.sonarResult) {
-        filter.sonarResult = query.sonarResult;
+    if (query.sonarRsult) {
+        filter.sonarRsult = query.sonarRsult;
     }
 
     // Get the total count of documents that match the filter
@@ -45,7 +45,7 @@ const getAllMating = asyncwrapper(async (req, res) => {
         })
         .limit(limit)
         .skip(skip);
-
+      
     // If animalType is provided in the query, filter the results
     if (query.animalType) {
         const filteredMatingData = matingData.filter(mating => mating.animalId && mating.animalId.animalType === query.animalType);
