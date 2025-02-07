@@ -1190,12 +1190,12 @@ const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
     data: { feedShed: response },
   });
 });
-
 const deletefeedshed = asyncwrapper(async (req, res, next) => {
   const userId = req.userId; // Get the user ID from the token
+  const feedShedId = req.params.feedShedId; // Get the feedShedId from the request parameters
 
-  // Delete the ShedEntry
-  const deletedEntry = await ShedEntry.findByIdAndDelete(req.params.feedShedId);
+  // Step 1: Find and delete the ShedEntry
+  const deletedEntry = await ShedEntry.findByIdAndDelete(feedShedId);
   if (!deletedEntry) {
     const error = AppError.create(
       "Shed entry not found or unauthorized to delete",
@@ -1205,35 +1205,54 @@ const deletefeedshed = asyncwrapper(async (req, res, next) => {
     return next(error);
   }
 
-  // If the entry was deleted successfully, recalculate total feed cost
+  // Step 2: Restore the feed quantities
+  for (const feedItem of deletedEntry.feeds) {
+    const { feedId, quantity } = feedItem;
+
+    // Find the feed and restore its quantity
+    const feed = await Feed.findById(feedId);
+    if (feed) {
+      feed.quantity += quantity; // Add back the deducted quantity
+      await feed.save();
+    }
+  }
+
+  // Step 3: Recalculate total feed cost and per animal feed cost for the remaining entries
   const animals = await Animal.find({
     locationShed: deletedEntry.locationShed,
   });
+
   const shedEntries = await ShedEntry.find({
     locationShed: deletedEntry.locationShed,
     owner: userId,
   });
 
   // Fetch all feeds associated with remaining entries
-  const feedIds = shedEntries.map((entry) => entry.feed);
+  const feedIds = shedEntries.flatMap((entry) =>
+    entry.feeds.map((feed) => feed.feedId)
+  );
   const feeds = await Feed.find({ _id: { $in: feedIds } }).select("price _id");
 
+  // Create a mapping of feed ID to its price
   const feedMap = feeds.reduce((map, feed) => {
-    map[feed._id] = feed.price; // Create a mapping of feed ID to its price
+    map[feed._id] = feed.price;
     return map;
   }, {});
 
   // Recalculate total feed cost based on remaining shed entries
   const totalFeedCost = shedEntries.reduce((sum, entry) => {
-    const feedPrice = feedMap[entry.feed]; // Get the price of the current feed
-    const cost = (feedPrice || 0) * entry.quantity; // Calculate the cost for this entry
-    return sum + cost; // Add to total
+    const entryCost = entry.feeds.reduce((entrySum, feedItem) => {
+      const feedPrice = feedMap[feedItem.feedId]; // Get the price of the current feed
+      const cost = (feedPrice || 0) * feedItem.quantity; // Calculate the cost for this feed item
+      return entrySum + cost;
+    }, 0);
+    return sum + entryCost; // Add to total
   }, 0);
 
   // Calculate per animal feed cost
   const perAnimalFeedCost = totalFeedCost / (animals.length || 1);
 
-  // Update AnimalCost for each animal
+  // Step 4: Update AnimalCost for each animal
   for (const animal of animals) {
     let animalCostEntry = await AnimalCost.findOne({
       animalTagId: animal.tagId,
@@ -1254,10 +1273,9 @@ const deletefeedshed = asyncwrapper(async (req, res, next) => {
     await animalCostEntry.save();
   }
 
-  // Respond with a success message
+  // Step 5: Respond with a success message
   res.status(200).json({ status: httpstatustext.SUCCESS, data: null });
 });
-
 
 
 // --------------------------------------fodder ------------------------
