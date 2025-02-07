@@ -673,72 +673,59 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   });
 });
   
-  const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId; // Get the user ID from the token
-  
-    // Delete the TreatmentEntry
-    const deletedEntry = await TreatmentEntry.findByIdAndDelete(req.params.treatmentShedId);
-    if (!deletedEntry) {
-      const error = AppError.create(
-        "Treatment entry not found or unauthorized to delete",
-        404,
-        httpstatustext.FAIL
-      );
-      return next(error);
-    }
-  
-    // If the entry was deleted successfully, recalculate total treatment cost
-    const animals = await Animal.find({
-      locationShed: deletedEntry.locationShed,
-    });
-    const treatmentEntries = await TreatmentEntry.find({
-      locationShed: deletedEntry.locationShed,
-      owner: userId,
-    });
-  
-    // Fetch all treatments associated with remaining entries
-    const treatmentIds = treatmentEntries.map((entry) => entry.treatment);
-    const treatments = await Treatment.find({ _id: { $in: treatmentIds } }).select("price _id");
-  
-    const treatmentMap = treatments.reduce((map, treatment) => {
-      map[treatment._id] = treatment.price; // Create a mapping of treatment ID to its price
-      return map;
-    }, {});
-  
-    // Recalculate total treatment cost based on remaining treatment entries
-    const totalTreatmentCost = treatmentEntries.reduce((sum, entry) => {
-      const treatmentPrice = treatmentMap[entry.treatment]; // Get the price of the current treatment
-      const cost = (treatmentPrice || 0) * entry.volume; // Calculate the cost for this entry
-      return sum + cost; // Add to total
-    }, 0);
-  
-    // Calculate per animal treatment cost
-    const perAnimalTreatmentCost = totalTreatmentCost / (animals.length || 1);
-  
-    // Update AnimalCost for each animal
-    for (const animal of animals) {
-      let animalCostEntry = await AnimalCost.findOne({
-        animalTagId: animal.tagId,
+const  deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
+  const userId = req.userId;
+  const { treatmentEntryId } = req.params; // ID of the treatment entry to delete
+
+  // Find the treatment entry
+  const treatmentEntry = await TreatmentEntry.findById(treatmentEntryId);
+  if (!treatmentEntry) {
+      return res.status(404).json({
+          status: "FAILURE",
+          message: "Treatment entry not found.",
       });
-  
-      if (animalCostEntry) {
-        animalCostEntry.treatmentCost = perAnimalTreatmentCost; // Update existing treatment cost
-      } else {
-        animalCostEntry = new AnimalCost({
-          animalTagId: animal.tagId,
-          feedCost: 0, // Keep feed cost as 0 if not already present
-          treatmentCost: perAnimalTreatmentCost,
-          date: new Date(), // Use the current date or appropriate date
-          owner: userId,
-        });
+  }
+
+  // Ensure the user is authorized to delete the treatment entry
+  if (treatmentEntry.owner.toString() !== userId.toString()) {
+      return res.status(403).json({
+          status: "FAILURE",
+          message: "You are not authorized to delete this treatment entry.",
+      });
+  }
+
+  // Iterate through each treatment in the entry and restore stock
+  for (const treatmentItem of treatmentEntry.treatments) {
+      const treatment = await Treatment.findById(treatmentItem.treatmentId);
+      if (treatment) {
+          treatment.volume += treatmentItem.volume; // Restore deducted volume
+          await treatment.save();
       }
-  
+  }
+
+  // Delete the treatment entry
+  await TreatmentEntry.findByIdAndDelete(treatmentEntryId);
+
+  // Update the treatment cost for the animal
+  let animalCostEntry = await AnimalCost.findOne({ animalTagId: treatmentEntry.tagId });
+
+  if (animalCostEntry) {
+      // Deduct the treatment cost from the total treatment cost
+      const deductedCost = treatmentEntry.treatments.reduce((sum, item) => {
+          return sum + (item.volume * (treatmentEntry.pricePerMl || 0));
+      }, 0);
+
+      animalCostEntry.treatmentCost = Math.max(0, animalCostEntry.treatmentCost - deductedCost);
       await animalCostEntry.save();
-    }
-  
-    // Respond with a success message
-    res.status(200).json({ status: httpstatustext.SUCCESS, data: null });
+  }
+
+  // Respond with success message
+  res.status(200).json({
+      status: "SUCCESS",
+      message: "Treatment entry deleted successfully.",
   });
+});
+
   
   
 
