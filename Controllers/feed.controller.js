@@ -1203,7 +1203,7 @@ const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
   });
 });
 
-const deletefeedshed = asyncwrapper(async (req, res) => {
+const deletefeedshed = asyncwrapper(async (req, res, next) => {
   const userId = req.userId; // Get the user ID from the token
 
   // Delete the ShedEntry
