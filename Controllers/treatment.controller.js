@@ -675,10 +675,10 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   
 const  deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
   const userId = req.userId;
-  const { treatmentEntryId } = req.params; // ID of the treatment entry to delete
-
+  const { treatmentShedId } = req.params; // ID of the treatment entry to delete
+  
   // Find the treatment entry
-  const treatmentEntry = await TreatmentEntry.findById(treatmentEntryId);
+  const treatmentEntry = await TreatmentEntry.findById(treatmentShedId);
   if (!treatmentEntry) {
       return res.status(404).json({
           status: "FAILURE",
@@ -704,7 +704,7 @@ const  deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
   }
 
   // Delete the treatment entry
-  await TreatmentEntry.findByIdAndDelete(treatmentEntryId);
+  await TreatmentEntry.findByIdAndDelete(treatmentShedId);
 
   // Update the treatment cost for the animal
   let animalCostEntry = await AnimalCost.findOne({ animalTagId: treatmentEntry.tagId });
