@@ -452,10 +452,8 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  // Log feeds to see the incoming data structure
   console.log("Incoming feeds:", feeds);
 
-  // Fetch animals at the shed
   const animals = await Animal.find({ locationShed });
   if (animals.length === 0) {
     return res.status(404).json({
@@ -469,8 +467,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 
   for (const feedItem of feeds) {
     const { feedId, quantity } = feedItem;
-
-    // Log the quantity to see if it's NaN
     console.log("Processing feed:", feedId, "with quantity:", quantity);
 
     if (!feedId || !quantity) {
@@ -480,7 +476,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // Validate quantity to ensure it's a valid number
     if (isNaN(quantity) || quantity <= 0) {
       return res.status(400).json({
         status: "FAILURE",
@@ -503,24 +498,21 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // Ensure there is enough quantity in stock
     if (feed.quantity < quantity) {
       return res.status(400).json({
         status: "FAILURE",
         message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Requested: ${quantity}.`,
       });
     }
+
     console.log("Updating feed quantity:", feed.quantity);
-    // Subtract the quantity used from stock
     feed.quantity -= quantity;
     console.log("New feed quantity:", feed.quantity);
     await feed.save();
 
-    // Calculate feed cost and push it to the array
     const feedCost = feed.price * quantity;
     feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
 
-    // Include feedId in the allFeeds array
     allFeeds.push({
       feedId: feed._id,
       feedName: feed.name,
@@ -528,21 +520,25 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  // Total feed cost calculations
+  // Log feedCosts to verify its contents
+  console.log("Feed Costs:", feedCosts);
+
   const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
   const perAnimalFeedCost = totalFeedCost / animals.length;
 
-  // Create a single shed entry with the modified feeds array
+  // Log totalFeedCost and perAnimalFeedCost
+  console.log("Total Feed Cost:", totalFeedCost);
+  console.log("Per Animal Feed Cost:", perAnimalFeedCost);
+
   const shedEntry = new ShedEntry({
     locationShed,
     owner: userId,
-    feeds: allFeeds, // Use the new array with feedId
+    feeds: allFeeds,
     date: date ? new Date(date) : Date.now(),
   });
 
   await shedEntry.save();
 
-  // Cost entry updates for each animal
   for (const animal of animals) {
     let animalCostEntry = await AnimalCost.findOne({
       animalTagId: animal.tagId,
@@ -554,7 +550,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       animalCostEntry = new AnimalCost({
         animalTagId: animal.tagId,
         feedCost: perAnimalFeedCost,
-        treatmentCost: 0, // Default treatment cost
+        treatmentCost: 0,
         date: date,
         owner: userId,
       });
