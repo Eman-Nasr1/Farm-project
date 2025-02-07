@@ -452,8 +452,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  console.log("Incoming feeds:", feeds);
-
   const animals = await Animal.find({ locationShed });
   if (animals.length === 0) {
     return res.status(404).json({
@@ -505,11 +503,8 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    console.log("Updating feed quantity:", feed.quantity);
     feed.quantity -= quantity;
-    console.log("New feed quantity:", feed.quantity);
     await feed.save();
-
     const feedCost = feed.price * quantity;
     feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
 
@@ -521,14 +516,11 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
   }
 
   // Log feedCosts to verify its contents
-  console.log("Feed Costs:", feedCosts);
 
   const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
   const perAnimalFeedCost = totalFeedCost / animals.length;
 
   // Log totalFeedCost and perAnimalFeedCost
-  console.log("Total Feed Cost:", totalFeedCost);
-  console.log("Per Animal Feed Cost:", perAnimalFeedCost);
 
   const shedEntry = new ShedEntry({
     locationShed,
