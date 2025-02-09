@@ -25,9 +25,7 @@ const animalValidationRules = () => {
         body('gender')  
             .notEmpty().withMessage('Gender is required')  
             .isIn(['male', 'female']).withMessage('Gender must be either male or female'),  
-        body('Teething')  
-            .optional()  
-            .isIn(['two', 'four', 'six']).withMessage('Teething must be either two, four, or six'),  
+    
         // Add more validations as needed  
     ];  
 };  
