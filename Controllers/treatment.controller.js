@@ -6,6 +6,7 @@ const User=require('../Models/user.model');
 const Animal=require('../Models/animal.model');
 const TreatmentEntry=require('../Models/treatmentEntry.model');
 const AnimalCost=require('../Models/animalCost.model');
+const mongoose = require("mongoose");
 
 const getallTreatments = asyncwrapper(async (req, res) => {
     const userId = req.userId;
@@ -135,108 +136,6 @@ const deleteTreatment= asyncwrapper(async(req,res)=>{
 
 //------------------------------------------treetment for animale-----------------------
 
-// const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
-//   const userId = req.userId;
-//   const { treatments, locationShed, date } = req.body;
-
-//   if (!Array.isArray(treatments) || treatments.length === 0 || !locationShed || !date) {
-//     return res.status(400).json({
-//       status: "FAILURE",
-//       message: "treatments (array), locationShed, and date are required.",
-//     });
-//   }
-
-//   const animals = await Animal.find({ locationShed });
-
-//   if (animals.length === 0) {
-//     return res.status(404).json({
-//       status: "FAILURE",
-//       message: `No animals found in shed "${locationShed}".`,
-//     });
-//   }
-
-//   let totalTreatmentCost = 0;
-//   const createdTreatments = [];
-
-//   for (const treatmentItem of treatments) {
-//     const { treatmentId, volume } = treatmentItem;
-  
-//     if (!treatmentId || !volume || isNaN(volume) || volume <= 0) {
-//       return res.status(400).json({
-//         status: "FAILURE",
-//         message: "Each treatment must have a valid treatmentId and volume.",
-//       });
-//     }
-
-//     const treatment = await Treatment.findById(treatmentId);
-//     if (!treatment) {
-//       return res.status(404).json({
-//         status: "FAILURE",
-//         message: `Treatment with ID "${treatmentId}" not found.`,
-//       });
-//     }
-
-//     if (treatment.owner.toString() !== userId.toString()) {
-//       return res.status(403).json({
-//         status: "FAILURE",
-//         message: "You are not authorized to use this treatment.",
-//       });
-//     }
-
-//     if (treatment.volume < volume) {
-//       return res.status(400).json({
-//         status: "FAILURE",
-//         message: `Not enough stock for treatment "${treatment.name}". Available: ${treatment.volume}, Requested: ${volume}.`,
-//       });
-//     }
-   
-//     // Deduct volume from treatment stock
-//     treatment.volume -= volume;
-//     await treatment.save();
-
-//     // Get price per ml from treatment stock
-//     const volumePerAnimal = volume / animals.length;
-//     const treatmentCost = treatment.pricePerMl * volume;
-//     totalTreatmentCost += treatmentCost;
-
-//     for (const animal of animals) {
-//       const newTreatmentEntry = new TreatmentEntry({
-//         treatments: [{ treatmentId: treatment._id, volumePerAnimal }],
-//         tagId: animal.tagId,
-//         locationShed,
-//         date,
-//         owner: userId,
-//       });
-
-//       await newTreatmentEntry.save();
-//       createdTreatments.push(newTreatmentEntry);
-
-//       let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
-
-//       if (animalCostEntry) {
-//         animalCostEntry.treatmentCost += treatmentCost / animals.length;
-//       } else {
-//         animalCostEntry = new AnimalCost({
-//           animalTagId: animal.tagId,
-//           treatmentCost: treatmentCost / animals.length,
-//           feedCost: 0,
-//           date,
-//           owner: userId,
-//         });
-//       }
-
-//       await animalCostEntry.save();
-//     }
-//   }
- 
-//   res.status(201).json({
-//     status: "SUCCESS",
-//     data: {
-//       treatments: createdTreatments,
-//       totalTreatmentCost,
-//     },
-//   });
-// });
 const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {  
   const userId = req.userId;  
   const { treatments, locationShed, date } = req.body;  
@@ -499,115 +398,221 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
       data: { treatmentShed: response },
     });
   });
-  
 
-  const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId; // User ID from token
-    const treatmentEntryId = req.params.treatmentEntryId; // ID of the TreatmentEntry to update
-    const updatedData = req.body; // Updated data from the request body
+const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    // Find the existing treatment entry document
-    let treatmentEntry = await TreatmentEntry.findOne({
-        _id: treatmentEntryId,
-        owner: userId,
-    });
+  try {
+    const userId = req.userId;
+    const { treatmentEntryId } = req.params;
 
-    if (!treatmentEntry) {
-        const error = AppError.create(
-            "Treatment entry not found or unauthorized to update",
-            404,
-            httpstatustext.FAIL
-        );
-        return next(error);
+    // تحقق من req.body
+   // console.log("Request Body:", req.body);
+
+    // استخراج البيانات من req.body
+    const { treatments, tagId, date } = req.body;
+
+    // تحقق من وجود treatments
+    if (!Array.isArray(treatments) || treatments.length === 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "treatments array is required and must not be empty.",
+      });
     }
 
-    let treatment; // Declare treatment globally for the function
-
-    // Check if treatment name is provided and replace it with the corresponding treatment ID
-    if (updatedData.treatmentName) {
-        treatment = await Treatment.findOne({ name: updatedData.treatmentName });
-        if (!treatment) {
-            const error = AppError.create(
-                `Treatment with name "${updatedData.treatmentName}" not found`,
-                404,
-                httpstatustext.FAIL
-            );
-            return next(error);
-        }
-        updatedData.treatment = treatment._id; // Replace treatmentName with treatment ID
-        treatmentEntry.treatment = treatment._id; // Update the treatment in the TreatmentEntry document
+    // تحقق من وجود tagId و date
+    if (!tagId || !date) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "tagId and date are required.",
+      });
     }
 
-    // Validate and process the date
-    if (updatedData.date) {
-        const parsedDate = new Date(updatedData.date);
-        if (isNaN(parsedDate.getTime())) {
-            return next(AppError.create("Invalid date format", 400, httpstatustext.FAIL));
-        }
-        treatmentEntry.date = parsedDate; // Assign the validated date
+    // Fetch the existing treatment entry
+    const existingTreatmentEntry = await TreatmentEntry.findById(treatmentEntryId).session(session);
+    if (!existingTreatmentEntry) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        status: "FAILURE",
+        message: `Treatment entry with ID "${treatmentEntryId}" not found.`,
+      });
     }
 
-    // Update top-level fields in the treatment entry
-    Object.assign(treatmentEntry, updatedData);
+    // console.log("Existing treatment entry found:", existingTreatmentEntry);
 
-    // If `volume` or `treatment` is updated, recalculate costs
-    if (updatedData.volume || updatedData.treatment) {
-        treatment = treatment || (await Treatment.findById(treatmentEntry.treatment)); // Fetch treatment if not already fetched
-        if (!treatment) {
-            const error = AppError.create(
-                `Treatment with ID "${treatmentEntry.treatment}" not found`,
-                404,
-                httpstatustext.FAIL
-            );
-            return next(error);
-        }
-
-        treatmentEntry.volume = updatedData.volume || treatmentEntry.volume;
-        const pricePerMl = treatment.price / treatment.volume;
-        const treatmentCost = pricePerMl * treatmentEntry.volume;
-        treatmentEntry.treatmentCost = treatmentCost; // Store treatment cost inside entry if needed
+    // Fetch the animal associated with the tagId
+    const animal = await Animal.findOne({ tagId }).session(session);
+    if (!animal) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        status: "FAILURE",
+        message: `Animal with tag ID "${tagId}" not found.`,
+      });
     }
 
-    // Save the updated treatment entry document
-    await treatmentEntry.save();
+    // console.log("Animal found:", animal);
 
-    // Find all animals in the same shed as this treatment entry
-    const animals = await Animal.find({ locationShed: treatmentEntry.locationShed });
+    // Process each treatment in the treatments array
+    for (const treatmentItem of treatments) {
+      const { treatmentId: newTreatmentId, volume: newVolume } = treatmentItem;
 
-    // Update or create AnimalCost entries for each animal
-    const pricePerMl = treatment.price / treatment.volume; // Calculate outside loop for efficiency
-    for (const animal of animals) {
-        let animalCostEntry = await AnimalCost.findOne({
-            animalTagId: animal.tagId,
+      // تحقق من وجود newTreatmentId و newVolume
+      if (!newTreatmentId || !newVolume || isNaN(newVolume) || newVolume <= 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: "Each treatment must have a valid treatmentId and volume.",
         });
+      }
 
-        const treatmentCostPerAnimal = treatmentEntry.volume * pricePerMl;
+      // console.log("Processing treatment:", { newTreatmentId, newVolume });
 
-        if (animalCostEntry) {
-            animalCostEntry.treatmentCost += treatmentCostPerAnimal;
-        } else {
-            animalCostEntry = new AnimalCost({
-                animalTagId: animal.tagId,
-                feedCost: 0, // Default feed cost if none recorded yet
-                treatmentCost: treatmentCostPerAnimal,
-                date: treatmentEntry.date,
-                owner: userId,
-            });
+      // Fetch the old treatment from the existing treatment entry
+      const oldTreatmentId = existingTreatmentEntry.treatments[0].treatmentId;
+      const oldVolume = existingTreatmentEntry.treatments[0].volume;
+      const oldTreatment = await Treatment.findById(oldTreatmentId).session(session);
+
+      if (!oldTreatment) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: `Old treatment with ID "${oldTreatmentId}" not found.`,
+        });
+      }
+
+      // console.log("Old treatment found:", oldTreatment);
+
+      // Fetch the new treatment
+      const newTreatment = await Treatment.findById(newTreatmentId).session(session);
+      if (!newTreatment) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: `Treatment with ID "${newTreatmentId}" not found.`,
+        });
+      }
+
+      // console.log("New treatment found:", newTreatment);
+
+      // Check if the new treatment is expired
+      if (newTreatment.expireDate && new Date(newTreatment.expireDate) < new Date()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: `Treatment "${newTreatment.name}" is expired (Expired on ${newTreatment.expireDate.toISOString().split('T')[0]}).`,
+        });
+      }
+
+      // Check authorization for the new treatment
+      if (newTreatment.owner.toString() !== userId.toString()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(403).json({
+          status: "FAILURE",
+          message: "You are not authorized to use this treatment.",
+        });
+      }
+
+      // Calculate the difference in volume
+      const volumeDifference = newVolume - oldVolume;
+
+      // If the treatment ID is changed
+      if (oldTreatmentId.toString() !== newTreatmentId.toString()) {
+        // Return the old volume to the old treatment stock
+        oldTreatment.volume += oldVolume;
+        await oldTreatment.save({ session });
+
+        // Deduct the new volume from the new treatment stock
+        if (newTreatment.volume < newVolume) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            status: "FAILURE",
+            message: `Not enough stock for treatment "${newTreatment.name}". Available: ${newTreatment.volume}, Requested: ${newVolume}.`,
+          });
         }
+        newTreatment.volume -= newVolume;
+        await newTreatment.save({ session });
+      } else {
+        // If the treatment ID is the same, adjust the stock based on the volume difference
+        if (volumeDifference > 0) {
+          // If the new volume is greater, deduct the difference
+          if (newTreatment.volume < volumeDifference) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              status: "FAILURE",
+              message: `Not enough stock for treatment "${newTreatment.name}". Available: ${newTreatment.volume}, Required: ${volumeDifference}.`,
+            });
+          }
+          newTreatment.volume -= volumeDifference;
+        } else if (volumeDifference < 0) {
+          // If the new volume is less, return the difference
+          newTreatment.volume += Math.abs(volumeDifference);
+        }
+        await newTreatment.save({ session });
+      }
 
-        await animalCostEntry.save();
+      // Fetch the associated animal cost entry
+      let animalCostEntry = await AnimalCost.findOne({ animalTagId: tagId }).session(session);
+
+      if (!animalCostEntry) {
+        animalCostEntry = new AnimalCost({
+          animalTagId: tagId,
+          treatmentCost: 0,
+          feedCost: 0,
+          date,
+          owner: userId,
+        });
+      }
+
+      // Recalculate the treatment cost
+      const oldTreatmentCost = oldTreatment.pricePerMl * oldVolume;
+      const newTreatmentCost = newTreatment.pricePerMl * newVolume;
+
+      // Adjust the animal cost entry
+      animalCostEntry.treatmentCost -= oldTreatmentCost; // Remove the old cost
+      animalCostEntry.treatmentCost += newTreatmentCost; // Add the new cost
+      await animalCostEntry.save({ session });
+
+      // console.log("Animal cost entry updated:", animalCostEntry);
     }
 
-    // Populate the response to include treatment name and price
-    const updatedTreatmentEntry = await TreatmentEntry.findById(treatmentEntry._id).populate({
-        path: "treatment",
-        select: "name price volume",
-    });
+    // Update the treatment entry
+    existingTreatmentEntry.treatments = treatments;
+    existingTreatmentEntry.date = new Date(date);
+    await existingTreatmentEntry.save({ session });
 
-    res.json({
-        status: httpstatustext.SUCCESS,
-        data: { treatmentEntry: updatedTreatmentEntry },
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    // Send response
+    res.status(200).json({
+      status: "SUCCESS",
+      message: "Treatment entry updated successfully.",
+      data: {
+        treatmentEntry: existingTreatmentEntry,
+      },
     });
+  } catch (error) {
+    // Abort transaction on error
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Error updating treatment entry:", error);
+    next(error);
+  }
 });
 
 
