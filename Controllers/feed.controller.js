@@ -578,34 +578,43 @@ const getAllFeedsByShed = asyncwrapper(async (req, res) => {
 });
 
 const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
-  const feedShed = await ShedEntry.findById(req.params.feedShedId).populate({
-    path: "feed", // Populate the feed field
-    select: "name price", // Select only the name and price fields
-  });
+  try {
+    // Fetch the feed shed entry by ID and populate relevant fields
+    const feedShed = await ShedEntry.findById(req.params.feedShedId).populate({
+      path: "feeds.feedId", // المسار الصحيح للعلف
+      select: "name price", // الحقول المطلوبة
+    });
 
-  if (!feedShed) {
-    const error = AppError.create(
-      "Feed shed entry not found",
-      404,
-      httpstatustext.FAIL
-    );
-    return next(error);
+    if (!feedShed) {
+      const error = AppError.create(
+        "Feed shed entry not found",
+        404,
+        httpstatustext.FAIL
+      );
+      return next(error);
+    }
+
+    // Format the response to include feed details
+    const response = {
+      _id: feedShed._id,
+      locationShed: feedShed.locationShed,
+      date: feedShed.date,
+      feeds: feedShed.feeds.map((feed) => ({
+        feedId: feed.feedId._id,
+        feedName: feed.feedId.name, // اسم العلف
+        price: feed.feedId.price, // سعر العلف
+        quantity: feed.quantity, // الكمية المستخدمة
+      })),
+    };
+
+    return res.json({
+      status: httpstatustext.SUCCESS,
+      data: { feedShed: response },
+    });
+  } catch (error) {
+    console.error("Error fetching feed shed:", error);
+    next(error);
   }
-
-  // Format the response to include feed name and price
-  const response = {
-    _id: feedShed._id,
-    locationShed: feedShed.locationShed,
-    quantity: feedShed.quantity,
-    date: feedShed.date,
-    feedName: feedShed.feed?.name, // Feed name from the populated data
-    feedPrice: feedShed.feed?.price, // Feed price from the populated data
-  };
-
-  return res.json({
-    status: httpstatustext.SUCCESS,
-    data: { feedShed: response },
-  });
 });
 const deletefeedshed = asyncwrapper(async (req, res, next) => {
   const userId = req.userId; // Get the user ID from the token
@@ -726,16 +735,41 @@ const getAllFodders = asyncwrapper(async (req, res) => {
   });
 });
 
-
 const getSingleFodder = asyncwrapper(async (req, res, next) => {
-  const fodder = await Fodder.findById(req.params.fodderId);
-  if (!fodder) {
-    return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
+  try {
+    // Fetch the fodder by ID and populate relevant fields
+    const fodder = await Fodder.findById(req.params.fodderId).populate({
+      path: "components.feedId", // المسار الصحيح للعلف
+      select: "name price", // الحقول المطلوبة
+    });
+
+    if (!fodder) {
+      return next(AppError.create("Fodder not found", 404, httpstatustext.FAIL));
+    }
+
+    // Format the response to include feed details
+    const response = {
+      _id: fodder._id,
+      name: fodder.name,
+      totalQuantity: fodder.totalQuantity,
+      totalPrice: fodder.totalPrice,
+      owner: fodder.owner,
+      components: fodder.components.map((component) => ({
+        feedId: component.feedId._id,
+        feedName: component.feedId.name, // اسم العلف
+        price: component.feedId.price, // سعر العلف
+        quantity: component.quantity, // الكمية المستخدمة
+      })),
+    };
+
+    return res.json({
+      status: httpstatustext.SUCCESS,
+      data: { fodder: response },
+    });
+  } catch (error) {
+    console.error("Error fetching fodder:", error);
+    next(error);
   }
-  res.json({
-    status: httpstatustext.SUCCESS,
-    data: { fodder },
-  });
 });
 
 const manufactureFodder = asyncwrapper(async (req, res, next) => {
