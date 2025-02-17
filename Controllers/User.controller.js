@@ -7,35 +7,41 @@ const jwt =require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer'); 
 
-const getallusers=asyncwrapper(async(req,res,next)=>{
-  if (req.role !== 'admin') {
+ const getallusers = asyncwrapper(async (req, res, next) => {
+  if (req.user.role !== 'admin') {
     const error = AppError.create('Admin access only', 403, httpstatustext.ERROR);
     return next(error);
   }
-    // console.log(req.headers);
-     const query=req.query;
-     const limit=query.limit||10;
-     const page=query.page||1; 
-     const skip=(page-1)*limit;
- 
-     const users= await User.find({},{"__v":false,"password":false,"confirmpassword":false}).limit(limit).skip(skip);
-     const total = await User.countDocuments(filter);
-     const totalPages = Math.ceil(total / limit);
-     res.json({
-      status:httpstatustext.SUCCESS,
-      pagination: {
-        page:page,
-        limit: limit,
-        total: total,
-        totalPages:totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1
-        },
-      data:{users}});
- })
 
+  const query = req.query;
+  const limit = query.limit || 10;
+  const page = query.page || 1;
+  const skip = (page - 1) * limit;
+
+  // Define the filter object (empty object to count all users)
+  const filter = {};
+
+  const users = await User.find({}, { "__v": false, "password": false, "confirmpassword": false })
+    .limit(limit)
+    .skip(skip);
+
+  const total = await User.countDocuments(filter); // Use the filter object here
+  const totalPages = Math.ceil(total / limit);
+
+  res.json({
+    status: httpstatustext.SUCCESS,
+    pagination: {
+      page: page,
+      limit: limit,
+      total: total,
+      totalPages: totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1
+    },
+    data: { users }
+  });
+});
  const getsnigleuser =asyncwrapper(async( req, res, next)=>{
- 
  
     const user=await User.findById(req.params.userId);
     if (!user) {
@@ -45,7 +51,6 @@ const getallusers=asyncwrapper(async(req,res,next)=>{
   }
      return res.json({status:httpstatustext.SUCCESS,data:{user}});
 })
-
 const updateUser = asyncwrapper(async (req, res, next) => {
   const { userId } = req.params;
   const { name, email, phone, country, role, usertype, password } = req.body;
@@ -88,8 +93,6 @@ const updateUser = asyncwrapper(async (req, res, next) => {
       data: { user },
   });
 });
-
-
 const deleteUser= asyncwrapper(async(req,res,next)=>{
   if (req.role !== 'admin') {
     const error = AppError.create('Admin access only', 403, httpstatustext.ERROR);
@@ -99,18 +102,22 @@ const deleteUser= asyncwrapper(async(req,res,next)=>{
  res.status(200).json({status:httpstatustext.SUCCESS,data:null});
 
 })
-
 const loginAsUser = asyncwrapper(async (req, res, next) => {  
   const { userId } = req.params; // Get the user ID from the request parameters  
 
   // Find the user by ID  
   const user = await User.findById(userId);  
+  //console.log('User to log in as:', user); // Log the user being logged in as
+
   if (!user) {  
       const error = AppError.create('User not found', 404, httpstatustext.FAIL);  
       return next(error);  
   }  
 
-  // Check if the requester is an admin (assumed you have an admin user check)  
+  // Log the requester's details
+  // console.log('Requester:', req.user);
+
+  // Check if the requester is an admin  
   if (!req.user || req.user.role !== 'admin') {  
       const error = AppError.create('Not authorized', 403, httpstatustext.FAIL);  
       return next(error);  

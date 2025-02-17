@@ -14,26 +14,16 @@ const verifytoken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
-    // Check if the token belongs to a user or an employee
-    if (decoded.userId) {
-      // Employee token: Extract userId from employee's token
-      req.userId = decoded.userId; // Parent user's ID
-      req.role = 'employee';
-      req.permissions = decoded.permissions || []; 
-    } else {
-      // User token: Use the user ID directly
-      req.userId = decoded.id;
-      req.role = 'user';
-      req.permissions = []; 
-    }
+    // Attach user information to the request object
+    req.user = {
+      id: decoded.id || decoded.userId, // Use `id` or `userId` based on the token type
+      email: decoded.email,
+      role: decoded.role || (decoded.userId ? 'employee' : 'user'), // Default to 'user' if role is not provided
+      permissions: decoded.permissions || [],
+      isAdmin: decoded.role === 'admin' // Set a flag for admin users
+    };
 
-    req.currentuser = decoded;
-
-    if (req.role === 'admin') {  
-      req.isAdmin = true; // Set a flag for admin users  
-    } else {  
-      req.isAdmin = false; // Set a flag for non-admin users  
-    } 
+   // console.log('Decoded User:', req.user); // Log the decoded user for debugging
 
     next();
   } catch (err) {
