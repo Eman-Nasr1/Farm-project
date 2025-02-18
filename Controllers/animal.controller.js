@@ -170,7 +170,7 @@ const getallanimals = asyncwrapper(async (req, res,next) => {
         return next(AppError.create('Permission denied', 403, httpstatustext.FAIL));
       }
     
-    const userId = req.userId;
+    const userId = req.user.id;
     const query = req.query;
     const limit = query.limit || 10;
     const page = query.page || 1;
@@ -237,7 +237,7 @@ const getsnigleanimal =asyncwrapper(async( req, res, next)=>{
 
 const addanimal = asyncwrapper(async (req, res,next) => {
     // console.log(req.body);
-    const userId = req.userId;
+    const userId = req.user.id;
    // 
    
     const newanimal = new Animal({ ...req.body, owner: userId }); // Assuming Course is a model for courses

@@ -13,7 +13,6 @@ const verifytoken = (req, res, next) => {
   const token = authtoken.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-
     // Attach user information to the request object
     req.user = {
       id: decoded.id || decoded.userId, // Use `id` or `userId` based on the token type
@@ -22,7 +21,7 @@ const verifytoken = (req, res, next) => {
       permissions: decoded.permissions || [],
       isAdmin: decoded.role === 'admin' // Set a flag for admin users
     };
-
+console.log("requser:",req.user);
    // console.log('Decoded User:', req.user); // Log the decoded user for debugging
 
     next();

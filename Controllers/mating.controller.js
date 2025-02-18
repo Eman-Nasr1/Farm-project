@@ -10,7 +10,7 @@ const upload = multer({ storage: storage }).single('file');
 
 
 const getAllMating = asyncwrapper(async (req, res) => {
-    const userId = req.userId;
+    const userId = req.user.id;
     const query = req.query;
     const limit = parseInt(query.limit) || 10;
     const page = parseInt(query.page) || 1;
@@ -154,7 +154,7 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
 
 
 const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user.id;
 
     // Fetch animals based on filter logic
     const query = req.query;
@@ -218,7 +218,7 @@ const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
 
 
 const addmating = asyncwrapper(async (req, res,next) => {
-    const userId = req.userId;
+    const userId = req.user.id;
 
     // Extract tagId from the request body along with the mating data
     const { tagId, ...matingData } = req.body;
@@ -254,7 +254,7 @@ const getsinglemating = asyncwrapper(async (req, res, next) => {
 
 
 const deletemating= asyncwrapper(async(req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const matingId = req.params.matingId;
 
     // Find the Mating document by its ID
@@ -270,7 +270,7 @@ const deletemating= asyncwrapper(async(req,res,next)=>{
 })
 
 const updatemating = asyncwrapper(async (req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const matingId = req.params.matingId;
     const updatedData = req.body;
 

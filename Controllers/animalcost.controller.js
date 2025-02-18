@@ -8,7 +8,7 @@ const AnimalCost=require('../Models/animalCost.model');
 const getallanimalscost = asyncwrapper(async (req, res,next) => {
     
     
-    const userId = req.userId;
+    const userId = req.user.id;
     const query = req.query;
     const limit = query.limit || 10;
     const page = query.page || 1;

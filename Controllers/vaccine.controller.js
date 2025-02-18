@@ -9,51 +9,9 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 
 
-// const getallVaccine =asyncwrapper(async(req,res)=>{
-
-//     const userId = req.userId;
-//     const query=req.query;
-//     const limit=query.limit||10;
-//     const page=query.page||1;
-//     const skip=(page-1)*limit;
-
-//     const filter = { owner: userId };
-//     const vaccinationLogFilter = {};
-
-//     if (query.tagId) {
-//         vaccinationLogFilter["vaccinationLog.tagId"] = query.tagId; // e.g., filter by tagId
-//     }
-
-//     if (query.locationShed) {
-//         vaccinationLogFilter["vaccinationLog.locationShed"] = query.locationShed; // e.g., filter by locationShed
-//     }
-
-//     if (query.DateGiven) {
-//         vaccinationLogFilter["vaccinationLog.DateGiven"] = { $gte: new Date(query.DateGiven) }; // filter by DateGiven
-//     }
-    
-//     if (query.vaccineName) {
-//         filter.vaccineName = query.vaccineName; // e.g., 
-//     }
-
-//     const vaccine = await Vaccine.find(filter, { "__v": false })  
-//     .populate({  
-//         path: 'animalId', // This is the field in the Mating schema that references Animal  
-//         select: 'animalType' // Select only the animalType field from the Animal model  
-//     })  
-//     .limit(limit)  
-//     .skip(skip);  
-
-//     if (query.animalType) {  
-//         const filteredvaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);  
-//         return res.json({ status: httpstatustext.SUCCESS, data: { vaccine: filteredvaccineData } });  
-//     }  
-
-//     res.json({status:httpstatustext.SUCCESS,data:{vaccine}});
-// })
 
 const getAllVaccine = asyncwrapper(async (req, res) => {
-    const userId = req.userId;
+    const userId = req.user.id;
     const query = req.query;
     const limit = parseInt(query.limit) || 10;
     const page = parseInt(query.page) || 1;
@@ -133,7 +91,7 @@ const getAllVaccine = asyncwrapper(async (req, res) => {
 
 
 const exportVaccinesToExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user.id;
 
     // Fetch vaccines based on filter logic
     const query = req.query;
@@ -226,7 +184,7 @@ const importVaccineFromExcel = asyncwrapper(async (req, res, next) => {
                     createdAt: new Date()
                 }],
                 givenEvery,
-                owner: req.userId,
+                owner: req.user.id,
                 animalId: animal._id
             });
 
@@ -276,7 +234,7 @@ const getsinglevaccine = asyncwrapper(async (req, res, next) => {
 });
 
 const addvaccine = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId;  
+    const userId = req.user.id;  
     const { vaccinationLog, ...vaccineData } = req.body;  
     const createdVaccines = []; // Array to keep track of created vaccines  
   
@@ -322,55 +280,9 @@ const addvaccine = asyncwrapper(async (req, res, next) => {
     res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });  
 });
 
-// const addvaccine = asyncwrapper(async (req, res, next) => {
-//     const userId = req.userId;  
-//     const { vaccinationLog, ...vaccineData } = req.body;  
-//     const createdVaccines = []; // Array to keep track of created vaccines
-
-//     // Check if vaccinationLog has a valid entry for DateGiven
-//     if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven) {
-//         return next(new AppError('Vaccination log must include at least one entry with DateGiven', 400, httpstatustext.FAIL));
-//     }
-
-//     // Check if locationShed is provided
-//     const locationShed = vaccinationLog[0].locationShed; // Assuming locationShed is part of the first log entry
-//     if (locationShed) {
-//         // Fetch all animals in the specified shed
-//         const animals = await Animal.find({ locationShed });
-        
-//         if (animals.length === 0) {
-//             return next(new AppError('No animals found in the specified location shed', 404, httpstatustext.FAIL));
-//         }
-
-//         // Create vaccine for each animal in the shed
-//         for (const animal of animals) {
-//             const newVaccine = new Vaccine({
-//                 ...vaccineData,  // Include vaccine name and givenEvery
-//                 vaccinationLog: [{
-//                     tagId: animal.tagId,  // Adding the tagId from the animal
-//                     DateGiven: vaccinationLog[0].DateGiven,
-//                     locationShed: locationShed, // Using the location shed from the request
-//                     vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
-//                     createdAt: new Date()
-//                 }],
-//                 owner: userId,
-//                 animalId: animal._id // Reference to the animal
-//             });
-
-//             await newVaccine.save();
-//             createdVaccines.push(newVaccine);  // Store the created vaccine in the array
-//         }
-
-//         return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
-//     }
-
-//     // If neither tagId nor locationShed is provided, return an error
-//     return next(new AppError('Either tagId or locationShed must be provided', 400, httpstatustext.FAIL));
-// });
-
 
 const addvaccineforanimal = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId;  
+    const userId = req.user.id;  
     const { vaccinationLog, ...vaccineData } = req.body;  
     const createdVaccines = []; // Array to keep track of created vaccines
 
@@ -413,7 +325,7 @@ const addvaccineforanimal = asyncwrapper(async (req, res, next) => {
 
 
 const updateVaccine = asyncwrapper(async (req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const vaccineId = req.params.vaccineId;
     const updatedData = req.body;
 
@@ -428,7 +340,7 @@ const updateVaccine = asyncwrapper(async (req,res,next)=>{
 })
 
 const deleteVaccine= asyncwrapper(async(req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const vaccineId = req.params.vaccineId;
 
     // Find the document by its ID

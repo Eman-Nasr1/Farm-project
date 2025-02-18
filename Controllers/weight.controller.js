@@ -6,7 +6,7 @@ const Weight=require('../Models/weight.model');
 
 const getallweight =asyncwrapper(async(req,res)=>{
 
-    const userId = req.userId;
+    const userId = req.user.id;
     const query=req.query;
     const limit=query.limit||10;
     const page=query.page||1;
@@ -67,7 +67,7 @@ const getsingleWeight = asyncwrapper(async (req, res, next) => {
 });
 
 const addweight = asyncwrapper(async (req, res,next) => {
-    const userId = req.userId;
+    const userId = req.user.id;
 
     // Extract tagId from the request body along with the mating data
     const { tagId, ...weightData } = req.body;
@@ -86,7 +86,7 @@ const addweight = asyncwrapper(async (req, res,next) => {
 })
 
 const deleteweight= asyncwrapper(async(req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const weightId = req.params.weightId;
 
     // Find the Mating document by its ID
@@ -102,7 +102,7 @@ const deleteweight= asyncwrapper(async(req,res,next)=>{
 })
 
 const updateweight = asyncwrapper(async (req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const weightId = req.params.weightId;
     const updatedData = req.body;
 

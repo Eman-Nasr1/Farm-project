@@ -11,7 +11,7 @@ const mongoose = require("mongoose");
 const { ConsoleMessage } = require("puppeteer");
 
 const getallfeeds = asyncwrapper(async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -44,7 +44,7 @@ const getallfeeds = asyncwrapper(async (req, res) => {
 });
 
 const getfeeds=asyncwrapper(async (req, res)=>{
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const filter = { owner: userId };
   const feeds = await Feed.find(filter, { "__v": false }).sort({ createdAt: -1 });
@@ -63,7 +63,7 @@ const getsniglefeed = asyncwrapper(async (req, res, next) => {
 });
 
 const addfeed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
 
   const newfeed = new Feed({ ...req.body, owner: userId });
   await newfeed.save();
@@ -71,7 +71,7 @@ const addfeed = asyncwrapper(async (req, res, next) => {
 });
 
 const updatefeed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const feedId = req.params.feedId;
   const updatedData = req.body;
 
@@ -191,7 +191,7 @@ const deletefeed = asyncwrapper(async (req, res,next) => {
 
 
 const addFeedToShed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const { locationShed, feeds, date } = req.body;
 
   if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
@@ -322,7 +322,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.userId;
+    const userId =req.user.id ;
     const { shedEntryId } = req.params; // معرف سجل الحظيرة
     const { locationShed, feeds, date } = req.body; // بيانات التحديث
 
@@ -523,7 +523,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 const getAllFeedsByShed = asyncwrapper(async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const limit = parseInt(query.limit, 10) || 10;
   const page = parseInt(query.page, 10) || 1;
@@ -617,7 +617,7 @@ const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
   }
 });
 const deletefeedshed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId; // Get the user ID from the token
+  const userId = req.user.id; // Get the user ID from the token
   const feedShedId = req.params.feedShedId; // Get the feedShedId from the request parameters
 
   // Step 1: Find and delete the ShedEntry
@@ -707,7 +707,7 @@ const deletefeedshed = asyncwrapper(async (req, res, next) => {
 // --------------------------------------fodder ------------------------
 
 const getAllFodders = asyncwrapper(async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -773,7 +773,7 @@ const getSingleFodder = asyncwrapper(async (req, res, next) => {
 });
 
 const manufactureFodder = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const { feeds, name } = req.body;  // Expecting an array of feed IDs and their quantities
 
   // Validate the inputs
@@ -853,7 +853,7 @@ const updateFodder = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.userId;
+    const userId = req.user.id;
     const { fodderId } = req.params; // معرف العلف المصنع
     const { feeds, name } = req.body; // بيانات التحديث
 

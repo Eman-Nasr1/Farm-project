@@ -174,7 +174,7 @@ const generatePDF = (data) => {
 };
 
 const generatePDFReport = async (req, res, next) => {  
-    const userId = new mongoose.Types.ObjectId(req.userId);  
+    const userId = new mongoose.Types.ObjectId(req.user.id);  
     let animalType = req.query.animalType;  
 
     // Ensure animalType is an array  
@@ -283,7 +283,7 @@ const generatePDFReport = async (req, res, next) => {
 
 
 const generateDailyyyCounts = asyncwrapper(async (req, res, next) => {  
-    const userId = new mongoose.Types.ObjectId(req.userId);   
+    const userId = new mongoose.Types.ObjectId(req.user.id);   
     let animalType = req.query.animalType;  
    
     // Ensure animalType is an array  

@@ -8,7 +8,7 @@ const jwt =require('jsonwebtoken');
 
 const createEmployee = asyncwrapper(async (req, res, next) => {
     const { name, email, password, phone, role, permissions } = req.body;
-    const userId = req.userId; // Assume you have middleware that provides the logged-in user ID
+    const userId = req.user.id; // Assume you have middleware that provides the logged-in user ID
 
     // Ensure the user exists
     const user = await User.findById(userId);

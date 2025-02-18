@@ -10,7 +10,7 @@ const asyncwrapper = require('../middleware/asyncwrapper');
 const mongoose = require('mongoose');
 
 const generateCombinedReport = asyncwrapper(async (req, res, next) => {
-    const userId = new mongoose.Types.ObjectId(req.userId);
+    const userId = new mongoose.Types.ObjectId(req.user.id);
    
     const { animalType, dateFrom, dateTo } = req.query;
 

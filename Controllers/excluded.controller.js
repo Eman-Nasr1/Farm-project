@@ -7,7 +7,7 @@ const Animal=require('../Models/animal.model');
 
 const getallexcluded =asyncwrapper(async(req,res)=>{
 
-    const userId = req.userId;
+    const userId = req.user.id;
     const query=req.query;
     const limit=query.limit||10;
     const page=query.page||1;
@@ -64,7 +64,7 @@ const getSingleExcluded = asyncwrapper(async (req, res, next) => {
 
 const addexcluded = asyncwrapper(async (req, res,next) => {
 
-    const userId = req.userId;
+    const userId = req.user.id;
     const { tagId, ...excludedData } = req.body;
     const animal = await Animal.findOne({ tagId });
     if (!animal) {
@@ -79,7 +79,7 @@ const addexcluded = asyncwrapper(async (req, res,next) => {
 })
 
 const updateExcluded = asyncwrapper(async (req,res)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const excludedId = req.params.excludedId;
     const updatedData = req.body;
 
@@ -94,7 +94,7 @@ const updateExcluded = asyncwrapper(async (req,res)=>{
 })
 
 const deleteExcluded= asyncwrapper(async(req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const excludedId = req.params.excludedId;
 
     const excluded = await Excluded.findOne({ _id: excludedId, owner: userId });

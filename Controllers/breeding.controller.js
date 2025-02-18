@@ -11,7 +11,7 @@ const upload = multer({ storage: storage }).single('file');
 
 
 const getAllBreeding = asyncwrapper(async (req, res) => {
-    const userId = req.userId;
+    const userId = req.user.id;
     const query = req.query;
     const limit = parseInt(query.limit) || 10;
     const page = parseInt(query.page) || 1;
@@ -139,7 +139,7 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
                 deliveryDate,  
                 numberOfBirths,  
                 birthEntries,  
-                owner: req.userId // Assuming the owner is set from the request  
+                owner: req.user.id// Assuming the owner is set from the request  
             });  
 
             // Save the new breeding document  
@@ -155,7 +155,7 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
 });
 
 const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId;  
+    const userId = req.user.id;  
 
     // Fetch filters from query  
     const query = req.query;  
@@ -277,7 +277,7 @@ const getsinglebreeding = asyncwrapper(async (req, res, next) => {
 // })
 
 const addBreeding = asyncwrapper(async (req, res, next) => {  
-    const userId = req.userId;  
+    const userId = req.user.id  
 
     // Extract tagId from the request body along with the breeding data  
     const { tagId, birthEntries, ...breedingData } = req.body;  
@@ -327,7 +327,7 @@ const addBreeding = asyncwrapper(async (req, res, next) => {
 });
 
 const deletebreeding= asyncwrapper(async(req,res,next)=>{
-    const userId = req.userId;
+    const userId = req.user.id;
     const breedingId = req.params.breedingId;
 
     // Find the breeding document by its ID
@@ -359,7 +359,7 @@ const deletebreeding= asyncwrapper(async(req,res,next)=>{
 // })
 
 const updatebreeding = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user.id;
     const breedingId = req.params.breedingId;
     const updatedData = req.body;
 

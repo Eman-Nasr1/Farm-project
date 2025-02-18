@@ -9,7 +9,7 @@ const AnimalCost = require("../Models/animalCost.model");
 const mongoose = require("mongoose");
 
 const getallTreatments = asyncwrapper(async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -44,7 +44,7 @@ const getallTreatments = asyncwrapper(async (req, res) => {
 });
 
 const getTreatments = asyncwrapper(async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const filter = { owner: userId };
   const treatments = await Treatment.find(filter, { __v: false }).sort({
@@ -69,7 +69,7 @@ const getsnigleTreatment = asyncwrapper(async (req, res, next) => {
 });
 
 const addTreatment = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const { name, type, volume, price, expireDate } = req.body;
 
   // Validate input
@@ -111,7 +111,7 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
 });
 
 const updateTreatment = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const treatmentId = req.params.treatmentId;
   const { price, volume, ...updatedData } = req.body; // Extract price & volume separately
 
@@ -153,7 +153,7 @@ const deleteTreatment = asyncwrapper(async (req, res) => {
 //------------------------------------------treetment for animale-----------------------
 
 const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const { treatments, locationShed, date } = req.body;
 
   if (
@@ -278,7 +278,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
 });
 
 const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const { treatments, tagId, date } = req.body;
 
   // Validate input data
@@ -448,7 +448,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.userId;
+    const userId = req.user.id;
     const { treatmentEntryId } = req.params;
 
     // تحقق من req.body
@@ -673,7 +673,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 });
 
 const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const query = req.query;
   const limit = parseInt(query.limit, 10) || 10;
   const page = parseInt(query.page, 10) || 1;
@@ -735,7 +735,7 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
 });
 
 const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user.id;
   const { treatmentShedId } = req.params; // ID of the treatment entry to delete
 
   // Find the treatment entry
