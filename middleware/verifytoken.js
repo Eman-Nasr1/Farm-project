@@ -21,7 +21,6 @@ const verifytoken = (req, res, next) => {
       permissions: decoded.permissions || [],
       isAdmin: decoded.role === 'admin' // Set a flag for admin users
     };
-console.log("requser:",req.user);
    // console.log('Decoded User:', req.user); // Log the decoded user for debugging
 
     next();
