@@ -236,6 +236,37 @@ const addmating = asyncwrapper(async (req, res,next) => {
     res.json({ status: httpstatustext.SUCCESS, data: { mating: newMating } });
 })
 
+const addMatingByLocation = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
+
+    // Extract locationShed and mating data from the request body
+    const { locationShed, ...matingData } = req.body;
+
+    // Find all female animals in the specified location (shed)
+    const femaleAnimals = await Animal.find({ locationShed, gender: 'female' });
+
+    if (femaleAnimals.length === 0) {
+        const error = AppError.create('No female animals found in the specified location', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Create mating records for each female animal
+    const newMatings = await Promise.all(
+        femaleAnimals.map(async (animal) => {
+            const newMating = new Mating({
+                ...matingData,
+                owner: userId,
+                tagId: animal.tagId,
+                animalId: animal._id,
+            });
+            await newMating.save();
+            return newMating;
+        })
+    );
+
+    res.json({ status: httpstatustext.SUCCESS, data: { matings: newMatings } });
+});
+
 
 const getsinglemating = asyncwrapper(async (req, res, next) => {
     const matingId = req.params.matingId;
@@ -292,7 +323,7 @@ module.exports={
     getsinglemating,
     getmatingforspacficanimal,
     importMatingFromExcel,
-    exportMatingToExcel
+    exportMatingToExcel,
+    addMatingByLocation,
     
-
 }

@@ -8,6 +8,7 @@ router.get('/api/mating/GetAllMating',verifytoken,matingcontroller.getAllMating)
 router.get('/api/mating/GetSingleAnimalMating/:animalId',verifytoken,matingcontroller.getmatingforspacficanimal);
 router.get('/api/mating/GetSingleMating/:matingId',verifytoken,matingcontroller.getsinglemating);
 router.post('/api/mating/AddMating',verifytoken, matingValidationRules(), validateMating,matingcontroller.addmating);
+router.post('/api/mating/AddMatingByLocation',verifytoken, validateMating,matingcontroller.addMatingByLocation);
 router.patch('/api/mating/UpdateMating/:matingId',verifytoken, matingValidationRules(),  validateMating,matingcontroller.updatemating);
 router.delete('/api/mating/DeleteMating/:matingId',verifytoken,matingcontroller.deletemating);
 
