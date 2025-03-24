@@ -3,6 +3,7 @@ const httpstatustext = require("../utilits/httpstatustext");
 const asyncwrapper = require("../middleware/asyncwrapper");
 const AppError = require("../utilits/AppError");
 const User = require("../Models/user.model");
+const LocationShed = require('../Models/locationsed.model');
 const Animal = require("../Models/animal.model");
 const TreatmentEntry = require("../Models/treatmentEntry.model");
 const AnimalCost = require("../Models/animalCost.model");
@@ -168,12 +169,21 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  const animals = await Animal.find({ locationShed });
+  // Find the locationShed document by its ID
+  const shed = await LocationShed.findById(locationShed);
+  if (!shed) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: `Location shed with ID "${locationShed}" not found.`,
+    });
+  }
 
+  // Find animals in the specified locationShed
+  const animals = await Animal.find({ locationShed });
   if (animals.length === 0) {
     return res.status(404).json({
       status: "FAILURE",
-      message: `No animals found in shed "${locationShed}".`,
+      message: `No animals found in shed "${shed.locationShedName}".`,
     });
   }
 
@@ -207,6 +217,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
         }).`,
       });
     }
+
     // Check authorization
     if (treatment.owner.toString() !== userId.toString()) {
       return res.status(403).json({
@@ -239,7 +250,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
       const newTreatmentEntry = new TreatmentEntry({
         treatments: [{ treatmentId: treatment._id, volume: volumePerAnimal }], // Store volumePerAnimal
         tagId: animal.tagId,
-        locationShed,
+        locationShed: shed._id, // Store the locationShed ID
         date: new Date(date),
         owner: userId,
       });
@@ -405,10 +416,15 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
     // Fetch the treatment shed entry by ID and populate relevant fields
     const treatmentShed = await TreatmentEntry.findById(
       req.params.treatmentShedId
-    ).populate({
-      path: "treatments.treatmentId", // المسار الصحيح للعلاج
-      select: "name pricePerMl volume", // الحقول المطلوبة
-    });
+    )
+      .populate({
+        path: "treatments.treatmentId",
+        select: "name pricePerMl volume",
+      })
+      .populate({
+        path: "locationShed",
+        select: "locationShedName", // Populate locationShedName
+      });
 
     if (!treatmentShed) {
       const error = AppError.create(
@@ -423,13 +439,16 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
     const response = {
       _id: treatmentShed._id,
       tagId: treatmentShed.tagId,
-      locationShed: treatmentShed.locationShed,
+      locationShed: {
+        _id: treatmentShed.locationShed._id,
+        locationShedName: treatmentShed.locationShed.locationShedName,
+      },
       date: treatmentShed.date,
       treatments: treatmentShed.treatments.map((treatment) => ({
         treatmentId: treatment.treatmentId._id,
-        treatmentName: treatment.treatmentId.name, // اسم العلاج
-        pricePerMl: treatment.treatmentId.pricePerMl, // السعر لكل مل
-        volume: treatment.volume, // الكمية المستخدمة
+        treatmentName: treatment.treatmentId.name,
+        pricePerMl: treatment.treatmentId.pricePerMl,
+        volume: treatment.volume,
       })),
     };
 
@@ -450,30 +469,14 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { treatmentEntryId } = req.params;
-
-    // تحقق من req.body
-    // console.log("Request Body:", req.body);
-
-    // استخراج البيانات من req.body
     const { treatments, tagId, date } = req.body;
 
-    // تحقق من وجود treatments
-    if (!Array.isArray(treatments) || treatments.length === 0) {
+    if (!Array.isArray(treatments) || treatments.length === 0 || !tagId || !date) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
         status: "FAILURE",
-        message: "treatments array is required and must not be empty.",
-      });
-    }
-
-    // تحقق من وجود tagId و date
-    if (!tagId || !date) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        status: "FAILURE",
-        message: "tagId and date are required.",
+        message: "treatments (array), tagId, and date are required.",
       });
     }
 
@@ -490,8 +493,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // console.log("Existing treatment entry found:", existingTreatmentEntry);
-
     // Fetch the animal associated with the tagId
     const animal = await Animal.findOne({ tagId }).session(session);
     if (!animal) {
@@ -503,13 +504,10 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // console.log("Animal found:", animal);
-
     // Process each treatment in the treatments array
     for (const treatmentItem of treatments) {
       const { treatmentId: newTreatmentId, volume: newVolume } = treatmentItem;
 
-      // تحقق من وجود newTreatmentId و newVolume
       if (!newTreatmentId || !newVolume || isNaN(newVolume) || newVolume <= 0) {
         await session.abortTransaction();
         session.endSession();
@@ -518,8 +516,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
           message: "Each treatment must have a valid treatmentId and volume.",
         });
       }
-
-      // console.log("Processing treatment:", { newTreatmentId, newVolume });
 
       // Fetch the old treatment from the existing treatment entry
       const oldTreatmentId = existingTreatmentEntry.treatments[0].treatmentId;
@@ -537,8 +533,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
         });
       }
 
-      // console.log("Old treatment found:", oldTreatment);
-
       // Fetch the new treatment
       const newTreatment = await Treatment.findById(newTreatmentId).session(
         session
@@ -551,8 +545,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
           message: `Treatment with ID "${newTreatmentId}" not found.`,
         });
       }
-
-      // console.log("New treatment found:", newTreatment);
 
       // Check if the new treatment is expired
       if (
@@ -642,8 +634,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       animalCostEntry.treatmentCost -= oldTreatmentCost; // Remove the old cost
       animalCostEntry.treatmentCost += newTreatmentCost; // Add the new cost
       await animalCostEntry.save({ session });
-
-      // console.log("Animal cost entry updated:", animalCostEntry);
     }
 
     // Update the treatment entry
@@ -699,8 +689,12 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   // Find treatment entries with pagination
   const treatmentShed = await TreatmentEntry.find(filter, { __v: false })
     .populate({
-      path: "treatments.treatmentId", // Correct path to populate
-      select: "name price volume", // Select only relevant fields
+      path: "treatments.treatmentId",
+      select: "name pricePerMl volume",
+    })
+    .populate({
+      path: "locationShed",
+      select: "locationShedName", // Populate locationShedName
     })
     .limit(limit)
     .skip(skip);
@@ -708,15 +702,18 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   // Map the populated data for a cleaner response
   const response = treatmentShed.map((entry) => ({
     _id: entry._id,
-    locationShed: entry.locationShed,
+    locationShed: {
+      _id: entry.locationShed._id,
+      locationShedName: entry.locationShed.locationShedName,
+    },
     tagId: entry.tagId,
     date: entry.date,
     treatments: entry.treatments.map((treatment) => ({
-      treatmentId: treatment.treatmentId?._id, // Treatment ID
-      treatmentName: treatment.treatmentId?.name, // Treatment name from the populated data
-      treatmentPrice: treatment.treatmentId?.price, // Treatment price from the populated data
-      treatmentVolume: treatment.treatmentId?.volume, // Treatment volume from the populated data
-      volume: treatment.volume, // Volume specific to this treatment entry
+      treatmentId: treatment.treatmentId?._id,
+      treatmentName: treatment.treatmentId?.name,
+      treatmentPrice: treatment.treatmentId?.pricePerMl,
+      treatmentVolume: treatment.treatmentId?.volume,
+      volume: treatment.volume,
     })),
   }));
 

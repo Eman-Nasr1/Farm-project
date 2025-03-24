@@ -4,6 +4,7 @@ const httpstatustext = require("../utilits/httpstatustext");
 const asyncwrapper = require("../middleware/asyncwrapper");
 const AppError = require("../utilits/AppError");
 const User = require("../Models/user.model");
+const LocationShed = require('../Models/locationsed.model');
 const ShedEntry = require("../Models/shedFeed.model");
 const AnimalCost = require("../Models/animalCost.model");
 const Animal = require("../Models/animal.model");
@@ -98,98 +99,6 @@ const deletefeed = asyncwrapper(async (req, res,next) => {
 
 // --------------------------------------feed by shed ------------------------
 
-// const addFeedToShed = asyncwrapper(async (req, res, next) => {
-//   const userId = req.userId;
-//   const { locationShed, feeds, date } = req.body;
-
-//   if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
-//     return res.status(400).json({
-//       status: "FAILURE",
-//       message: "locationShed and feeds (array) are required.",
-//     });
-//   }
-
-//   const animals = await Animal.find({ locationShed });
-
-//   if (animals.length === 0) {
-//     return res.status(404).json({
-//       status: "FAILURE",
-//       message: `No animals found in shed "${locationShed}".`,
-//     });
-//   }
-
-//   const shedEntries = [];
-//   const feedCosts = [];
-
-//   for (const feedItem of feeds) {
-//     const { feedName, quantity } = feedItem;
-
-//     if (!feedName || !quantity) {
-//       return res.status(400).json({
-//         status: "FAILURE",
-//         message: "Each feed must have feedName and quantity.",
-//       });
-//     }
-
-//     const feed = await Feed.findOne({ name: feedName });
-
-//     if (!feed) {
-//       return res.status(404).json({
-//         status: "FAILURE",
-//         message: `Feed with name "${feedName}" not found.`,
-//       });
-//     }
-
-//     const feedCost = feed.price * quantity;
-//     feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
-
-//     const shedEntry = new ShedEntry({
-//       feed: feed._id,
-//       locationShed,
-//       quantity,
-//       owner: userId,
-//       date: date ? new Date(date) : Date.now(),
-//     });
-
-//     await shedEntry.save();
-//     shedEntries.push(shedEntry);
-//   }
-
-//   // Distribute feed costs across animals
-//   const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
-//   const perAnimalFeedCost = totalFeedCost / animals.length;
-
-//   for (const animal of animals) {
-//     let animalCostEntry = await AnimalCost.findOne({
-//       animalTagId: animal.tagId,
-//     });
-
-//     if (animalCostEntry) {
-//       animalCostEntry.feedCost += perAnimalFeedCost;
-//     } else {
-//       animalCostEntry = new AnimalCost({
-//         animalTagId: animal.tagId,
-//         feedCost: perAnimalFeedCost,
-//         treatmentCost: 0, // Default treatment cost
-//         date: date,
-//         owner: userId,
-//       });
-//     }
-
-//     await animalCostEntry.save();
-//   }
-
-//   res.status(201).json({
-//     status: "SUCCESS",
-//     data: {
-//       shedEntries,
-//       totalFeedCost,
-//       perAnimalFeedCost,
-//     },
-//   });
-// });
-
-
 const addFeedToShed = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const { locationShed, feeds, date } = req.body;
@@ -201,11 +110,21 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });
   }
 
+  // Find the locationShed document by its ID
+  const shed = await LocationShed.findById(locationShed);
+  if (!shed) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: `Location shed with ID "${locationShed}" not found.`,
+    });
+  }
+
+  // Find animals in the specified locationShed
   const animals = await Animal.find({ locationShed });
   if (animals.length === 0) {
     return res.status(404).json({
       status: "FAILURE",
-      message: `No animals found in shed "${locationShed}".`,
+      message: `No animals found in shed "${shed.locationShedName}".`,
     });
   }
 
@@ -214,7 +133,6 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 
   for (const feedItem of feeds) {
     const { feedId, quantity } = feedItem;
-    console.log("Processing feed:", feedId, "with quantity:", quantity);
 
     if (!feedId || !quantity) {
       return res.status(400).json({
@@ -264,15 +182,11 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  // Log feedCosts to verify its contents
-
   const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
   const perAnimalFeedCost = totalFeedCost / animals.length;
 
-  // Log totalFeedCost and perAnimalFeedCost
-
   const shedEntry = new ShedEntry({
-    locationShed,
+    locationShed: shed._id, // Store the locationShed ID
     owner: userId,
     feeds: allFeeds,
     date: date ? new Date(date) : Date.now(),
@@ -305,7 +219,10 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
     data: {
       shedEntry: {
         _id: shedEntry._id,
-        locationShed: shedEntry.locationShed,
+        locationShed: {
+          _id: shed._id,
+          locationShedName: shed.locationShedName, // Include locationShedName in the response
+        },
         owner: shedEntry.owner,
         feeds: shedEntry.feeds,
         createdAt: shedEntry.createdAt,
@@ -322,11 +239,10 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId =req.user.id ;
-    const { shedEntryId } = req.params; // معرف سجل الحظيرة
-    const { locationShed, feeds, date } = req.body; // بيانات التحديث
+    const userId = req.user.id;
+    const { shedEntryId } = req.params;
+    const { locationShed, feeds, date } = req.body;
 
-    // التحقق من صحة البيانات
     if (!shedEntryId || !locationShed || !Array.isArray(feeds) || feeds.length === 0) {
       await session.abortTransaction();
       session.endSession();
@@ -336,7 +252,16 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // استرجاع سجل الحظيرة الحالي
+    const shed = await LocationShed.findById(locationShed).session(session);
+    if (!shed) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        status: "FAILURE",
+        message: `Location shed with ID "${locationShed}" not found.`,
+      });
+    }
+
     const existingShedEntry = await ShedEntry.findById(shedEntryId).session(session);
     if (!existingShedEntry) {
       await session.abortTransaction();
@@ -347,22 +272,19 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // استرجاع الحيوانات في الحظيرة
     const animals = await Animal.find({ locationShed }).session(session);
     if (animals.length === 0) {
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({
         status: "FAILURE",
-        message: `No animals found in shed "${locationShed}".`,
+        message: `No animals found in shed "${shed.locationShedName}".`,
       });
     }
 
-    // معالجة كل علف في مصفوفة feeds
     for (const feedItem of feeds) {
       const { feedId, quantity: newQuantity } = feedItem;
 
-      // التحقق من وجود feedId و newQuantity
       if (!feedId || !newQuantity || isNaN(newQuantity) || newQuantity <= 0) {
         await session.abortTransaction();
         session.endSession();
@@ -372,7 +294,6 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         });
       }
 
-      // البحث عن العلف القديم في سجل الحظيرة
       const oldFeed = existingShedEntry.feeds.find((feed) => feed.feedId.toString() === feedId);
       if (!oldFeed) {
         await session.abortTransaction();
@@ -385,7 +306,6 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
       const oldQuantity = oldFeed.quantity;
 
-      // البحث عن العلف في قاعدة البيانات
       const feed = await Feed.findById(feedId).session(session);
       if (!feed) {
         await session.abortTransaction();
@@ -396,8 +316,6 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         });
       }
 
-
-      // التحقق من صلاحية المستخدم
       if (feed.owner.toString() !== userId.toString()) {
         await session.abortTransaction();
         session.endSession();
@@ -407,10 +325,8 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         });
       }
 
-      // حساب الفرق في الكمية
       const quantityDifference = newQuantity - oldQuantity;
 
-      // إذا كانت الكمية الجديدة أكبر
       if (quantityDifference > 0) {
         if (feed.quantity < quantityDifference) {
           await session.abortTransaction();
@@ -420,43 +336,29 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
             message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Required: ${quantityDifference}.`,
           });
         }
-        feed.quantity -= quantityDifference; // خصم الفرق من المخزون
+        feed.quantity -= quantityDifference;
       } else if (quantityDifference < 0) {
-        // إذا كانت الكمية الجديدة أقل
-        feed.quantity += Math.abs(quantityDifference); // إعادة الفرق إلى المخزون
+        feed.quantity += Math.abs(quantityDifference);
       }
 
       await feed.save({ session });
 
-      // تحديث الكمية في سجل الحظيرة
       oldFeed.quantity = newQuantity;
     }
 
-    // حفظ سجل الحظيرة المحدث
     existingShedEntry.date = new Date(date);
     await existingShedEntry.save({ session });
 
-    // إعادة حساب تكلفة العلف
     const totalFeedCost = await existingShedEntry.feeds.reduce(async (sumPromise, feed) => {
       const sum = await sumPromise;
-
-      // البحث عن العلف في قاعدة البيانات للحصول على السعر
       const feedData = await Feed.findById(feed.feedId).session(session);
       if (!feedData) {
         throw new Error(`Feed with ID "${feed.feedId}" not found.`);
       }
-
-      // التحقق من وجود price و quantity
-      if (typeof feedData.price !== "number" || typeof feed.quantity !== "number") {
-        throw new Error(`Invalid price or quantity for feed: ${feed.feedId}`);
-      }
-
       const feedCost = feedData.price * feed.quantity;
-      // console.log(feedData, feedData.price, feed.quantity); // للتتبع
       return sum + feedCost;
     }, Promise.resolve(0));
 
-    // التحقق من أن totalFeedCost رقم صالح
     if (isNaN(totalFeedCost)) {
       await session.abortTransaction();
       session.endSession();
@@ -468,7 +370,6 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
     const perAnimalFeedCost = totalFeedCost / animals.length;
 
-    // التحقق من أن perAnimalFeedCost رقم صالح
     if (isNaN(perAnimalFeedCost)) {
       await session.abortTransaction();
       session.endSession();
@@ -478,14 +379,13 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // تحديث سجل AnimalCost
     for (const animal of animals) {
       let animalCostEntry = await AnimalCost.findOne({
         animalTagId: animal.tagId,
       }).session(session);
 
       if (animalCostEntry) {
-        animalCostEntry.feedCost = perAnimalFeedCost; // تحديث التكلفة
+        animalCostEntry.feedCost = perAnimalFeedCost;
       } else {
         animalCostEntry = new AnimalCost({
           animalTagId: animal.tagId,
@@ -499,22 +399,28 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       await animalCostEntry.save({ session });
     }
 
-    // إتمام المعاملة
     await session.commitTransaction();
     session.endSession();
 
-    // إرسال الاستجابة
     res.status(200).json({
       status: "SUCCESS",
       message: "Shed entry updated successfully.",
       data: {
-        shedEntry: existingShedEntry,
+        shedEntry: {
+          _id: existingShedEntry._id,
+          locationShed: {
+            _id: shed._id,
+            locationShedName: shed.locationShedName,
+          },
+          owner: existingShedEntry.owner,
+          feeds: existingShedEntry.feeds,
+          date: existingShedEntry.date,
+        },
         totalFeedCost,
         perAnimalFeedCost,
       },
     });
   } catch (error) {
-    // التراجع عن المعاملة في حالة الخطأ
     await session.abortTransaction();
     session.endSession();
     console.error("Error updating shed entry:", error);
@@ -539,27 +445,31 @@ const getAllFeedsByShed = asyncwrapper(async (req, res) => {
     filter.date = query.date;
   }
 
-  // Get the total count of documents that match the filter
   const totalCount = await ShedEntry.countDocuments(filter);
 
-  // Find ShedEntries with pagination
   const feedShed = await ShedEntry.find(filter, { __v: false })
     .populate({
-      path: "feeds.feedId", // Populate feedId in the feeds array
-      select: "name price", // Select only the name and price fields from Feed
+      path: "feeds.feedId",
+      select: "name price",
+    })
+    .populate({
+      path: "locationShed",
+      select: "locationShedName", // Populate locationShedName
     })
     .limit(limit)
     .skip(skip);
 
-  // Transform the data for a cleaner response
   const response = feedShed.map((entry) => ({
     _id: entry._id,
-    locationShed: entry.locationShed,
+    locationShed: {
+      _id: entry.locationShed._id,
+      locationShedName: entry.locationShed.locationShedName,
+    },
     date: entry.date,
     feeds: entry.feeds.map((feed) => ({
-      feedName: feed.feedId?.name, // Feed name from populated data
-      feedPrice: feed.feedId?.price, // Feed price from populated data
-      quantity: feed.quantity, // Quantity specific to this ShedEntry
+      feedName: feed.feedId?.name,
+      feedPrice: feed.feedId?.price,
+      quantity: feed.quantity,
     })),
   }));
 
@@ -579,11 +489,15 @@ const getAllFeedsByShed = asyncwrapper(async (req, res) => {
 
 const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
   try {
-    // Fetch the feed shed entry by ID and populate relevant fields
-    const feedShed = await ShedEntry.findById(req.params.feedShedId).populate({
-      path: "feeds.feedId", // المسار الصحيح للعلف
-      select: "name price", // الحقول المطلوبة
-    });
+    const feedShed = await ShedEntry.findById(req.params.feedShedId)
+      .populate({
+        path: "feeds.feedId",
+        select: "name price",
+      })
+      .populate({
+        path: "locationShed",
+        select: "locationShedName", // Populate locationShedName
+      });
 
     if (!feedShed) {
       const error = AppError.create(
@@ -594,16 +508,18 @@ const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
       return next(error);
     }
 
-    // Format the response to include feed details
     const response = {
       _id: feedShed._id,
-      locationShed: feedShed.locationShed,
+      locationShed: {
+        _id: feedShed.locationShed._id,
+        locationShedName: feedShed.locationShed.locationShedName,
+      },
       date: feedShed.date,
       feeds: feedShed.feeds.map((feed) => ({
         feedId: feed.feedId._id,
-        feedName: feed.feedId.name, // اسم العلف
-        price: feed.feedId.price, // سعر العلف
-        quantity: feed.quantity, // الكمية المستخدمة
+        feedName: feed.feedId.name,
+        price: feed.feedId.price,
+        quantity: feed.quantity,
       })),
     };
 

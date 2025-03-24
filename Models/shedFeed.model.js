@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 
 const shedEntrySchema = new mongoose.Schema({
   locationShed: {
-    type: String,
-    required: true,
-  },
+           type: mongoose.Schema.Types.ObjectId,
+           ref: 'LocationShed'
+     },
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",

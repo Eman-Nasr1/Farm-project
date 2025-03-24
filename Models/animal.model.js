@@ -10,8 +10,8 @@ const Animalschema = new mongoose.Schema({
         required: true
     },
     breed: {
-        type: String,
-        required: true
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Breed'
     },
     animalType: {
         type: String,
@@ -40,7 +40,8 @@ const Animalschema = new mongoose.Schema({
         type: String
     },
     locationShed: {
-        type: String
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'LocationShed'
     },
     gender: {
         type: String,

@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");  
 
 const treatmentEntrySchema = new mongoose.Schema({  
-    locationShed: {  
-        type: String,  
-        required: true,  
-    },  
+   locationShed: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'LocationShed'
+      }, 
     owner: {  
         type: mongoose.Schema.Types.ObjectId,  
         ref: "User",  
