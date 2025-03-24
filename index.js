@@ -53,6 +53,12 @@ app.use('/',treatmentRoutes)
 const employeetRoutes=require('./Routes/employeeRoute');
 app.use('/',employeetRoutes)
 
+const locationshedRoutes=require('./Routes/locationshedRoutes');
+app.use('/',locationshedRoutes)
+
+const breedRoutes=require('./Routes/breedRoutes');
+app.use('/',breedRoutes)
+
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
 })
