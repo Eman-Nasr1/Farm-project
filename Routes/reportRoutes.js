@@ -7,5 +7,5 @@ const verifyToken = require('../middleware/verifytoken');
 router.get('/api/report/daily', verifyToken, reportController.generateDailyyyCounts);
 router.get('/api/report/daily/download', verifyToken, reportController.generatePDFReport);
 router.get('/api/filter/report', verifyToken, report2controller.generateCombinedReport);
-
+router.get('/api/report/download', verifyToken, report2controller.generateCombinedPDFReport);
 module.exports = router;
