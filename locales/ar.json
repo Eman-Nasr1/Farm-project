@@ -1,0 +1,10 @@
+{
+    "SUCCESS": "نجاح",
+    "FAIL": "فشل",
+    "ANIMAL_NOT_FOUND": "الحيوان غير موجود",
+    "FILE_UPLOAD_FAILED": "فشل تحميل الملف",
+    "REQUIRED_FIELDS_MISSING": "الحقول المطلوبة مفقودة في الصف {row}",
+    "INVALID_DATE_FORMAT": "تنسيق تاريخ غير صالح في الصف {row}",
+    "ANIMALS_IMPORTED_SUCCESSFULLY": "تم استيراد الحيوانات بنجاح",
+    "PERMISSION_DENIED": "تم رفض الإذن"
+  }

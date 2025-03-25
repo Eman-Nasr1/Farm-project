@@ -19,9 +19,10 @@ const nodemailer = require('nodemailer');
   const skip = (page - 1) * limit;
 
   // Define the filter object (empty object to count all users)
-  const filter = {};
+  const filter = { role: { $ne: 'admin' } }; // $ne means "not equal"
 
-  const users = await User.find({}, { "__v": false, "password": false, "confirmpassword": false })
+
+  const users = await User.find(filter, { "__v": false, "password": false, "confirmpassword": false })
     .limit(limit)
     .skip(skip);
 

@@ -1,0 +1,10 @@
+{
+    "SUCCESS": "Success",
+    "FAIL": "Fail",
+    "ANIMAL_NOT_FOUND": "Animal not found",
+    "FILE_UPLOAD_FAILED": "File upload failed",
+    "REQUIRED_FIELDS_MISSING": "Required fields are missing in row {row}",
+    "INVALID_DATE_FORMAT": "Invalid date format in row {row}",
+    "ANIMALS_IMPORTED_SUCCESSFULLY": "Animals imported successfully",
+    "PERMISSION_DENIED": "Permission denied"
+  }
