@@ -249,44 +249,35 @@ const getsingleanimal = asyncwrapper(async (req, res, next) => {
 
 const addanimal = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const { locationShedName, breedName, ...animalData } = req.body; // Extract locationShedName and breedName from the request body
+    const { locationShedName, breed, ...animalData } = req.body;
 
-    // Find the LocationShed document by its name
+    // Find LocationShed by name
     const locationShed = await LocationShed.findOne({ locationShedName, owner: userId });
-
     if (!locationShed) {
         const error = AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL);
         return next(error);
     }
 
-    // Find the Breed document by its name
-    const breed = await Breed.findOne({ breedName, owner: userId });
-
-    if (!breed) {
+    // Find Breed by name (changed from _id to breedName)
+    const breedDoc = await Breed.findOne({ breedName: breed, owner: userId });
+    if (!breedDoc) {
         const error = AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL);
         return next(error);
     }
 
-    // Create a new animal with the locationShed ID and breed ID
+    // Create new animal
     const newanimal = new Animal({
         ...animalData,
-        locationShed: locationShed._id, // Assign the locationShed ID
-        breed: breed._id, // Assign the breed ID
+        locationShed: locationShed._id,
+        breed: breedDoc._id,
         owner: userId
     });
 
     await newanimal.save();
 
-    // Populate the locationShed and breed fields in the response
     const populatedAnimal = await Animal.findById(newanimal._id)
-        .populate({
-            path: 'locationShed',
-            select: 'locationShedName' // Only include the locationShedName field
-        })
-        .populate({
-            path: 'breed',
-            select: 'breedName' // Only include the breedName field
-        });
+        .populate('locationShed', 'locationShedName')
+        .populate('breed', 'breedName');
 
     res.json({ status: httpstatustext.SUCCESS, data: { animal: populatedAnimal } });
 });

@@ -702,10 +702,10 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   // Map the populated data for a cleaner response
   const response = treatmentShed.map((entry) => ({
     _id: entry._id,
-    locationShed: {
+    locationShed: entry.locationShed ? {
       _id: entry.locationShed._id,
       locationShedName: entry.locationShed.locationShedName,
-    },
+    } : null,
     tagId: entry.tagId,
     date: entry.date,
     treatments: entry.treatments.map((treatment) => ({

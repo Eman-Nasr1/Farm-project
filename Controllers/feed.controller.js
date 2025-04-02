@@ -461,10 +461,10 @@ const getAllFeedsByShed = asyncwrapper(async (req, res) => {
 
   const response = feedShed.map((entry) => ({
     _id: entry._id,
-    locationShed: {
+    locationShed: entry.locationShed ? {
       _id: entry.locationShed._id,
       locationShedName: entry.locationShed.locationShedName,
-    },
+    } : null,
     date: entry.date,
     feeds: entry.feeds.map((feed) => ({
       feedName: feed.feedId?.name,
