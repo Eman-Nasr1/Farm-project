@@ -7,14 +7,18 @@ const AnimalCostSchema = new mongoose.Schema({
     },
     feedCost: {
         type: Number,
-        default: 0, // Default to 0 if no feed cost
+        default: 0,
     },
     treatmentCost: {
         type: Number,
-        default: 0, // Default to 0 if no treatment cost
+        default: 0,
+    },
+    vaccineCost: {  // New field for vaccine costs
+        type: Number,
+        default: 0,
     },
     totalCost: {
-        type: Number, // Computed as feedCost + treatmentCost
+        type: Number,
     },
     date: {
         type: Date,
@@ -30,9 +34,9 @@ const AnimalCostSchema = new mongoose.Schema({
     },
 });
 
+// Update the pre-save hook to include vaccineCost in total calculation
 AnimalCostSchema.pre('save', function (next) {
-    // Automatically calculate totalCost before saving
-    this.totalCost = this.feedCost + this.treatmentCost;
+    this.totalCost = this.feedCost + this.treatmentCost + this.vaccineCost;
     next();
 });
 

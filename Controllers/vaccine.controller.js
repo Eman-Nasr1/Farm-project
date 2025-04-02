@@ -3,367 +3,746 @@ const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const Vaccine=require('../Models/vaccine.model');
 const Animal=require('../Models/animal.model');
-const multer = require('multer');
-const xlsx = require('xlsx');
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage }).single('file');
+const AnimalCost = require("../Models/animalCost.model");
+const LocationShed=require('../Models/locationsed.model');
+const VaccineEntry=require('../Models/vaccineEntry.model');
+const mongoose = require("mongoose");
 
 
 
-const getAllVaccine = asyncwrapper(async (req, res) => {
+
+
+const addVaccine = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const query = req.query;
-    const limit = parseInt(query.limit) || 10;
-    const page = parseInt(query.page) || 1;
-    const skip = (page - 1) * limit;
-
-    const filter = { owner: userId };
-
-    // Create an array to hold the vaccination log filters  
-    const vaccinationLogFilters = {};
-
-    if (query.tagId || query.locationShed || query.DateGiven) {
-        vaccinationLogFilters.$elemMatch = {}; // Create an $elemMatch object for filtering  
-
-        if (query.tagId) {
-            vaccinationLogFilters.$elemMatch.tagId = query.tagId; // Filter by tagId  
-        }
-
-        if (query.locationShed) {
-            vaccinationLogFilters.$elemMatch.locationShed = query.locationShed; // Filter by locationShed  
-        }
-
-        if (query.DateGiven) {
-            vaccinationLogFilters.$elemMatch.DateGiven = { $gte: new Date(query.DateGiven) }; // Filter by DateGiven  
-        }
-
-        // Add the vaccinationLog filter to the main filter  
-        filter.vaccinationLog = vaccinationLogFilters;
-    }
-
-    if (query.vaccineName) {
-        filter.vaccineName = query.vaccineName; // e.g., 
-    }
-
-    // Get the total count of documents that match the filter
-    const totalCount = await Vaccine.countDocuments(filter);
-
-    // Find the paginated results
-    const vaccine = await Vaccine.find(filter, { "__v": false })
-        .populate({
-            path: 'animalId',
-            select: 'animalType'
-        })
-        .limit(limit)
-        .skip(skip);
-
-    // If animalType is provided in the query, filter the results
-    if (query.animalType) {
-        const filteredVaccineData = vaccine.filter(vaccine => vaccine.animalId && vaccine.animalId.animalType === query.animalType);
-        return res.json({
-            status: httpstatustext.SUCCESS,
-            data: {
-                vaccine: filteredVaccineData,
-                pagination: {
-                    total: filteredVaccineData.length,
-                    page: page,
-                    limit: limit,
-                    totalPages: Math.ceil(filteredVaccineData.length / limit)
-                }
-            }
-        });
-    }
-
-    // If no animalType filter is applied, return all vaccine data with pagination metadata
-    res.json({
-        status: httpstatustext.SUCCESS,
-        data: {
-            vaccine,
-            pagination: {
-                total: totalCount,
-                page: page,
-                limit: limit,
-                totalPages: Math.ceil(totalCount / limit)
-            }
-        }
-    });
-});
-
-
-const exportVaccinesToExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
-
-    // Fetch vaccines based on filter logic
-    const query = req.query;
-    const filter = { owner: userId };
-
-    if (query.vaccineName) filter.vaccineName = query.vaccineName;
-    if (query.DateGiven) filter['vaccinationLog.DateGiven'] = { $gte: new Date(query.DateGiven) };
-    if (query.locationShed) filter['vaccinationLog.locationShed'] = query.locationShed;
-
-    const vaccines = await Vaccine.find(filter).populate({
-        path: 'animalId',
-        select: 'tagId locationShed animalType'
-    });
-
-    if (!vaccines.length) {
-        return next(AppError.create('No vaccines found for the specified filters', 404, httpstatustext.FAIL));
-    }
-
-    // Prepare data for Excel
-    const data = [];
-    data.push(['Vaccine Name', 'Tag ID', 'Animal Type', 'Location Shed', 'Date Given', 'Valid Till']);
-
-    vaccines.forEach(vaccine => {
-        vaccine.vaccinationLog.forEach(log => {
-            data.push([
-                vaccine.vaccineName,
-                log.tagId || '',
-                vaccine.animalId?.animalType || '',
-                log.locationShed || '',
-                log.DateGiven ? new Date(log.DateGiven).toLocaleDateString() : '',
-                log.vallidTell ? new Date(log.vallidTell).toLocaleDateString() : ''
-            ]);
-        });
-    });
-
-    // Create a new workbook and add the data
-    const workbook = xlsx.utils.book_new();
-    const worksheet = xlsx.utils.aoa_to_sheet(data);
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Vaccines');
-
-    // Write the workbook to a buffer
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-
-    // Set headers and send the file
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="vaccines.xlsx"');
-
-    res.send(buffer);
-});
-
-const importVaccineFromExcel = asyncwrapper(async (req, res, next) => {
-    upload(req, res, async function (err) {
-        if (err) {
-            return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
-        }
-
-        const fileBuffer = req.file.buffer;
-        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-
-        // Convert sheet to JSON format (array of objects)
-        const data = xlsx.utils.sheet_to_json(worksheet);
-
-        const createdVaccines = [];
-
-        // Iterate over the rows
-        for (const [index, row] of data.entries()) {
-            const { tagId, vaccineName, DateGiven, givenEvery, locationShed } = row;
-
-            // Validate required fields
-            if (!tagId || !vaccineName || !DateGiven || !givenEvery) {
-                return next(AppError.create(`Missing required fields in row ${index + 2}`, 400, httpstatustext.FAIL));
-            }
-
-            // Find the animal by tagId
-            const animal = await Animal.findOne({ tagId });
-            if (!animal) {
-                return next(AppError.create(`Animal not found for tagId: ${tagId} in row ${index + 2}`, 404, httpstatustext.FAIL));
-            }
-
-            // Create a new vaccine record
-            const newVaccine = new Vaccine({
-                vaccineName,
-                vaccinationLog: [{
-                    tagId,
-                    DateGiven: new Date(DateGiven),
-                    locationShed: locationShed || animal.locationShed,
-                    vallidTell: new Date(new Date(DateGiven).getTime() + (givenEvery * 24 * 60 * 60 * 1000)),
-                    createdAt: new Date()
-                }],
-                givenEvery,
-                owner: req.user.id,
-                animalId: animal._id
-            });
-
-            await newVaccine.save();
-            createdVaccines.push(newVaccine);
-        }
-
-        res.json({
-            status: httpstatustext.SUCCESS,
-            message: 'Vaccines imported successfully',
-            data: createdVaccines,
-        });
-    });
-});
-
-const getVaccineforspacficanimal =asyncwrapper(async( req, res, next)=>{
- 
-    const animal = await Animal.findById(req.params.animalId);
-    if (!animal) {
-        const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
-        return next(error);
-    }
-    const vaccine = await Vaccine.find({ animalId: animal._id });
-
-    if (!vaccine) {
-        const error = AppError.create('Vaccine information not found for this animal', 404, httpstatustext.FAIL);
-        return next(error);
-    }
-
-    return res.json({ status: httpstatustext.SUCCESS, data: { animal, vaccine } });
-
-})
-
-
-const getsinglevaccine = asyncwrapper(async (req, res, next) => {
-    const vaccineId = req.params.vaccineId;
-
-    // Find the vaccine document by its ID
-    const vaccine = await Vaccine.findById(vaccineId);
-    if (!vaccine) {
-        const error = AppError.create('vaccine information not found', 404, httpstatustext.FAIL);
-        return next(error);
-    }
-
-    // Return the single vaccine record
-    return res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
-});
-
-const addvaccine = asyncwrapper(async (req, res, next) => {  
-    const userId = req.user.id;  
-    const { vaccinationLog, ...vaccineData } = req.body;  
-    const createdVaccines = []; // Array to keep track of created vaccines  
+    const { 
+      vaccineName,
+      BoosterDose,
+      AnnualDose,
+      bottles,
+      dosesPerBottle,
+      bottlePrice
+    } = req.body;
   
-    // Check if vaccinationLog is empty  
-    if (!vaccinationLog || vaccinationLog.length === 0) {  
-        return next(new AppError('Vaccination log is empty', 400, httpstatustext.FAIL));  
-    }  
-    
-    // Process each log in the vaccinationLog array  
-    for (const log of vaccinationLog) {  
-        const { locationShed, ...vaccineData2 } = log; // Destructure locationShed and other vaccine data  
-
-        // Find all animals that match the provided locationShed  
-        const animals = await Animal.find({ locationShed });  
-
-        // If no animals are found for the provided locationShed  
-        if (animals.length === 0) {  
-            const error = AppError.create('No animals found for the provided locationShed', 404, httpstatustext.FAIL);  
-            return next(error);  
-        }  
-
-        // Create and save a new vaccine for each found animal  
-        for (const animal of animals) {  
-            const newVaccine = new Vaccine({   
-                vaccinationLog: [{
-                    tagId: animal.tagId,  // Adding the tagId from the animal
-                    DateGiven: vaccinationLog[0].DateGiven,
-                    locationShed: locationShed, // Using the location shed from the request
-                    vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
-                    createdAt: new Date()
-                }],  // Pass the current log as vaccinationLog  
-                ...vaccineData, // Includes global vaccine data  
-                ...vaccineData2, // Includes vaccine data from the current log  
-                owner: userId,  
-                animalId: animal._id  
-            });  
-            await newVaccine.save();  
-            createdVaccines.push(newVaccine); // Store the created vaccine in the array  
-        }  
-    }  
-
-    // Send back the array of created vaccines  
-    res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });  
-});
-
-
-const addvaccineforanimal = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;  
-    const { vaccinationLog, ...vaccineData } = req.body;  
-    const createdVaccines = []; // Array to keep track of created vaccines
-
-    // Check if the vaccinationLog is valid and has DateGiven and tagId
-    if (!vaccinationLog || vaccinationLog.length === 0 || !vaccinationLog[0].DateGiven || !vaccinationLog[0].tagId) {
-        return next(new AppError('Vaccination log must include at least one entry with DateGiven and tagId', 400, httpstatustext.FAIL));
+    // Validate input
+    if (
+      !vaccineName ||
+      bottles === undefined || isNaN(bottles) || bottles < 0 ||
+      dosesPerBottle === undefined || isNaN(dosesPerBottle) || dosesPerBottle < 1 ||
+      bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0
+    ) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "Valid vaccine name, bottles, doses per bottle, and bottle price are required.",
+      });
     }
-
-    const tagId = vaccinationLog[0].tagId; // Extract tagId from the first log entry
-    if (tagId) {
-        const animal = await Animal.findOne({ tagId });
-        if (!animal) {
-            return next(new AppError('Animal not found for the provided tagId', 404, httpstatustext.FAIL));
-        }
-
-        // Create the vaccination log for the single animal
-        const newVaccine = new Vaccine({
-            ...vaccineData,
-            vaccinationLog: [{
-                tagId: animal.tagId,
-                DateGiven: vaccinationLog[0].DateGiven,
-                locationShed: vaccinationLog[0].locationShed || animal.locationShed,
-                vallidTell: new Date(new Date(vaccinationLog[0].DateGiven).getTime() + (vaccineData.givenEvery * 24 * 60 * 60 * 1000)),
-                createdAt: new Date()
-            }],
-            owner: userId,
-            animalId: animal._id
-        });
-
-        await newVaccine.save();
-        createdVaccines.push(newVaccine);
-
-        return res.json({ status: httpstatustext.SUCCESS, data: { vaccines: createdVaccines } });
+  
+    // Calculate derived values
+    const totalDoses = bottles * dosesPerBottle;
+    const dosePrice = bottlePrice / dosesPerBottle;
+  
+    // Create new vaccine with proper nesting
+    const newVaccine = new Vaccine({
+      vaccineName,
+      BoosterDose: BoosterDose || null,
+      AnnualDose: AnnualDose || null,
+      stock: {
+        bottles: Number(bottles),
+        dosesPerBottle: Number(dosesPerBottle),
+        totalDoses: Number(totalDoses)
+      },
+      pricing: {
+        bottlePrice: Number(bottlePrice),
+        dosePrice: Number(dosePrice)
+      },
+      owner: userId
+    });
+  
+    try {
+      await newVaccine.save();
+      res.status(201).json({
+        status: httpstatustext.SUCCESS,
+        data: { vaccine: newVaccine },
+      });
+    } catch (error) {
+      return next(new AppError('Failed to save vaccine: ' + error.message, 500));
     }
+  });
 
-
-    return next(new AppError(' tagId must be provided', 400, httpstatustext.FAIL));
-});
-
-
-
-const updateVaccine = asyncwrapper(async (req,res,next)=>{
+  // Get all vaccines (without pagination)
+const getVaccines = asyncwrapper(async (req, res) => {
     const userId = req.user.id;
-    const vaccineId = req.params.vaccineId;
-    const updatedData = req.body;
-
-    let vaccine = await Vaccine.findOne({ _id: vaccineId, owner: userId });
-        if (!vaccine) {
-            const error = AppError.create('Vaccine information not found or unauthorized to update', 404, httpstatustext.FAIL);
-            return next(error);
-        }
-        vaccine = await Vaccine.findOneAndUpdate({ _id: vaccineId }, updatedData, { new: true });
-
-        res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
-})
-
-const deleteVaccine= asyncwrapper(async(req,res,next)=>{
-    const userId = req.user.id;
-    const vaccineId = req.params.vaccineId;
-
-    // Find the document by its ID
-    const vaccine = await Vaccine.findOne({ _id: vaccineId, owner: userId });
+    const vaccines = await Vaccine.find({ owner: userId }, { __v: false }).sort({
+      createdAt: -1,
+    });
+    res.json({
+      status: httpstatustext.SUCCESS,
+      data: { vaccines },
+    });
+  });
+  
+  // Get single vaccine
+  const getVaccine = asyncwrapper(async (req, res, next) => {
+    const vaccine = await Vaccine.findById(req.params.vaccineId);
     if (!vaccine) {
-        const error = AppError.create('Vaccine information not found or unauthorized to delete', 404, httpstatustext.FAIL);
-        return next(error);
+      const error = AppError.create(
+        "Vaccine not found",
+        404,
+        httpstatustext.FAIL
+      );
+      return next(error);
     }
-    await vaccine.deleteOne({ _id: vaccineId });
+    return res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
+  });
+  
+  // Get all vaccines with pagination
+  const getAllVaccines = asyncwrapper(async (req, res) => {
+    const userId = req.user.id;
+    const query = req.query;
+    const limit = query.limit || 10;
+    const page = query.page || 1;
+    const skip = (page - 1) * limit;
+    const filter = { owner: userId };
+  
+    if (query.vaccineName) {
+      filter.vaccineName = { $regex: query.vaccineName, $options: 'i' };
+    }
+  
+    const vaccines = await Vaccine.find(filter, { __v: false })
+      .limit(limit)
+      .skip(skip)
+      .sort({ createdAt: -1 });
+  
+    const total = await Vaccine.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
+  
+    res.json({
+      status: httpstatustext.SUCCESS,
+      pagination: {
+        page: page,
+        limit: limit,
+        total: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+      data: { vaccines },
+    });
+  });
+  
+  // Update vaccine
+  const updateVaccine = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
+    const vaccineId = req.params.vaccineId;
+    const { 
+      bottles,
+      dosesPerBottle,
+      bottlePrice,
+      ...updatedData 
+    } = req.body;
+  
+    // Find the vaccine owned by the user
+    let vaccine = await Vaccine.findOne({ _id: vaccineId, owner: userId });
+  
+    if (!vaccine) {
+      const error = AppError.create(
+        "Vaccine not found or unauthorized to update",
+        404,
+        httpstatustext.FAIL
+      );
+      return next(error);
+    }
+  
+    // Update stock and pricing if provided
+    if (bottles !== undefined) vaccine.stock.bottles = bottles;
+    if (dosesPerBottle !== undefined) vaccine.stock.dosesPerBottle = dosesPerBottle;
+    if (bottlePrice !== undefined) vaccine.pricing.bottlePrice = bottlePrice;
+  
+    // Recalculate derived values if any stock/pricing fields changed
+    if (bottles !== undefined || dosesPerBottle !== undefined || bottlePrice !== undefined) {
+      vaccine.stock.totalDoses = vaccine.stock.bottles * vaccine.stock.dosesPerBottle;
+      vaccine.pricing.dosePrice = vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle;
+    }
+  
+    // Apply other updates
+    Object.assign(vaccine, updatedData);
+  
+    await vaccine.save();
+  
+    res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
+  });
+  
+  // Delete vaccine
+  const deleteVaccine = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
+    const vaccineId = req.params.vaccineId;
+  
+    const vaccine = await Vaccine.findOneAndDelete({ 
+      _id: vaccineId, 
+      owner: userId 
+    });
+  
+    if (!vaccine) {
+      const error = AppError.create(
+        "Vaccine not found or unauthorized to delete",
+        404,
+        httpstatustext.FAIL
+      );
+      return next(error);
+    }
+  
+    res.status(200).json({ 
+      status: httpstatustext.SUCCESS, 
+      data: null,
+      message: "Vaccine deleted successfully" 
+    });
+  });
+  //--------------------------------vaccine entry----------------------------------------
 
-    res.json({ status: httpstatustext.SUCCESS, message: 'Vaccine information deleted successfully' });
+  const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
+    const { vaccineId, locationShed, date, entryType } = req.body;
+  
+    if (!vaccineId || !locationShed || !date || !entryType) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "vaccineId, locationShed, date, and entryType are required.",
+      });
+    }
+  
+    // Start a Mongoose session for transactions
+    const session = await mongoose.startSession();
+    session.startTransaction();
+  
+    try {
+      // Find the locationShed document by its ID
+      const shed = await LocationShed.findById(locationShed).session(session);
+      if (!shed) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: `Location shed with ID "${locationShed}" not found.`,
+        });
+      }
+  
+      // Find animals in the specified locationShed
+      const animals = await Animal.find({ locationShed }).session(session);
+      if (animals.length === 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: `No animals found in shed "${shed.locationShedName}".`,
+        });
+      }
+  
+      // Find the vaccine
+      const vaccine = await Vaccine.findById(vaccineId).session(session);
+      if (!vaccine) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: `Vaccine with ID "${vaccineId}" not found.`,
+        });
+      }
+  
+      // Check authorization
+      if (vaccine.owner.toString() !== userId.toString()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(403).json({
+          status: "FAILURE",
+          message: "You are not authorized to use this vaccine.",
+        });
+      }
+  
+      // Check stock availability (1 dose per animal)
+      if (vaccine.stock.totalDoses < animals.length) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: `Not enough vaccine doses available. Required: ${animals.length}, Available: ${vaccine.stock.totalDoses}.`,
+        });
+      }
+  
+      // Calculate vaccine cost per animal
+      const vaccineCostPerAnimal = vaccine.pricing.dosePrice || 
+                                 (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
+      const totalVaccineCost = vaccineCostPerAnimal * animals.length;
+  
+      // Deduct doses from vaccine stock
+      vaccine.stock.totalDoses -= animals.length;
+      if (vaccine.stock.totalDoses % vaccine.stock.dosesPerBottle === 0) {
+        vaccine.stock.bottles = Math.floor(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
+      } else {
+        vaccine.stock.bottles = Math.floor(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle) + 1;
+      }
+      await vaccine.save({ session });
+  
+      const createdVaccineEntries = [];
+  
+      // Create vaccine entry for each animal
+      for (const animal of animals) {
+        const newVaccineEntry = new VaccineEntry({
+          Vaccine: vaccine._id,
+          tagId: animal.tagId,
+          locationShed: shed._id,
+          date: new Date(date),
+          entryType,
+          owner: userId,
+        });
+  
+        await newVaccineEntry.save({ session });
+        createdVaccineEntries.push(newVaccineEntry);
+  
+        // Update or create animal cost entry - now using vaccineCost field
+        let animalCostEntry = await AnimalCost.findOne({
+          animalTagId: animal.tagId,
+        }).session(session);
+  
+        if (animalCostEntry) {
+          animalCostEntry.vaccineCost += vaccineCostPerAnimal;
+        } else {
+          animalCostEntry = new AnimalCost({
+            animalTagId: animal.tagId,
+            vaccineCost: vaccineCostPerAnimal,
+            treatmentCost: 0,
+            feedCost: 0,
+            date: new Date(date),
+            owner: userId,
+          });
+        }
+  
+        await animalCostEntry.save({ session });
+      }
+  
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+  
+      res.status(201).json({
+        status: "SUCCESS",
+        data: {
+          vaccineEntries: createdVaccineEntries,
+          totalVaccineCost,
+          dosesUsed: animals.length,
+          remainingDoses: vaccine.stock.totalDoses,
+          remainingBottles: vaccine.stock.bottles,
+        },
+      });
+  
+    } catch (error) {
+      // If any error occurs, abort the transaction
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Error in addVaccineForAnimals:", error);
+      next(error);
+    }
+  });
 
-})
+  const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
+    const { vaccineId, tagId, date, entryType } = req.body;
+  
+    // Validate input
+    if (!vaccineId || !tagId || !date || !entryType) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "vaccineId, tagId, date, and entryType are required."
+      });
+    }
+  
+    const session = await mongoose.startSession();
+    session.startTransaction();
+  
+    try {
+      // Find animal
+      const animal = await Animal.findOne({ tagId }).session(session);
+      if (!animal) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: `Animal with tag ID "${tagId}" not found.`
+        });
+      }
+  
+      // Find vaccine
+      const vaccine = await Vaccine.findOne({
+        _id: vaccineId,
+        owner: userId
+      }).session(session);
+  
+      if (!vaccine) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: "Vaccine not found or unauthorized."
+        });
+      }
+  
+      // Check stock
+      if (vaccine.stock.totalDoses < 1) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: "No vaccine doses available."
+        });
+      }
+  
+      // Calculate cost
+      const dosePrice = vaccine.pricing.dosePrice || 
+                       (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
+  
+      // Update stock
+      vaccine.stock.totalDoses -= 1;
+      vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
+      await vaccine.save({ session });
+  
+      // Create vaccine entry
+      const newVaccineEntry = await VaccineEntry.create([{
+        Vaccine: vaccine._id,
+        tagId: animal.tagId,
+        locationShed: animal.locationShed,
+        date: new Date(date),
+        entryType,
+        owner: userId
+      }], { session });
+  
+      // Update animal cost
+      await AnimalCost.findOneAndUpdate(
+        { animalTagId: tagId },
+        { 
+          $inc: { vaccineCost: dosePrice },
+          $setOnInsert: { 
+            feedCost: 0,
+            treatmentCost: 0,
+            date: new Date(date),
+            owner: userId
+          }
+        },
+        { upsert: true, session }
+      );
+  
+      await session.commitTransaction();
+      session.endSession();
+  
+      res.status(201).json({
+        status: "SUCCESS",
+        data: {
+          vaccineEntry: newVaccineEntry[0],
+          vaccineCost: dosePrice,
+          remainingDoses: vaccine.stock.totalDoses
+        }
+      });
+  
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Vaccination error:", error);
+      next(error);
+    }
+  });
+  const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
+    try {
+      const vaccineEntry = await VaccineEntry.findById(req.params.vaccineEntryId)
+        .populate('Vaccine', 'vaccineName BoosterDose AnnualDose pricing.dosePrice')
+        .populate('locationShed', 'locationShedName');
 
-module.exports={
-    deleteVaccine,
+      if (!vaccineEntry) {
+        return res.status(404).json({
+          status: "FAILURE",
+          message: "Vaccine entry not found."
+        });
+      }
+  
+      const response = {
+        _id: vaccineEntry._id,
+        tagId: vaccineEntry.tagId,
+        locationShed: vaccineEntry.locationShed ? {
+          _id: vaccineEntry.locationShed._id,
+          locationShedName: vaccineEntry.locationShed.locationShedName
+        } : null,
+        date: vaccineEntry.date,
+        entryType: vaccineEntry.entryType,
+        vaccine: vaccineEntry.Vaccine ? {  // Changed from vaccineEntry.vaccine to vaccineEntry.Vaccine
+          _id: vaccineEntry.Vaccine._id,
+          name: vaccineEntry.Vaccine.vaccineName,  // Fixed typo from vaccineName
+          dosePrice: vaccineEntry.Vaccine.pricing?.dosePrice  // Optional chaining
+        } : null
+      };
+  
+      res.json({
+        status: "SUCCESS",
+        data: { vaccineEntry: response }
+      });
+  
+    } catch (error) {
+      console.error("Error fetching vaccine entry:", error);
+      next(error);
+    }
+  });
+  const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+  
+    try {
+      const userId = req.user.id;
+      const { vaccineEntryId } = req.params;
+      const { vaccineId, tagId, date, entryType } = req.body;
+  
+      // Validate input
+      if (!vaccineId || !tagId || !date || !entryType) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: "All fields are required."
+        });
+      }
+  
+      // Find existing entry
+      const existingEntry = await VaccineEntry.findById(vaccineEntryId).session(session);
+      if (!existingEntry) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: "Vaccine entry not found."
+        });
+      }
+  
+      // Find animal
+      const animal = await Animal.findOne({ tagId }).session(session);
+      if (!animal) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: "Animal not found."
+        });
+      }
+  
+      // Find new vaccine
+      const newVaccine = await Vaccine.findOne({
+        _id: vaccineId,
+        owner: userId
+      }).session(session);
+  
+      if (!newVaccine) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: "New vaccine not found or unauthorized."
+        });
+      }
+  
+      // Calculate new dose price
+      const newDosePrice = newVaccine.pricing?.dosePrice || 
+                         (newVaccine.pricing?.bottlePrice / newVaccine.stock?.dosesPerBottle) || 0;
+  
+      // Initialize old dose price
+      let oldDosePrice = 0;
+      let oldVaccine = null;
+  
+      // Only check old vaccine if reference exists
+      if (existingEntry.Vaccine) {
+        oldVaccine = await Vaccine.findById(existingEntry.Vaccine).session(session);
+        if (oldVaccine) {
+          oldDosePrice = oldVaccine.pricing?.dosePrice || 
+                        (oldVaccine.pricing?.bottlePrice / oldVaccine.stock?.dosesPerBottle) || 0;
+        }
+      }
+  
+      // If changing vaccine and old vaccine exists
+      if (existingEntry.Vaccine && existingEntry.Vaccine.toString() !== vaccineId && oldVaccine) {
+        // Return dose to old vaccine
+        oldVaccine.stock.totalDoses += 1;
+        oldVaccine.stock.bottles = Math.ceil(oldVaccine.stock.totalDoses / oldVaccine.stock.dosesPerBottle);
+        await oldVaccine.save({ session });
+  
+        // Deduct from new vaccine
+        if (newVaccine.stock.totalDoses < 1) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            status: "FAILURE",
+            message: "Not enough doses in new vaccine."
+          });
+        }
+        newVaccine.stock.totalDoses -= 1;
+        newVaccine.stock.bottles = Math.ceil(newVaccine.stock.totalDoses / newVaccine.stock.dosesPerBottle);
+        await newVaccine.save({ session });
+      } else if (!existingEntry.Vaccine) {
+        // If no previous vaccine, just deduct from new one
+        if (newVaccine.stock.totalDoses < 1) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            status: "FAILURE",
+            message: "Not enough doses in new vaccine."
+          });
+        }
+        newVaccine.stock.totalDoses -= 1;
+        newVaccine.stock.bottles = Math.ceil(newVaccine.stock.totalDoses / newVaccine.stock.dosesPerBottle);
+        await newVaccine.save({ session });
+      }
+  
+      // Update cost record if animalTagId exists
+      if (tagId) {
+        await AnimalCost.findOneAndUpdate(
+          { animalTagId: tagId },
+          { $inc: { vaccineCost: (newDosePrice - oldDosePrice) } },
+          { session, upsert: true }
+        );
+      }
+  
+      // Update entry
+      existingEntry.Vaccine = newVaccine._id;
+      existingEntry.tagId = tagId;
+      existingEntry.date = new Date(date);
+      existingEntry.entryType = entryType;
+      existingEntry.locationShed = animal.locationShed;
+      await existingEntry.save({ session });
+  
+      await session.commitTransaction();
+      session.endSession();
+  
+      res.status(200).json({
+        status: "SUCCESS",
+        data: {
+          vaccineEntry: existingEntry,
+          costDifference: (newDosePrice - oldDosePrice)
+        }
+      });
+  
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Update error:", {
+        message: error.message,
+        stack: error.stack,
+        params: req.params,
+        body: req.body
+      });
+      next(error);
+    }
+  });
+  const getAllVaccineEntries = asyncwrapper(async (req, res) => {
+    const userId = req.user.id;
+    const { limit = 10, page = 1, tagId, locationShed, entryType } = req.query;
+  
+    const filter = { owner: userId };
+    if (tagId) filter.tagId = tagId;
+    if (locationShed) filter.locationShed = locationShed;
+    if (entryType) filter.entryType = entryType;
+  
+    const total = await VaccineEntry.countDocuments(filter);
+    const entries = await VaccineEntry.find(filter)
+      .populate('Vaccine', 'vaccineName pricing.dosePrice')
+      .populate('locationShed', 'locationShedName')
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .sort({ date: -1 });
+  
+    res.json({
+      status: "SUCCESS",
+      data: {
+        entries,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  });
+  const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+  
+    try {
+      const userId = req.user.id;
+      const { vaccineEntryId } = req.params;
+  
+      // Find entry
+      const entry = await VaccineEntry.findById(vaccineEntryId).session(session);
+      if (!entry) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          status: "FAILURE",
+          message: "Entry not found."
+        });
+      }
+  
+      // Verify ownership
+      if (entry.owner.toString() !== userId.toString()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(403).json({
+          status: "FAILURE",
+          message: "Unauthorized."
+        });
+      }
+  
+      // Find vaccine and restore dose
+      const vaccine = await Vaccine.findById(entry.vaccine).session(session);
+      if (vaccine) {
+        vaccine.stock.totalDoses += 1;
+        vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
+        await vaccine.save({ session });
+      }
+  
+      // Update cost record
+      const dosePrice = vaccine?.pricing.dosePrice || 
+                       (vaccine?.pricing.bottlePrice / vaccine?.stock.dosesPerBottle) || 0;
+      
+      await AnimalCost.findOneAndUpdate(
+        { animalTagId: entry.tagId },
+        { $inc: { vaccineCost: -dosePrice } },
+        { session }
+      );
+  
+      // Delete entry
+      await VaccineEntry.deleteOne({ _id: vaccineEntryId }).session(session);
+  
+      await session.commitTransaction();
+      session.endSession();
+  
+      res.status(200).json({
+        status: "SUCCESS",
+        message: "Vaccine entry deleted successfully.",
+        data: {
+          restoredDoses: vaccine?.stock.totalDoses
+        }
+      });
+  
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Delete error:", error);
+      next(error);
+    }
+  });
+
+  module.exports = {
+    addVaccine, // From your previous implementation
+    getVaccines,
+    getVaccine,
+    getAllVaccines,
     updateVaccine,
-    addvaccine,
-    addvaccineforanimal,
-    getVaccineforspacficanimal,
-    getsinglevaccine,
-    getAllVaccine,
-    exportVaccinesToExcel,
-    importVaccineFromExcel
-
-}
+    deleteVaccine,
+    addVaccineForAnimals,
+    addVaccineForAnimal ,
+    getSingleVaccineEntry ,
+    updateVaccineEntry,
+    getAllVaccineEntries,
+    deleteVaccineEntry,
+  };
