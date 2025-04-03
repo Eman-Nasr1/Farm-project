@@ -439,10 +439,10 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
     const response = {
       _id: treatmentShed._id,
       tagId: treatmentShed.tagId,
-      locationShed: {
+      locationShed: treatmentShed.locationShed ? {
         _id: treatmentShed.locationShed._id,
-        locationShedName: treatmentShed.locationShed.locationShedName,
-      },
+        locationShedName: treatmentShed.locationShed?.locationShedName,
+      } : null,
       date: treatmentShed.date,
       treatments: treatmentShed.treatments.map((treatment) => ({
         treatmentId: treatment.treatmentId._id,

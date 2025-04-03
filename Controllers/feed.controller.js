@@ -510,10 +510,10 @@ const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
 
     const response = {
       _id: feedShed._id,
-      locationShed: {
+      locationShed: feedShed.locationShed ? {
         _id: feedShed.locationShed._id,
         locationShedName: feedShed.locationShed.locationShedName,
-      },
+      } : null,
       date: feedShed.date,
       feeds: feedShed.feeds.map((feed) => ({
         feedId: feed.feedId._id,
