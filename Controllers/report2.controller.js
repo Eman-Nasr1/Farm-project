@@ -13,257 +13,318 @@ const pdf = require('html-pdf');
 const path = require('path');
 
 const generateCombinedReport = asyncwrapper(async (req, res, next) => {
-    const userId = new mongoose.Types.ObjectId(req.user.id);
-   
-    const { animalType, dateFrom, dateTo } = req.query;
-
-    const fromDate = new Date(dateFrom);
-    fromDate.setUTCHours(0, 0, 0, 0);
-    const toDate = new Date(dateTo);
-    toDate.setUTCHours(23, 59, 59, 999);
-
-     // Calculate feed consumption  
-     const feedConsumption = await ShedEntry.aggregate([  
-        {  
-            $match: {  
-                owner: userId,  
-                date: { $gte: fromDate, $lte: toDate }  
-            }  
-        },  
-        {  
-            $unwind: '$feeds' // Unwind the feeds array  
-        },  
-        {  
-            $lookup: {  
-                from: 'feeds',  
-                localField: 'feeds.feedId',  
-                foreignField: '_id',  
-                as: 'feedDetails'  
-            }  
-        },  
-        {  
-            $unwind: '$feedDetails' // Unwind feed details  
-        },  
-        {  
-            $group: {  
-                _id: '$feedDetails.name', // Group by feed name  
-                totalConsumed: { $sum: '$feeds.quantity' } // Sum the quantities consumed  
-            }  
-        },  
-        {  
-            $project: {  
-                _id: 0,  
-                feedName: '$_id',  
-                totalConsumed: 1  
-            }  
-        }  
-    ]);  
-
-    // Fetch remaining stock for feeds  
-    const remainingFeedStock = await Feed.aggregate([  
-        {  
-            $match: {  
-                owner: userId  
-            }  
-        }  
-    ]);  
-
-    // Calculate treatment consumption  
-    const treatmentConsumption = await TreatmentEntry.aggregate([  
-        {  
-            $match: {  
-                owner: userId,  
-                date: { $gte: fromDate, $lte: toDate }  
-            }  
-        },  
-        {  
-            $unwind: '$treatments' // Unwind the treatments array  
-        },  
-        {  
-            $lookup: {  
-                from: 'treatments',  
-                localField: 'treatments.treatmentId',  
-                foreignField: '_id',  
-                as: 'treatmentDetails'  
-            }  
-        },  
-        {  
-            $unwind: '$treatmentDetails' // Unwind treatment details  
-        },  
-        {  
-            $group: {  
-                _id: '$treatmentDetails.name', // Group by treatment name  
-                totalConsumed: { $sum: '$treatments.volume' } // Sum the volumes consumed  
-            }  
-        },  
-        {  
-            $project: {  
-                _id: 0,  
-                treatmentName: '$_id',  
-                totalConsumed: 1  
-            }  
-        }  
-    ]);  
-
-    // Fetch remaining stock for treatments  
-    const remainingTreatmentStock = await Treatment.aggregate([  
-        {  
-            $match: {  
-                owner: userId  
-            }  
-        }  
-    ]);  
-
-    // Generate animal report
-    const animalReport = await Animal.aggregate([
-        {
-            $match: {
-                owner: userId,
-                animalType: animalType,
-                createdAt: { $gte: fromDate, $lte: toDate }
-            }
-        },
-        {
-            $group: {
-                _id: { gender: '$gender', animalType: '$animalType' },
-                count: { $sum: 1 }
-            }
-        },
-        {
-            $project: {
-                _id: 0,
-                gender: '$_id.gender',
-                animalType: '$_id.animalType',
-                count: 1
-            }
+    try {
+        // Validate user and parameters
+        if (!req.user?.id) {
+            return res.status(401).json({
+                status: 'error',
+                message: 'Unauthorized - User not authenticated'
+            });
         }
-    ]);
- // Generate excluded animal report
-    const excludedReport = await Excluded.aggregate([
-        {
-            $match: {
-                owner: userId,
-                excludedType: { $in: ["death", "sweep", "sale"] },
-                Date: { $gte: fromDate, $lte: toDate }
-            }
-        },
-        {
-            $lookup: {
-                from: 'animals',
-                localField: 'animalId',
-                foreignField: '_id',
-                as: 'animal'
-            }
-        },
-        {
-            $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
-        },
-        {
-            $match: { 'animal.animalType': animalType }
-        },
-        {
-            $group: {
-                _id: { excludedType: '$excludedType', animalType: '$animal.animalType', gender: '$animal.gender' },
-                count: { $sum: 1 }
-            }
-        },
-        {
-            $project: {
-                _id: 0,
-                excludedType: '$_id.excludedType',
-                animalType: '$_id.animalType',
-                gender: '$_id.gender',
-                count: 1
-            }
+
+        const userId = new mongoose.Types.ObjectId(req.user.id);
+        const { animalType, dateFrom, dateTo } = req.query;
+
+        // Validate required parameters
+        if (!animalType || !dateFrom || !dateTo) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Missing required parameters: animalType, dateFrom, and dateTo are required'
+            });
         }
-    ]);
-   
-const positiveSonarCount = await Mating.aggregate([  
-    {  
-        $match: {  
-            owner: userId,  
-            sonarRsult: 'positive',  
-            matingDate: { $gte: fromDate, $lte: toDate },  
-            expectedDeliveryDate: { $gt: new Date() } // Check if expectedDeliveryDate is greater than today  
-        }  
-    },  
-    {  
-        $lookup: {  
-            from: 'animals',  
-            localField: 'animalId',  
-            foreignField: '_id',  
-            as: 'animal'  
-        }  
-    },  
-    {  
-        $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }  
-    },  
-    {  
-        $match: { 'animal.animalType': animalType }  
-    },  
-    {  
-        $count: 'positiveSonarCount'  
-    }  
-]);
 
-    // Generate birth entries report from Breeding model
-    const birthEntriesReport = await Breeding.aggregate([
-        {
-            $match: {
-                owner: userId,
-                createdAt: { $gte: fromDate, $lte: toDate }
-            }
-        },
-        {
-            $lookup: {
-                from: 'animals',
-                localField: 'animalId',
-                foreignField: '_id',
-                as: 'animal'
-            }
-        },
-        {
-            $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
-        },
-        {
-            $match: { 'animal.animalType': animalType }
-        },
-        {
-            $unwind: '$birthEntries'
-        },
-        {
-            $match: { 'birthEntries.createdAt': { $gte: fromDate, $lte: toDate } }
-        },
-        {
-            $group: {
-                _id: null,
-                totalBirthEntries: { $sum: 1 },
-                totalMales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'male'] }, 1, 0] } },
-                totalFemales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'female'] }, 1, 0] } }
-            }
+        // Validate and parse dates
+        const fromDate = new Date(dateFrom);
+        const toDate = new Date(dateTo);
+        
+        if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Invalid date format. Please use YYYY-MM-DD format'
+            });
         }
-    ]);
 
-    // Extract values from birthEntriesReport
-    const { totalBirthEntries = 0, totalMales = 0, totalFemales = 0 } = birthEntriesReport[0] || {};
+        fromDate.setUTCHours(0, 0, 0, 0);
+        toDate.setUTCHours(23, 59, 59, 999);
 
-    return {
-        status: 'success',
-        data: {
+       // console.log(`Generating report for ${animalType} from ${fromDate} to ${toDate}`);
+
+        // Execute all aggregations in parallel for better performance
+        const [
+            feedConsumption,
+            remainingFeedStock,
+            treatmentConsumption,
+            remainingTreatmentStock,
             animalReport,
             excludedReport,
-            pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
-            birthEntries: {
-                totalBirthEntries,
-                totalMales,
-                totalFemales
+            positiveSonarCount,
+            birthEntriesReport
+        ] = await Promise.all([
+            // Feed Consumption
+            ShedEntry.aggregate([  
+                {  
+                    $match: {  
+                        owner: userId,  
+                        date: { $gte: fromDate, $lte: toDate }  
+                    }  
+                },  
+                {  
+                    $unwind: '$feeds' 
+                },  
+                {  
+                    $lookup: {  
+                        from: 'feeds',  
+                        localField: 'feeds.feedId',  
+                        foreignField: '_id',  
+                        as: 'feedDetails'  
+                    }  
+                },  
+                {  
+                    $unwind: '$feedDetails' 
+                },  
+                {  
+                    $group: {  
+                        _id: '$feedDetails.name',
+                        totalConsumed: { $sum: '$feeds.quantity' } 
+                    }  
+                },  
+                {  
+                    $project: {  
+                        _id: 0,  
+                        feedName: '$_id',  
+                        totalConsumed: 1  
+                    }  
+                }  
+            ]),
+            
+            // Remaining Feed Stock
+            Feed.aggregate([  
+                {  
+                    $match: {  
+                        owner: userId  
+                    }  
+                }  
+            ]),
+            
+            // Treatment Consumption
+            TreatmentEntry.aggregate([  
+                {  
+                    $match: {  
+                        owner: userId,  
+                        date: { $gte: fromDate, $lte: toDate }  
+                    }  
+                },  
+                {  
+                    $unwind: '$treatments'
+                },  
+                {  
+                    $lookup: {  
+                        from: 'treatments',  
+                        localField: 'treatments.treatmentId',  
+                        foreignField: '_id',  
+                        as: 'treatmentDetails'  
+                    }  
+                },  
+                {  
+                    $unwind: '$treatmentDetails'
+                },  
+                {  
+                    $group: {  
+                        _id: '$treatmentDetails.name',
+                        totalConsumed: { $sum: '$treatments.volume' } 
+                    }  
+                },  
+                {  
+                    $project: {  
+                        _id: 0,  
+                        treatmentName: '$_id',  
+                        totalConsumed: 1  
+                    }  
+                }  
+            ]),
+            
+            // Remaining Treatment Stock
+            Treatment.aggregate([  
+                {  
+                    $match: {  
+                        owner: userId  
+                    }  
+                }  
+            ]),
+            
+            // Animal Report
+            Animal.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        animalType: animalType,
+                        createdAt: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { gender: '$gender', animalType: '$animalType' },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        gender: '$_id.gender',
+                        animalType: '$_id.animalType',
+                        count: 1
+                    }
+                }
+            ]),
+            
+            // Excluded Report
+            Excluded.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        excludedType: { $in: ["death", "sweep", "sale"] },
+                        Date: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'animals',
+                        localField: 'animalId',
+                        foreignField: '_id',
+                        as: 'animal'
+                    }
+                },
+                {
+                    $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
+                },
+                {
+                    $match: { 'animal.animalType': animalType }
+                },
+                {
+                    $group: {
+                        _id: { excludedType: '$excludedType', animalType: '$animal.animalType', gender: '$animal.gender' },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        excludedType: '$_id.excludedType',
+                        animalType: '$_id.animalType',
+                        gender: '$_id.gender',
+                        count: 1
+                    }
+                }
+            ]),
+            
+            // Positive Sonar Count
+            Mating.aggregate([  
+                {  
+                    $match: {  
+                        owner: userId,  
+                        sonarRsult: 'positive',  
+                        matingDate: { $gte: fromDate, $lte: toDate },  
+                        expectedDeliveryDate: { $gt: new Date() }
+                    }  
+                },  
+                {  
+                    $lookup: {  
+                        from: 'animals',  
+                        localField: 'animalId',  
+                        foreignField: '_id',  
+                        as: 'animal'  
+                    }  
+                },  
+                {  
+                    $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }  
+                },  
+                {  
+                    $match: { 'animal.animalType': animalType }  
+                },  
+                {  
+                    $count: 'positiveSonarCount'  
+                }  
+            ]),
+            
+            // Birth Entries Report
+            Breeding.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        createdAt: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'animals',
+                        localField: 'animalId',
+                        foreignField: '_id',
+                        as: 'animal'
+                    }
+                },
+                {
+                    $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
+                },
+                {
+                    $match: { 'animal.animalType': animalType }
+                },
+                {
+                    $unwind: '$birthEntries'
+                },
+                {
+                    $match: { 'birthEntries.createdAt': { $gte: fromDate, $lte: toDate } }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalBirthEntries: { $sum: 1 },
+                        totalMales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'male'] }, 1, 0] } },
+                        totalFemales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'female'] }, 1, 0] } }
+                    }
+                }
+            ])
+        ]);
+
+        // Process birth entries data
+        const birthEntriesData = birthEntriesReport[0] || {
+            totalBirthEntries: 0,
+            totalMales: 0,
+            totalFemales: 0
+        };
+
+        // Send successful response
+        res.status(200).json({
+            status: 'success',
+            data: {
+                animalReport,
+                excludedReport,
+                pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
+                birthEntries: {
+                    totalBirthEntries: birthEntriesData.totalBirthEntries,
+                    totalMales: birthEntriesData.totalMales,
+                    totalFemales: birthEntriesData.totalFemales
+                },
+                feedConsumption,  
+                remainingFeedStock,  
+                treatmentConsumption,  
+                remainingTreatmentStock 
             },
-            feedConsumption,  
-            remainingFeedStock,  
-            treatmentConsumption,  
-            remainingTreatmentStock 
-        }
-    };
+            meta: {
+                dateFrom: dateFrom,
+                dateTo: dateTo,
+                animalType: animalType,
+                generatedAt: new Date()
+            }
+        });
+
+    } catch (error) {
+        console.error("Error generating combined report:", error);
+        res.status(500).json({
+            status: 'error',
+            message: 'An error occurred while generating the report',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
 });
 
 const generateCombinedPDFReport = async (req, res, next) => {  
