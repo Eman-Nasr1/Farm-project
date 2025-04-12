@@ -10,6 +10,7 @@ const setLocale = require('../middleware/localeMiddleware');
 
 router.use(setLocale);
 router.get('/api/animal/location-sheds',verifytoken,animalcontroller.getAllLocationSheds);
+router.get('/api/animal/getAnimalStatistics',verifytoken,animalcontroller.getAnimalStatistics);
 router.get('/api/animal/exportAnimalsToExcel',verifytoken,animalcontroller.exportAnimalsToExcel);
 router.get('/api/animal/getallanimals',verifytoken,animalcontroller.getallanimals);
 router.get('/api/animal/getsinglanimals/:tagId',verifytoken,animalcontroller.getsingleanimal);

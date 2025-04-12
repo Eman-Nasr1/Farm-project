@@ -15,6 +15,128 @@ const setLocale = require('../middleware/localeMiddleware');
 
 const upload = multer({ storage: storage }).single('file');
 
+
+const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
+    try {
+        // First ensure we have a valid userId from the request
+        const userId = req.userId || req.user?.id;
+        if (!userId) {
+           // console.error('User ID is missing in request');
+            return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
+        }
+
+       // console.log(`[DEBUG] Processing statistics for user ${userId}`);
+
+        // Get total count of animals for the user
+        const totalAnimals = await Animal.countDocuments({ owner: userId });
+       // console.log(`[DEBUG] Total animals: ${totalAnimals}`);
+
+        // Get counts by animal type (sheep/goat)
+        const animalsByType = await Animal.aggregate([
+            { 
+                $match: { 
+                    owner: new mongoose.Types.ObjectId(userId) // Fixed ObjectId construction
+                }
+            },
+            { 
+                $group: { 
+                    _id: "$animalType", 
+                    count: { $sum: 1 },
+                    males: { 
+                        $sum: { 
+                            $cond: [{ $eq: ["$gender", "male"] }, 1, 0] 
+                        } 
+                    },
+                    females: { 
+                        $sum: { 
+                            $cond: [{ $eq: ["$gender", "female"] }, 1, 0] 
+                        } 
+                    }
+                }
+            },
+            { 
+                $project: {
+                    animalType: "$_id",
+                    count: 1,
+                    males: 1,
+                    females: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+      //  console.log('[DEBUG] Animals by type:', animalsByType);
+
+        // Initialize with all possible types
+        const typeStats = {
+            sheep: { total: 0, males: 0, females: 0 },
+            goat: { total: 0, males: 0, females: 0 }
+        };
+
+        // Update with actual data
+        animalsByType.forEach(stat => {
+            if (stat.animalType && typeStats[stat.animalType]) {
+                typeStats[stat.animalType] = {
+                    total: stat.count,
+                    males: stat.males,
+                    females: stat.females
+                };
+            }
+        });
+
+        // Get counts by gender
+        const animalsByGender = await Animal.aggregate([
+            { 
+                $match: { 
+                    owner: new mongoose.Types.ObjectId(userId) 
+                }
+            },
+            { 
+                $group: { 
+                    _id: "$gender", 
+                    count: { $sum: 1 }
+                }
+            },
+            { 
+                $project: {
+                    gender: "$_id",
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+       // console.log('[DEBUG] Animals by gender:', animalsByGender);
+
+        // Initialize gender stats
+        const genderStats = {
+            male: 0,
+            female: 0
+        };
+
+        // Update with actual data
+        animalsByGender.forEach(stat => {
+            if (stat.gender && genderStats.hasOwnProperty(stat.gender)) {
+                genderStats[stat.gender] = stat.count;
+            }
+        });
+
+        // Return the statistics
+        res.json({
+            status: httpstatustext.SUCCESS,
+            data: {
+                totalAnimals,
+                byType: typeStats,
+                byGender: genderStats
+            }
+        });
+
+    } catch (error) {
+        console.error('[ERROR] in getAnimalStatistics:', error);
+        return next(AppError.create(i18n.__('STATISTICS_ERROR'), 500, httpstatustext.ERROR));
+    }
+});
+
 const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
     upload(req, res, async function (err) {
         if (err) {
@@ -386,5 +508,5 @@ module.exports={
     importAnimalsFromExcel,
     exportAnimalsToExcel,
     getAllLocationSheds,
-    
+    getAnimalStatistics,
 }
