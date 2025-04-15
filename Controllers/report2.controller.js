@@ -5,7 +5,9 @@ const Breeding = require('../Models/breeding.model');
 const Feed = require('../Models/feed.model'); // Path to the Feed model  
 const ShedEntry = require('../Models/shedFeed.model'); // Path to the ShedEntry model  
 const Treatment = require('../Models/treatment.model'); // Path to the Treatment model  
-const TreatmentEntry = require('../Models/treatmentEntry.model'); 
+const TreatmentEntry = require('../Models/treatmentEntry.model');
+const Vaccine=require('../Models/vaccine.model');
+const VaccineEntry=require('../Models/vaccineEntry.model'); 
 const asyncwrapper = require('../middleware/asyncwrapper');
 const mongoose = require('mongoose');
 const PdfPrinter = require('pdfmake');
@@ -47,14 +49,14 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
         fromDate.setUTCHours(0, 0, 0, 0);
         toDate.setUTCHours(23, 59, 59, 999);
 
-       // console.log(`Generating report for ${animalType} from ${fromDate} to ${toDate}`);
-
         // Execute all aggregations in parallel for better performance
         const [
             feedConsumption,
             remainingFeedStock,
             treatmentConsumption,
             remainingTreatmentStock,
+            vaccineConsumption,
+            remainingVaccineStock,
             animalReport,
             excludedReport,
             positiveSonarCount,
@@ -150,6 +152,59 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
                         owner: userId  
                     }  
                 }  
+            ]),
+            
+            // Vaccine Consumption - FIXED: Corrected method name to aggregate()
+            VaccineEntry.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        date: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'vaccines',
+                        localField: 'Vaccine',  // Changed from 'vaccine' to match your schema
+                        foreignField: '_id',
+                        as: 'vaccineDetails'
+                    }
+                },
+                {
+                    $unwind: '$vaccineDetails'
+                },
+                {
+                    $group: {
+                        _id: '$vaccineDetails.vaccineName',
+                        totalConsumed: { $sum: 1 } // Count each vaccine entry as one dose
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        vaccineName: '$_id',
+                        totalConsumed: 1
+                    }
+                }
+            ]),
+            
+            // Remaining Vaccine Stock - FIXED: Corrected method name to aggregate()
+            Vaccine.aggregate([
+                {
+                    $match: {
+                        owner: userId
+                    }
+                },
+                {
+                    $project: {
+                        vaccineName: 1,
+                        'stock.bottles': 1,
+                        'stock.dosesPerBottle': 1,
+                        'stock.totalDoses': 1,
+                        'pricing.bottlePrice': 1,
+                        'pricing.dosePrice': 1
+                    }
+                }
             ]),
             
             // Animal Report
@@ -307,7 +362,9 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
                 feedConsumption,  
                 remainingFeedStock,  
                 treatmentConsumption,  
-                remainingTreatmentStock 
+                remainingTreatmentStock,
+                vaccineConsumption,
+                remainingVaccineStock 
             },
             meta: {
                 dateFrom: dateFrom,

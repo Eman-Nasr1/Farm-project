@@ -9,6 +9,8 @@ router.get('/api/vaccine/GetVaccine-menue',verifytoken,vaccinecontroller.getVacc
 router.get('/api/vaccine/GetSingleVaccine/:vaccineId',verifytoken,vaccinecontroller.getVaccine);
 router.post('/api/vaccine/AddVaccine',verifytoken,vaccinecontroller.addVaccine);
 
+router.get('/api/vaccine/GetVaccineForAnimal/:animalId',verifytoken,vaccinecontroller.getVaccinesForSpecificAnimal);
+
 router.patch('/api/vaccine/UpdateVaccine/:vaccineId',verifytoken, vaccinecontroller.updateVaccine);
 router.delete('/api/vaccine/DeleteVaccine/:vaccineId',verifytoken,vaccinecontroller.deleteVaccine);
 

@@ -13,6 +13,7 @@ router.patch('/api/treatment/updatetreatment/:treatmentId',verifytoken,treatment
 router.delete('/api/treatment/deletetreatment/:treatmentId',verifytoken,treatmentController.deleteTreatment);
 router.post('/api/treatment/addtreatmentbylocationshed',verifytoken, treatmentController.addTreatmentForAnimals);
 router.post('/api/treatment/addtreatmentbyanimal',verifytoken, treatmentController.addTreatmentForAnimal);
+router.get('/api/treatment/gettreatmentsForAnimal/:animalId',verifytoken,treatmentController.getTreatmentsForSpecificAnimal);
 
 
 router.get('/api/treatment/getAlltreatmentforAnimals',verifytoken,treatmentController.getAllTreatmentsByShed);

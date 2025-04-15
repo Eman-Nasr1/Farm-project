@@ -10,8 +10,6 @@ const mongoose = require("mongoose");
 
 
 
-
-
 const addVaccine = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const { 
@@ -732,6 +730,56 @@ const getVaccines = asyncwrapper(async (req, res) => {
     }
   });
 
+
+  const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
+    const animal = await Animal.findById(req.params.animalId);
+    if (!animal) {
+        const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+ 
+    
+    const vaccineEntries = await VaccineEntry.find({ 
+        tagId: animal.tagId // Changed from animalId to tagId
+    })
+    .populate('Vaccine') // Matches your schema definition
+    .populate('locationShed', 'locationShedName'); // Optional if you need shed info
+
+    if (!vaccineEntries || vaccineEntries.length === 0) {
+        console.warn(`No vaccines found for animal ${animal._id} with tag ${animal.tagId}`);
+        const error = AppError.create('No vaccine records found for this animal', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+
+    // Format the response data
+    const responseData = {
+        animal: {
+            _id: animal._id,
+            tagId: animal.tagId,
+            animalType: animal.animalType,
+            gender: animal.gender
+        },
+        vaccines: vaccineEntries.map(entry => ({
+            _id: entry._id,
+            date: entry.date,
+            entryType: entry.entryType,
+            vaccine: entry.Vaccine ? {
+                _id: entry.Vaccine._id,
+                name: entry.Vaccine.vaccineName
+            } : null,
+            locationShed: entry.locationShed ? {
+                _id: entry.locationShed._id,
+                name: entry.locationShed.locationShedName
+            } : null
+        }))
+    };
+
+    return res.json({ 
+        status: httpstatustext.SUCCESS, 
+        data: responseData
+    });
+});
+
   module.exports = {
     addVaccine, // From your previous implementation
     getVaccines,
@@ -745,4 +793,5 @@ const getVaccines = asyncwrapper(async (req, res) => {
     updateVaccineEntry,
     getAllVaccineEntries,
     deleteVaccineEntry,
+    getVaccinesForSpecificAnimal
   };
