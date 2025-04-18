@@ -159,7 +159,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
         country
      })
      const token=await jwt.sign(
-        { email: newuser.email, id: newuser._id, role: newuser.role }, // Include 'role' in the payload
+        { email: newuser.email, id: newuser._id, role: newuser.role, name:newuser.name }, // Include 'role' in the payload
         process.env.JWT_SECRET_KEY,
         { expiresIn: '30d' }) 
 
