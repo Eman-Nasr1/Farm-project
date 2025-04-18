@@ -136,7 +136,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
 });
  
  const register=asyncwrapper(async(req,res,next)=>{
-    const {name,email,password,confirmpassword,phone,country,role,usertype}=req.body;
+    const {name,email,password,confirmpassword,phone,country,role}=req.body;
 
     const olderuser=await User.findOne({email:email});
     if(olderuser){
@@ -156,9 +156,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
         confirmpassword:hashpassword,
         phone,
         role,
-        country,
-        usertype
-
+        country
      })
      const token=await jwt.sign(
         { email: newuser.email, id: newuser._id, role: newuser.role }, // Include 'role' in the payload

@@ -33,11 +33,6 @@ const Userschema=new mongoose.Schema(
             enum:["user","admin"],
             default:"user"
         },
-        usertype:{
-            type:String,
-            enum:["farm","trader"],
-            default:"farm"
-        },
         country:{
             type: String,
             required: true
