@@ -54,7 +54,7 @@ const nodemailer = require('nodemailer');
 })
 const updateUser = asyncwrapper(async (req, res, next) => {
   const { userId } = req.params;
-  const { name, email, phone, country, role, usertype, password } = req.body;
+  const { name, email, phone, country, role, password } = req.body;
 
   // Find the user by ID
   const user = await User.findById(userId);
@@ -84,7 +84,7 @@ const updateUser = asyncwrapper(async (req, res, next) => {
   if (phone) user.phone = phone;
   if (country) user.country = country;
   if (role) user.role = role;
-  if (usertype) user.usertype = usertype;
+  
 
   // Save the updated user
   await user.save();
