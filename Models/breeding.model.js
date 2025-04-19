@@ -40,6 +40,16 @@ const breedingSchema = new mongoose.Schema({
         type: Date,
         required: true
     },
+    MotheringAbility: {
+        type: String,
+        enum: ['good', 'bad','medium','متوسطة','جيدة','غير جيدة'],
+        required: true
+    },
+    milking :{
+        type: String,
+        enum: ['no milk', 'one teat','two teat','واحد حلمة','اثنين حلمة',' لا يوجد حليب'],
+        required: true
+    },
     numberOfBriths: {
         type: Number
     },
