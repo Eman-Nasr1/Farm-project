@@ -34,13 +34,14 @@ const breedingSchema = new mongoose.Schema({
         required: true
     },
     deliveryState: {
-        type: String
+        type: String,
+        enum: ['normal', 'difficult', 'assisted', 'caesarean','طبيعية','طبيعيه ب مساعده','متعسرة','قيصرية'],
     },
     deliveryDate: {
         type: Date,
         required: true
     },
-    MotheringAbility: {
+    motheringAbility: {
         type: String,
         enum: ['good', 'bad','medium','متوسطة','جيدة','غير جيدة'],
         required: true
