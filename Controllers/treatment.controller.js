@@ -793,81 +793,143 @@ const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
 });
 
 
+// const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
+//   try {
+//       // 1. Find the animal
+//       const animal = await Animal.findById(req.params.animalId).lean();
+//       if (!animal) {
+//          // console.log(`Animal not found with ID: ${req.params.animalId}`);
+//           return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
+//       }
+
+//       //console.log(`Searching treatments for animal: ${animal._id}, tag: ${animal.tagId}`);
+
+//       // 2. Find treatment entries using tagId
+//       const treatmentEntries = await TreatmentEntry.find({ 
+//           tagId: animal.tagId 
+//       })
+//       .populate({
+//           path: 'treatments.treatmentId',
+//           select: 'name pricePerMl volume',
+//           options: { 
+//               lean: true,
+//               // This makes population not fail if treatment is missing
+//               transform: (doc) => doc || { name: 'Deleted Treatment' }
+//           }
+//       })
+//       .populate({
+//           path: 'locationShed',
+//           select: 'locationShedName',
+//           options: { lean: true }
+//       })
+//       .sort({ date: -1 })
+//       .lean();
+
+//       console.log(`Found ${treatmentEntries.length} treatment entries`);
+
+//       // 3. Filter out any entries that might have invalid treatments
+//       const validTreatmentEntries = treatmentEntries.filter(entry => 
+//           entry.treatments && entry.treatments.length > 0
+//       );
+
+//       // 4. Format the response
+//       const responseData = {
+//           animal: {
+//               _id: animal._id,
+//               tagId: animal.tagId,
+//               animalType: animal.animalType,
+//               gender: animal.gender
+//           },
+//           treatments: validTreatmentEntries.map(entry => ({
+//               _id: entry._id,
+//               date: entry.date,
+//               location: entry.locationShed ? {
+//                   _id: entry.locationShed._id,
+//                   name: entry.locationShed.locationShedName
+//               } : null,
+//               medications: entry.treatments.map(t => ({
+//                   _id: t.treatmentId?._id || null,
+//                   name: t.treatmentId?.name || 'Unknown Treatment',
+//                   dosage: t.volume,
+//                   unitPrice: t.treatmentId?.pricePerMl || 0,
+//                   totalCost: t.volume * (t.treatmentId?.pricePerMl || 0)
+//               }))
+//           }))
+//       };
+
+//       // Return success even if no treatments found, but with empty array
+//       return res.json({ 
+//           status: httpstatustext.SUCCESS, 
+//           data: responseData 
+//       });
+
+//   } catch (error) {
+//       console.error('Error fetching treatments:', error);
+//       return next(AppError.create('Error fetching treatment data', 500, httpstatustext.ERROR));
+//   }
+// });
+
 const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   try {
-      // 1. Find the animal
-      const animal = await Animal.findById(req.params.animalId).lean();
+      // Find the animal by ID
+      const animal = await Animal.findById(req.params.animalId);
       if (!animal) {
-         // console.log(`Animal not found with ID: ${req.params.animalId}`);
-          return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
+          const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
+          return next(error);
       }
 
-      //console.log(`Searching treatments for animal: ${animal._id}, tag: ${animal.tagId}`);
+      // Find all treatment entries for this animal's tagId
+      const treatmentEntries = await TreatmentEntry.find({ tagId: animal.tagId })
+          .populate({
+              path: 'treatments.treatmentId',
+              select: 'name pricePerMl volume expireDate' // Include relevant treatment details
+          })
+          .populate({
+              path: 'locationShed',
+              select: 'locationShedName' // Include shed name if needed
+          })
+          .sort({ date: -1 }); // Sort by date (newest first)
 
-      // 2. Find treatment entries using tagId
-      const treatmentEntries = await TreatmentEntry.find({ 
-          tagId: animal.tagId 
-      })
-      .populate({
-          path: 'treatments.treatmentId',
-          select: 'name pricePerMl volume',
-          options: { 
-              lean: true,
-              // This makes population not fail if treatment is missing
-              transform: (doc) => doc || { name: 'Deleted Treatment' }
-          }
-      })
-      .populate({
-          path: 'locationShed',
-          select: 'locationShedName',
-          options: { lean: true }
-      })
-      .sort({ date: -1 })
-      .lean();
+      if (!treatmentEntries || treatmentEntries.length === 0) {
+          const error = AppError.create('No treatment records found for this animal', 404, httpstatustext.FAIL);
+          return next(error);
+      }
 
-      console.log(`Found ${treatmentEntries.length} treatment entries`);
-
-      // 3. Filter out any entries that might have invalid treatments
-      const validTreatmentEntries = treatmentEntries.filter(entry => 
-          entry.treatments && entry.treatments.length > 0
-      );
-
-      // 4. Format the response
-      const responseData = {
-          animal: {
-              _id: animal._id,
-              tagId: animal.tagId,
-              animalType: animal.animalType,
-              gender: animal.gender
-          },
-          treatments: validTreatmentEntries.map(entry => ({
-              _id: entry._id,
-              date: entry.date,
-              location: entry.locationShed ? {
-                  _id: entry.locationShed._id,
-                  name: entry.locationShed.locationShedName
-              } : null,
-              medications: entry.treatments.map(t => ({
-                  _id: t.treatmentId?._id || null,
-                  name: t.treatmentId?.name || 'Unknown Treatment',
-                  dosage: t.volume,
-                  unitPrice: t.treatmentId?.pricePerMl || 0,
-                  totalCost: t.volume * (t.treatmentId?.pricePerMl || 0)
-              }))
+      // Format the response
+      const formattedTreatments = treatmentEntries.map(entry => ({
+          _id: entry._id,
+          date: entry.date,
+          locationShed: entry.locationShed ? {
+              _id: entry.locationShed._id,
+              name: entry.locationShed.locationShedName
+          } : null,
+          treatments: entry.treatments.map(treatment => ({
+              treatmentId: treatment.treatmentId._id,
+              name: treatment.treatmentId.name,
+              volume: treatment.volume,
+              pricePerMl: treatment.treatmentId.pricePerMl,
+              expireDate: treatment.treatmentId.expireDate
           }))
-      };
+      }));
 
-      // Return success even if no treatments found, but with empty array
       return res.json({ 
           status: httpstatustext.SUCCESS, 
-          data: responseData 
+          data: { 
+              animal: {
+                  _id: animal._id,
+                  tagId: animal.tagId,
+                  animalType: animal.animalType
+              },
+              treatments: formattedTreatments 
+          } 
       });
 
   } catch (error) {
-      console.error('Error fetching treatments:', error);
-      return next(AppError.create('Error fetching treatment data', 500, httpstatustext.ERROR));
+      console.error("Error fetching treatments for animal:", error);
+      next(error);
   }
 });
+
 module.exports = {
   getallTreatments,
   getsnigleTreatment,
