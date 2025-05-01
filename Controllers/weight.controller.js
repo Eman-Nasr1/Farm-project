@@ -73,7 +73,10 @@ const addweight = asyncwrapper(async (req, res,next) => {
     const { tagId, ...weightData } = req.body;
 
     // Find the animal with the provided tagId
-    const animal = await Animal.findOne({ tagId });
+    const animal = await Animal.findOne({  
+        tagId,  
+        owner: userId, // Ensure the animal belongs to the user  
+    });
     if (!animal) {
         const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
         return next(error);

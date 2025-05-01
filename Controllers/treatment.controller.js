@@ -306,7 +306,10 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   }
 
   // Find the animal using tagId
-  const animal = await Animal.findOne({ tagId });
+  const animal = await Animal.findOne({  
+    tagId,  
+    owner: userId, // Ensure the animal belongs to the user  
+});
   if (!animal) {
     return res.status(404).json({
       status: "FAILURE",

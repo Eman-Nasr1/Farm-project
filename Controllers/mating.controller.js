@@ -217,24 +217,39 @@ const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
 })
 
 
-const addmating = asyncwrapper(async (req, res,next) => {
+const addmating = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-
-    // Extract tagId from the request body along with the mating data
     const { tagId, ...matingData } = req.body;
 
-    // Find the animal with the provided tagId
-    const animal = await Animal.findOne({ tagId });
+    // Find the animal with the provided tagId AND owned by the current user
+    const animal = await Animal.findOne({ 
+        tagId, 
+        owner: userId 
+    });
+
     if (!animal) {
-        const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
+        const error = AppError.create(
+            'Animal not found for the provided tagId or it does not belong to you', 
+            404, 
+            httpstatustext.FAIL
+        );
         return next(error);
     }
-    const newMating = new Mating({ ...matingData, owner: userId, tagId, animalId: animal._id });
+
+    const newMating = new Mating({ 
+        ...matingData, 
+        owner: userId, 
+        tagId, 
+        animalId: animal._id 
+    });
 
     await newMating.save();
 
-    res.json({ status: httpstatustext.SUCCESS, data: { mating: newMating } });
-})
+    res.json({ 
+        status: httpstatustext.SUCCESS, 
+        data: { mating: newMating } 
+    });
+});
 
 const addMatingByLocation = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;

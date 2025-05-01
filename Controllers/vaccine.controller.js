@@ -357,7 +357,10 @@ const getVaccines = asyncwrapper(async (req, res) => {
   
     try {
       // Find animal
-      const animal = await Animal.findOne({ tagId }).session(session);
+      const animal = await Animal.findOne({  
+        tagId,  
+        owner: userId, // Ensure the animal belongs to the user  
+    }).session(session);
       if (!animal) {
         await session.abortTransaction();
         session.endSession();

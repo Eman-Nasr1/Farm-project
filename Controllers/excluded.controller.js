@@ -66,7 +66,10 @@ const addexcluded = asyncwrapper(async (req, res,next) => {
 
     const userId = req.user.id;
     const { tagId, ...excludedData } = req.body;
-    const animal = await Animal.findOne({ tagId });
+    const animal = await Animal.findOne({  
+        tagId,  
+        owner: userId, // Ensure the animal belongs to the user  
+    });
     if (!animal) {
         const error = AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL);
         return next(error);
