@@ -7,7 +7,7 @@ const AnimalCost = require("../Models/animalCost.model");
 const LocationShed=require('../Models/locationsed.model');
 const VaccineEntry=require('../Models/vaccineEntry.model');
 const mongoose = require("mongoose");
-
+const i18n = require('../i18n');
 
 
 const addVaccine = asyncwrapper(async (req, res, next) => {
@@ -634,36 +634,49 @@ const getVaccines = asyncwrapper(async (req, res) => {
       next(error);
     }
   });
-  const getAllVaccineEntries = asyncwrapper(async (req, res) => {
+  const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const { limit = 10, page = 1, tagId, locationShed, entryType } = req.query;
-  
+
     const filter = { owner: userId };
     if (tagId) filter.tagId = tagId;
-    if (locationShed) filter.locationShed = locationShed;
     if (entryType) filter.entryType = entryType;
-  
-    const total = await VaccineEntry.countDocuments(filter);
-    const entries = await VaccineEntry.find(filter)
-      .populate('Vaccine', 'vaccineName pricing.dosePrice')
-      .populate('locationShed', 'locationShedName')
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .sort({ date: -1 });
-  
-    res.json({
-      status: "SUCCESS",
-      data: {
-        entries,
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(total / parseInt(limit))
+
+    // If locationShed is provided, find its ObjectId first
+    if (locationShed) {
+        const shed = await LocationShed.findOne({ locationShedName: locationShed });
+        if (!shed) {
+            return res.status(404).json({
+                status: "FAIL",
+                message: "Location shed not found",
+                data: null,
+            });
         }
-      }
+        filter.locationShed = shed._id; // Now using ObjectId
+    }
+
+    const entries = await VaccineEntry.find(filter)
+        .populate('Vaccine', 'vaccineName pricing.dosePrice')
+        .populate('locationShed', 'locationShedName')
+        .limit(parseInt(limit))
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .sort({ date: -1 });
+
+    const total = await VaccineEntry.countDocuments(filter);
+
+    res.json({
+        status: "SUCCESS",
+        data: {
+            entries,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit)),
+            },
+        },
     });
-  });
+});
   const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
     const session = await mongoose.startSession();
     session.startTransaction();
