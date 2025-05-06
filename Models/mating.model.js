@@ -1,103 +1,114 @@
 const mongoose = require('mongoose');
 
-const Matinglschema=new mongoose.Schema(
+const MatingSchema = new mongoose.Schema(
     {
-        tagId:{
+        tagId: {
             type: String,
             required: true
         },
-        maleTag_id:{
+        maleTag_id: {
             type: String,
             required: true
         },
-       
-        matingType:{
+        matingType: {
             type: String,
             required: true 
         },
-        matingDate:{
+        matingDate: {
             type: Date
-            
         },
-        sonarDate:{
+        checkDays: {
+            type: Number,
+            enum: [45, 60, 90], // Only allow these specific values
+            required: false // Optional field
+        },
+        sonarDate: {
             type: Date
-            
         },
-       
-        sonarRsult:{
+        sonarRsult: {
             type: String,
-            enum:["positive","negative"],
+            enum: ["positive", "negative"],
         },
-
-        expectedDeliveryDate:{
+        expectedDeliveryDate: {
             type: Date
         },
- 
         owner: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-         },
-         animalId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        animalId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Animal'
-             },
-             createdAt: {  
-                type: Date,  
-                default: Date.now  // Automatically set to the current date/time when created  
-            } 
-       
-  
+        },
+        createdAt: {  
+            type: Date,  
+            default: Date.now
+        }
     }
-)
+);
 
-Matinglschema.pre('save', function (next) {
-    // Calculate expectedDeliveryDate before saving the document
-    if (this.sonarRsult === 'positive') {
-        const daysToAdd = 147; // Number of days to add after a positive sonar result
+// Pre-save hook to automatically calculate dates
+MatingSchema.pre('save', function (next) {
+    // Calculate sonarDate if checkDays and matingDate are provided
+    if (this.checkDays && this.matingDate) {
+        const sonarDate = new Date(this.matingDate);
+        sonarDate.setDate(sonarDate.getDate() + this.checkDays);
+        this.sonarDate = sonarDate;
+    }
+
+    // Calculate expectedDeliveryDate if sonarResult is positive
+    if (this.sonarRsult === 'positive' && this.matingDate) {
+        const daysToAdd = 147; // 147 days after mating for expected delivery
         this.expectedDeliveryDate = new Date(this.matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
     }
 
-    
     next();
 });
 
-Matinglschema.pre('findOneAndUpdate', async function (next) {
+// Pre-update hook for findOneAndUpdate operations
+MatingSchema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     
-    // First check if the update contains sonarResult and matingDate
-    if (update.sonarRsult === 'positive') {
+    // Calculate sonarDate if checkDays is being updated
+    if (update.checkDays) {
+        let matingDate;
+        
+        // If matingDate is provided in the update, use that
         if (update.matingDate) {
-            // Check if matingDate is a valid date
-            const matingDate = new Date(update.matingDate);
-            if (!isNaN(matingDate.getTime())) {
-                const daysToAdd = 147;
-                update.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-            } else {
-                return next(new Error('Invalid matingDate provided in the update.'));
-            }
+            matingDate = new Date(update.matingDate);
         } else {
-            // If matingDate is not provided in the update, fetch the document's current matingDate
+            // Otherwise, get the current matingDate from the document
             const doc = await this.model.findOne(this.getQuery());
-            if (doc && doc.matingDate) {
-                const matingDate = new Date(doc.matingDate);
-                if (!isNaN(matingDate.getTime())) {
-                    const daysToAdd = 147;
-                    update.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-                } else {
-                    return next(new Error('Invalid matingDate in the document.'));
-                }
-            } else {
-                // No matingDate to work with
-                update.expectedDeliveryDate = undefined;
-            }
+            matingDate = doc?.matingDate;
+        }
+
+        if (matingDate && !isNaN(matingDate.getTime())) {
+            const sonarDate = new Date(matingDate);
+            sonarDate.setDate(sonarDate.getDate() + update.checkDays);
+            update.sonarDate = sonarDate;
+        }
+    }
+
+    // Calculate expectedDeliveryDate if sonarResult is being updated to positive
+    if (update.sonarRsult === 'positive') {
+        let matingDate;
+        
+        if (update.matingDate) {
+            matingDate = new Date(update.matingDate);
+        } else {
+            const doc = await this.model.findOne(this.getQuery());
+            matingDate = doc?.matingDate;
+        }
+
+        if (matingDate && !isNaN(matingDate.getTime())) {
+            const daysToAdd = 147;
+            update.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
         }
     } else if (update.sonarRsult === 'negative') {
-        // If sonarResult is 'negative', remove the expectedDeliveryDate
         update.expectedDeliveryDate = null;
     }
 
     next();
 });
 
-
-module.exports= mongoose.model('Mating',Matinglschema)
+module.exports = mongoose.model('Mating', MatingSchema);

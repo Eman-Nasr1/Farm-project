@@ -219,7 +219,17 @@ const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
 
 const addmating = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const { tagId, ...matingData } = req.body;
+    const { tagId, checkDays, ...matingData } = req.body;
+
+    // Validate checkDays if provided
+    if (checkDays && ![45, 60, 90].includes(checkDays)) {
+        const error = AppError.create(
+            'checkDays must be one of: 45, 60, or 90', 
+            400, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
 
     // Find the animal with the provided tagId AND owned by the current user
     const animal = await Animal.findOne({ 
@@ -234,6 +244,23 @@ const addmating = asyncwrapper(async (req, res, next) => {
             httpstatustext.FAIL
         );
         return next(error);
+    }
+
+    // Calculate sonarDate if checkDays is provided and matingDate exists
+    if (checkDays && matingData.matingDate) {
+        const matingDate = new Date(matingData.matingDate);
+        if (!isNaN(matingDate.getTime())) {
+            const sonarDate = new Date(matingDate);
+            sonarDate.setDate(sonarDate.getDate() + checkDays);
+            matingData.sonarDate = sonarDate;
+        } else {
+            const error = AppError.create(
+                'Invalid matingDate provided', 
+                400, 
+                httpstatustext.FAIL
+            );
+            return next(error);
+        }
     }
 
     const newMating = new Mating({ 
@@ -282,7 +309,6 @@ const addMatingByLocation = asyncwrapper(async (req, res, next) => {
     res.json({ status: httpstatustext.SUCCESS, data: { matings: newMatings } });
 });
 
-
 const getsinglemating = asyncwrapper(async (req, res, next) => {
     const matingId = req.params.matingId;
 
@@ -296,8 +322,6 @@ const getsinglemating = asyncwrapper(async (req, res, next) => {
     // Return the single mating record
     return res.json({ status: httpstatustext.SUCCESS, data: { mating } });
 });
-
-
 
 const deletemating= asyncwrapper(async(req,res,next)=>{
     const userId = req.user.id;
@@ -315,20 +339,72 @@ const deletemating= asyncwrapper(async(req,res,next)=>{
 
 })
 
-const updatemating = asyncwrapper(async (req,res,next)=>{
+const updatemating = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const matingId = req.params.matingId;
     const updatedData = req.body;
 
-    let mating = await Mating.findOne({ _id: matingId, owner: userId });
-        if (!mating) {
-            const error = AppError.create('Mating information not found or unauthorized to update', 404, httpstatustext.FAIL);
-            return next(error);
-        }
-        mating = await Mating.findOneAndUpdate({ _id: matingId }, updatedData, { new: true });
+    // First verify the mating exists and belongs to the user
+    const existingMating = await Mating.findOne({ _id: matingId, owner: userId });
+    if (!existingMating) {
+        const error = AppError.create(
+            'Mating information not found or unauthorized to update', 
+            404, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
 
-        res.json({ status: httpstatustext.SUCCESS, data: { mating } });
-})
+    // If checkDays is being updated but matingDate isn't, we need the existing matingDate
+    if (updatedData.checkDays && !updatedData.matingDate) {
+        updatedData.matingDate = existingMating.matingDate;
+    }
+
+    // If checkDays is provided without matingDate, and there isn't an existing matingDate
+    if (updatedData.checkDays && !updatedData.matingDate) {
+        const error = AppError.create(
+            'Cannot calculate sonarDate: matingDate is required when providing checkDays', 
+            400, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
+
+    // If matingDate is being updated and checkDays exists (either in update or existing)
+    if (updatedData.matingDate) {
+        const checkDaysToUse = updatedData.checkDays || existingMating.checkDays;
+        if (checkDaysToUse) {
+            const matingDate = new Date(updatedData.matingDate);
+            if (!isNaN(matingDate.getTime())) {
+                const sonarDate = new Date(matingDate);
+                sonarDate.setDate(sonarDate.getDate() + checkDaysToUse);
+                updatedData.sonarDate = sonarDate;
+            } else {
+                const error = AppError.create(
+                    'Invalid matingDate provided', 
+                    400, 
+                    httpstatustext.FAIL
+                );
+                return next(error);
+            }
+        }
+    }
+
+    // Perform the update
+    const updatedMating = await Mating.findOneAndUpdate(
+        { _id: matingId, owner: userId }, // Ensure we only update if owner matches
+        updatedData, 
+        { 
+            new: true, // Return the updated document
+            runValidators: true // Ensure schema validations run
+        }
+    );
+
+    res.json({ 
+        status: httpstatustext.SUCCESS, 
+        data: { mating: updatedMating } 
+    });
+});
 
 module.exports={
     getAllMating,
