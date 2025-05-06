@@ -280,16 +280,48 @@ const addmating = asyncwrapper(async (req, res, next) => {
 
 const addMatingByLocation = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
+    const { locationShed, checkDays, ...matingData } = req.body; // Changed to locationShedId
 
-    // Extract locationShed and mating data from the request body
-    const { locationShed, ...matingData } = req.body;
+    // Validate checkDays if provided
+    if (checkDays && ![45, 60, 90].includes(checkDays)) {
+        const error = AppError.create(
+            'checkDays must be one of: 45, 60, or 90', 
+            400, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
 
-    // Find all female animals in the specified location (shed)
-    const femaleAnimals = await Animal.find({ locationShed, gender: 'female' });
+    const femaleAnimals = await Animal.find({ 
+        locationShed: locationShed, // Using the ObjectId directly
+        gender: 'female',
+        owner: userId
+    });
 
     if (femaleAnimals.length === 0) {
-        const error = AppError.create('No female animals found in the specified location', 404, httpstatustext.FAIL);
+        const error = AppError.create(
+            'No female animals found in the specified location or they do not belong to you', 
+            404, 
+            httpstatustext.FAIL
+        );
         return next(error);
+    }
+
+    // Calculate sonarDate if checkDays and matingDate are provided
+    if (checkDays && matingData.matingDate) {
+        const matingDate = new Date(matingData.matingDate);
+        if (!isNaN(matingDate.getTime())) {
+            const sonarDate = new Date(matingDate);
+            sonarDate.setDate(sonarDate.getDate() + checkDays);
+            matingData.sonarDate = sonarDate;
+        } else {
+            const error = AppError.create(
+                'Invalid matingDate provided', 
+                400, 
+                httpstatustext.FAIL
+            );
+            return next(error);
+        }
     }
 
     // Create mating records for each female animal
@@ -297,6 +329,7 @@ const addMatingByLocation = asyncwrapper(async (req, res, next) => {
         femaleAnimals.map(async (animal) => {
             const newMating = new Mating({
                 ...matingData,
+                checkDays,
                 owner: userId,
                 tagId: animal.tagId,
                 animalId: animal._id,
@@ -306,7 +339,10 @@ const addMatingByLocation = asyncwrapper(async (req, res, next) => {
         })
     );
 
-    res.json({ status: httpstatustext.SUCCESS, data: { matings: newMatings } });
+    res.json({ 
+        status: httpstatustext.SUCCESS, 
+        data: { matings: newMatings } 
+    });
 });
 
 const getsinglemating = asyncwrapper(async (req, res, next) => {
