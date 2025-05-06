@@ -17,6 +17,14 @@ const MatingSchema = new mongoose.Schema(
         matingDate: {
             type: Date
         },
+        sonarNotificationSent: {
+            type: Boolean,
+            default: false
+          },
+          deliveryNotificationSent: {
+            type: Boolean,
+            default: false
+          },
         checkDays: {
             type: Number,
             enum: [45, 60, 90], // Only allow these specific values

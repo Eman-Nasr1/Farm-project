@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const httpstatustext=require('./utilits/httpstatustext');
 
 const notificationCron = require('./middleware/notificationCron');
-
+const matingNotificationCron = require('./middleware/matingNotification');
 
 const cors=require('cors');
 require('dotenv').config();
@@ -21,6 +21,7 @@ const authrouter=require('./Routes/authRoutes');
 app.use('/',authrouter)
 
 notificationCron;
+matingNotificationCron;
 const animalRoutes=require('./Routes/animalRoutes');
 app.use('/',animalRoutes)
 
