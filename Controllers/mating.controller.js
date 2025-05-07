@@ -267,6 +267,7 @@ const addmating = asyncwrapper(async (req, res, next) => {
         ...matingData, 
         owner: userId, 
         tagId, 
+        checkDays,
         animalId: animal._id 
     });
 
