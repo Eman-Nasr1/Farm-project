@@ -7,7 +7,7 @@ const birthEntrySchema = new mongoose.Schema({
     },
     gender: {
         type: String,
-        enum: ['male', 'female'],
+        enum: ['male', 'female','ذكر','أنثى'],
         required: true
     },
     birthweight: {
@@ -51,7 +51,7 @@ const breedingSchema = new mongoose.Schema({
         enum: ['no milk', 'one teat','two teat','واحد حلمة','اثنين حلمة',' لا يوجد حليب'],
         required: true
     },
-    numberOfBriths: {
+    numberOfBirths: {
         type: Number
     },
     birthEntries: [birthEntrySchema],

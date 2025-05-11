@@ -71,6 +71,72 @@ const getAllBreeding = asyncwrapper(async (req, res) => {
     });
 });
 
+const downloadBreedingTemplate = asyncwrapper(async (req, res, next) => {
+    try {
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+
+        const headersEn = [
+            'Mother Tag ID',
+            'Delivery Date (YYYY-MM-DD)',
+            'Delivery State (normal, difficult, assisted, caesarean)',
+            'Mothering Ability (good, bad, medium)',
+            'Milking Status (no milk, one teat, two teat)',
+            'Total Births',
+            'Birth 1 Tag ID',
+            'Birth 1 Gender (male, female)',
+            'Birth 1 Weight (kg)',
+            'Birth 2 Tag ID',
+            'Birth 2 Gender (male, female)',
+            'Birth 2 Weight (kg)',
+            // You can add more birth entries if needed
+        ];
+
+        const headersAr = [
+            'رقم تعريف الأم',
+            'تاريخ الولادة (YYYY-MM-DD)',
+            'حالة الولادة (طبيعية، متعسرة، طبيعيه ب مساعده، قيصرية)',
+            'قدرة الأمومة (جيدة، غير جيدة، متوسطة)',
+            'حالة الحلب ( لا يوجد حليب، واحد حلمة، اثنين حلمة)',
+            'عدد الولادات',
+            'رقم 1 للمولود',
+            'جنس المولود 1 (ذكر، أنثى)',
+            'وزن المولود 1 (كجم)',
+            'رقم 2 للمولود',
+            'جنس المولود 2 (ذكر، أنثى)',
+            'وزن المولود 2 (كجم)',
+        ];
+
+        const headers = isArabic ? headersAr : headersEn;
+
+        const exampleRow = isArabic
+            ? ['123', '2024-01-01', 'طبيعية', 'جيدة', 'واحد حلمة', 2, 'B1', 'ذكر', 3.2, 'B2', 'أنثى', 2.8]
+            : ['123', '2024-01-01', 'normal', 'good', 'one teat', 2, 'B1', 'male', 3.2, 'B2', 'female', 2.8];
+
+        const worksheetData = [headers, exampleRow];
+
+        const workbook = xlsx.utils.book_new();
+        const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+
+        worksheet['!cols'] = headers.map(() => ({ wch: 22 }));
+
+        xlsx.utils.book_append_sheet(workbook, worksheet, isArabic ? 'نموذج الاستيراد' : 'Import Template');
+
+        const buffer = xlsx.write(workbook, {
+            type: 'buffer',
+            bookType: 'xlsx',
+        });
+
+        res.setHeader('Content-Disposition', `attachment; filename="breeding_template_${lang}.xlsx"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Template Download Error:', error);
+        next(AppError.create('Failed to generate template', 500, httpstatustext.ERROR));
+    }
+});
+
 const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {  
     upload(req, res, async function (err) {  
         if (err) {  
@@ -92,61 +158,83 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
                 continue;  
             }  
 
-            const breedingTagId = row[0]?.toString().trim(); // Main tag ID for the breeding  
-            const deliveryState = row[1]?.toString().trim();  
-            const deliveryDate = new Date(row[2]?.toString().trim());  
-            const numberOfBirths = parseInt(row[3]); // Number of births  
+            // Parse main fields with new column indexes
+            const motherTagId = row[0]?.toString().trim();
+            const deliveryState = row[2]?.toString().trim();
+            const deliveryDate = new Date(row[1]?.toString().trim());
+            const motheringAbility = row[3]?.toString().trim();
+            const milkingStatus = row[4]?.toString().trim();
+            const numberOfBirths = parseInt(row[5]);
 
             // Validate essential fields  
-            if (!breedingTagId || !deliveryDate || isNaN(numberOfBirths)) {  
+            if (!motherTagId || 
+                !deliveryState ||
+                isNaN(deliveryDate.getTime()) ||
+                !motheringAbility ||
+                !milkingStatus ||
+                isNaN(numberOfBirths)) {  
                 return next(AppError.create(`Required fields are missing or invalid in row ${i + 1}`, 400, httpstatustext.FAIL));  
             }  
 
-            // Validate delivery date  
-            if (isNaN(deliveryDate.getTime())) {  
-                return next(AppError.create(`Invalid date format in row ${i + 1}`, 400, httpstatustext.FAIL));  
-            }  
+            // Validate enum values
+            const validEnums = {
+                deliveryStates: ['normal', 'difficult', 'assisted', 'caesarean','طبيعية','طبيعيه ب مساعده','متعسرة','قيصرية'],
+                motheringAbilities: ['good', 'bad','medium','متوسطة','جيدة','غير جيدة'],
+                milkingStatuses: ['no milk', 'one teat','two teat','واحد حلمة','اثنين حلمة',' لا يوجد حليب']
+            };
 
-            const birthEntries = []; // Array to hold birth entry objects  
+            if (!validEnums.deliveryStates.includes(deliveryState)) {
+                return next(AppError.create(`Invalid delivery state in row ${i + 1}`, 400, httpstatustext.FAIL));
+            }
 
-            // Process birth entries based on the number of births  
+            if (!validEnums.motheringAbilities.includes(motheringAbility)) {
+                return next(AppError.create(`Invalid mothering ability in row ${i + 1}`, 400, httpstatustext.FAIL));
+            }
+
+            if (!validEnums.milkingStatuses.includes(milkingStatus)) {
+                return next(AppError.create(`Invalid milking status in row ${i + 1}`, 400, httpstatustext.FAIL));
+            }
+
+            const birthEntries = [];
+
+            // Process birth entries with new column indexes
             for (let j = 0; j < numberOfBirths; j++) {  
-                const tagIdColumnIndex = 4 + (j * 3);
-                const weightColumnIndex = 5 + (j * 3); // Assuming weight is in columns 5, 7, 9, etc.  
-                const genderColumnIndex = 6 + (j * 3); // Assuming gender is in columns 6, 8, 10, etc.
+                const baseIndex = 6 + (j * 3);
+                const tagId = row[baseIndex]?.toString().trim();
+                const gender = row[baseIndex + 1]?.toString().trim().toLowerCase();
+                const weight = row[baseIndex + 2];
 
-                const birthID = row[tagIdColumnIndex]; 
-                const birthWeight = row[weightColumnIndex];  
-                const birthGender = row[genderColumnIndex];  
+                // Validate birth entry
+                if (!tagId || !gender) {
+                    return next(AppError.create(`Missing required birth fields in row ${i + 1}, entry ${j + 1}`, 400, httpstatustext.FAIL));
+                }
 
-                // Ensure birth entries are valid  
-                if ( birthID||birthWeight || birthGender) { // Only add valid entries  
-                    // Generate a unique tag ID for each birth (i.e., concatenate breeding tag with entry index)  
-                    //const birthTagId = `${breedingTagId}-B${j + 1}`;  
+                if (!['male', 'female','ذكر','أنثى'].includes(gender)) {
+                    return next(AppError.create(`Invalid gender in row ${i + 1}, entry ${j + 1}`, 400, httpstatustext.FAIL));
+                }
 
-                    birthEntries.push({  
-                        tagId: birthID, // Assigning unique tag ID for each birth  
-                        birthweight: birthWeight ? parseFloat(birthWeight) : null,  
-                        gender: birthGender || null, // Default to null if gender is not provided  
-                    });  
-                }  
+                birthEntries.push({  
+                    tagId,
+                    gender,
+                    birthweight: weight ? parseFloat(weight) : null
+                });  
             }  
 
-            // Create new breeding object  
+            // Create new breeding object with all fields
             const newBreeding = new Breeding({  
-                tagId: breedingTagId, // Main tag ID for the breeding  
-                deliveryState,  
-                deliveryDate,  
-                numberOfBirths,  
-                birthEntries,  
-                owner: req.user.id// Assuming the owner is set from the request  
+                tagId: motherTagId,
+                deliveryState,
+                deliveryDate,
+                motheringAbility,
+                milking: milkingStatus,
+                numberOfBirths,
+                birthEntries,
+                owner: req.user.id
             });  
 
-            // Save the new breeding document  
             await newBreeding.save();  
         }  
 
-        // Return success response  
         res.json({  
             status: httpstatustext.SUCCESS,  
             message: 'Breeding data imported successfully',  
@@ -154,76 +242,133 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
     });  
 });
 
-const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {  
-    const userId = req.user.id;  
+const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {
+    try {
+        const userId = req.user?.id || req.userId;
+        if (!userId) {
+            return next(AppError.create('Unauthorized access', 401, httpstatustext.FAIL));
+        }
 
-    // Fetch filters from query  
-    const query = req.query;  
-    const filter = { owner: userId };  
+        const { startDate, endDate, deliveryState, lang = 'en' } = req.query;
+        const isArabic = lang === 'ar';
 
-    // Apply filter conditions based on query parameters  
-    if (query.deliveryState) filter.deliveryState = query.deliveryState;  
-    if (query.deliveryDate) filter.deliveryDate = query.deliveryDate;  
-    if (query.tagId) filter.tagId = query.tagId;  
+        const filter = { owner: userId };
 
-    // Fetch breeding records based on filters  
-    const breedingRecords = await Breeding.find(filter)  
-        .populate({  
-            path: 'animalId',  
-            select: 'animalType', // Select only the animalType field from the Animal model  
-        });  
+        if (startDate || endDate) {
+            filter.deliveryDate = {};
+            if (startDate) filter.deliveryDate.$gte = new Date(startDate);
+            if (endDate) filter.deliveryDate.$lte = new Date(endDate);
+        }
 
-    if (!breedingRecords || breedingRecords.length === 0) {  
-        const error = AppError.create('No breeding information found for the specified filters.', 404, httpstatustext.FAIL);  
-        return next(error);  
-    }  
+        if (deliveryState) filter.deliveryState = deliveryState;
 
-    // Create a new workbook and worksheet data  
-    const workbook = xlsx.utils.book_new();  
-    const worksheetData = [  
-        ['Tag ID', 'Delivery State', 'Delivery Date', 'Number of Births', 'Birth 1 Tag ID', 'Birth 1 Weight', 'Birth 1 Gender', 'Birth 2 Tag ID', 'Birth 2 Weight', 'Birth 2 Gender', 'Birth 3 Tag ID', 'Birth 3 Weight', 'Birth 3 Gender']  
-    ];  
+        const records = await Breeding.find(filter)
+            .populate({
+                path: 'animalId',
+                select: 'tagId animalType'
+            })
+            .sort({ deliveryDate: -1 });
 
-    // Populate worksheet data with breeding records  
-    breedingRecords.forEach(breeding => {  
-        const row = [  
-            breeding.tagId, // Include tagId from the breeding record, assuming this field exists  
-            breeding.deliveryState,  
-            breeding.deliveryDate ? breeding.deliveryDate.toISOString().split('T')[0] : '',  
-            breeding.numberOfBirths || 0  
-        ];  
+        if (!records.length) {
+            return next(AppError.create('No breeding records found', 404, httpstatustext.FAIL));
+        }
 
-        // Add birth entries (up to 3 for this example)  
-        breeding.birthEntries.slice(0, 3).forEach((birth) => {  
-            row.push(  
-                birth.tagId || '',  
-                birth.birthweight || '',  
-                birth.gender || ''  
-            );  
-        });  
+        const headersEn = [
+            'Mother Tag ID',
+            'Delivery Date',
+            'Delivery State',
+            'Mothering Ability',
+            'Milking Status',
+            'Total Births',
+        ];
 
-        // Fill empty cells if there are less than 3 birth entries  
-        for (let i = breeding.birthEntries.length; i < 3; i++) {  
-            row.push('', '', '');  
-        }  
+        const headersAr = [
+            'رقم تعريف الأم',
+            'تاريخ الولادة',
+            'حالة الولادة',
+            'قدرة الأمومة',
+            'حالة الحلب',
+            'إجمالي الولادات',
+        ];
 
-        worksheetData.push(row);  
-    });  
+        const headers = isArabic ? [...headersAr] : [...headersEn];
 
-    // Create worksheet and add it to the workbook  
-    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);  
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Breeding');  
+        const maxBirths = Math.max(...records.map(r => r.birthEntries?.length || 0));
 
-    // Write to buffer  
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });  
+        for (let i = 1; i <= maxBirths; i++) {
+            if (isArabic) {
+                headers.push(`رقم ${i} للمولود`, `جنس المولود ${i}`, `وزن المولود ${i} (كجم)`);
+            } else {
+                headers.push(`Birth ${i} Tag ID`, `Birth ${i} Gender`, `Birth ${i} Weight (kg)`);
+            }
+        }
 
-    // Set the proper headers for file download  
-    res.setHeader('Content-Disposition', 'attachment; filename="Breeding.xlsx"');  
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');  
+        const worksheetData = [headers];
 
-    // Send the file as a response  
-    res.send(buffer);  
+        for (const record of records) {
+     
+            const row = [
+                record.animalId?.tagId || 'N/A',
+                record.deliveryDate?.toISOString().split('T')[0] || (isArabic ? 'تاريخ غير صالح' : 'Invalid Date'),
+            
+                record.deliveryState,
+                record.motheringAbility || (isArabic ? 'غير مصنفة' : 'Not Rated'),
+                record.milking || (isArabic ? 'غير معروف' : 'Unknown'),
+                record.numberOfBirths ?? record.birthEntries?.length ?? 0
+            ];
+
+            if (record.birthEntries?.length > 0) {
+                record.birthEntries.forEach(entry => {
+                    const genderTranslated = isArabic
+                        ? (entry.gender?.toLowerCase() === 'male' ? 'ذكر' : 'أنثى')
+                        : (entry.gender?.toLowerCase() === 'male' ? 'Male' : 'Female');
+
+                    row.push(
+                        entry.tagId || 'N/A',
+                        genderTranslated,
+                        entry.birthweight?.toFixed(2) || '0.00'
+                    );
+                });
+            }
+
+            while (row.length < headers.length) {
+                row.push('');
+            }
+
+            worksheetData.push(row);
+        }
+
+        const workbook = xlsx.utils.book_new();
+        const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+
+        const colWidths = [
+            { wch: 18 }, // Mother Tag ID
+            { wch: 15 }, // Delivery Date
+            { wch: 20 }, // Delivery State
+            { wch: 20 }, // Mothering Ability
+            { wch: 18 }, // Milking Status
+            { wch: 14 }, // Total Births
+            ...Array(maxBirths * 3).fill({ wch: 18 }) // Birth entry fields
+        ];
+        worksheet['!cols'] = colWidths;
+
+        xlsx.utils.book_append_sheet(workbook, worksheet, isArabic ? 'سجلات الولادة' : 'Breeding Records');
+
+        const buffer = xlsx.write(workbook, {
+            type: 'buffer',
+            bookType: 'xlsx'
+        });
+
+        res.setHeader('Content-Disposition', `attachment; filename="breeding_records_${lang}.xlsx"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Export Error:', error);
+        next(AppError.create(`Export failed: ${error.message}`, 500, httpstatustext.ERROR));
+    }
 });
+
 const getbreedingforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
     const animal = await Animal.findById(req.params.animalId);
@@ -324,7 +469,7 @@ const getsinglebreeding = asyncwrapper(async (req, res, next) => {
 
 const addBreeding = asyncwrapper(async (req, res, next) => {  
     const userId = req.user.id;  
-
+    
     // Extract tagId and birthEntries from the request body  
     const { tagId, birthEntries, ...breedingData } = req.body;  
 
@@ -387,8 +532,12 @@ const addBreeding = asyncwrapper(async (req, res, next) => {
             });  
 
             if (existingAnimal) {  
-                console.warn(`Tag ID ${entry.tagId} already exists. Skipping.`);  
-                continue;  
+                const error = AppError.create(  
+                    `Tag ID ${entry.tagId} already exists.`,  
+                    400,  
+                    httpstatustext.FAIL  
+                );
+                return next(error);  
             }  
 
             // Create the new offspring  
@@ -491,5 +640,6 @@ module.exports={
     getAllBreeding,
     importBreedingFromExcel,
     exportBreedingToExcel,
+    downloadBreedingTemplate,
 
 }
