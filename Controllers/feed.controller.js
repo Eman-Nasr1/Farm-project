@@ -10,6 +10,7 @@ const AnimalCost = require("../Models/animalCost.model");
 const Animal = require("../Models/animal.model");
 const mongoose = require("mongoose");
 const { ConsoleMessage } = require("puppeteer");
+const i18n = require("../utilits/i18n");
 
 const getallfeeds = asyncwrapper(async (req, res) => {
   const userId = req.user.id;
@@ -57,7 +58,7 @@ const getfeeds=asyncwrapper(async (req, res)=>{
 const getsniglefeed = asyncwrapper(async (req, res, next) => {
   const feed = await Feed.findById(req.params.feedId);
   if (!feed) {
-    const error = AppError.create("feed not found", 404, httpstatustext.FAIL);
+    const error = AppError.create(i18n.__('FEED_NOT_FOUND'), 404, httpstatustext.FAIL);
     return next(error);
   }
   return res.json({ status: httpstatustext.SUCCESS, data: { feed } });
@@ -78,11 +79,7 @@ const updatefeed = asyncwrapper(async (req, res, next) => {
 
   let feed = await Feed.findOne({ _id: feedId, owner: userId });
   if (!feed) {
-    const error = AppError.create(
-      "feed information not found or unauthorized to update",
-      404,
-      httpstatustext.FAIL
-    );
+    const error = AppError.create(i18n.__('FEED_UNAUTHORIZED'), 404, httpstatustext.FAIL);
     return next(error);
   }
   feed = await Feed.findOneAndUpdate({ _id: feedId }, updatedData, {
@@ -830,7 +827,15 @@ const updateFodder = asyncwrapper(async (req, res, next) => {
         if (feed.quantity < quantityDifference) {
           await session.abortTransaction();
           session.endSession();
-          return next(AppError.create(`Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Required: ${quantityDifference}.`, 400, httpstatustext.FAIL));
+          return next(AppError.create(
+            i18n.__('INSUFFICIENT_FEED_STOCK', {
+              name: feed.name,
+              available: feed.quantity,
+              required: quantityDifference
+            }),
+            400,
+            httpstatustext.FAIL
+          ));
         }
         feed.quantity -= quantityDifference; // خصم الفرق من المخزون
       } else if (quantityDifference < 0) {
@@ -860,7 +865,7 @@ const updateFodder = asyncwrapper(async (req, res, next) => {
     // إرسال الاستجابة
     res.status(200).json({
       status: httpstatustext.SUCCESS,
-      message: "Fodder updated successfully.",
+      message: i18n.__('FODDER_UPDATED'),
       data: existingFodder,
     });
   } catch (error) {

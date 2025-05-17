@@ -8,6 +8,12 @@ const Animal = require("../Models/animal.model");
 const TreatmentEntry = require("../Models/treatmentEntry.model");
 const AnimalCost = require("../Models/animalCost.model");
 const mongoose = require("mongoose");
+const multer = require('multer');
+const xlsx = require('xlsx');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage }).single('file');
+const excelOps = require('../utilits/excelOperations');
+const i18n = require('../i18n');
 
 const getallTreatments = asyncwrapper(async (req, res) => {
   const userId = req.user.id;
@@ -792,83 +798,6 @@ const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
   });
 });
 
-
-// const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
-//   try {
-//       // 1. Find the animal
-//       const animal = await Animal.findById(req.params.animalId).lean();
-//       if (!animal) {
-//          // console.log(`Animal not found with ID: ${req.params.animalId}`);
-//           return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
-//       }
-
-//       //console.log(`Searching treatments for animal: ${animal._id}, tag: ${animal.tagId}`);
-
-//       // 2. Find treatment entries using tagId
-//       const treatmentEntries = await TreatmentEntry.find({ 
-//           tagId: animal.tagId 
-//       })
-//       .populate({
-//           path: 'treatments.treatmentId',
-//           select: 'name pricePerMl volume',
-//           options: { 
-//               lean: true,
-//               // This makes population not fail if treatment is missing
-//               transform: (doc) => doc || { name: 'Deleted Treatment' }
-//           }
-//       })
-//       .populate({
-//           path: 'locationShed',
-//           select: 'locationShedName',
-//           options: { lean: true }
-//       })
-//       .sort({ date: -1 })
-//       .lean();
-
-//       console.log(`Found ${treatmentEntries.length} treatment entries`);
-
-//       // 3. Filter out any entries that might have invalid treatments
-//       const validTreatmentEntries = treatmentEntries.filter(entry => 
-//           entry.treatments && entry.treatments.length > 0
-//       );
-
-//       // 4. Format the response
-//       const responseData = {
-//           animal: {
-//               _id: animal._id,
-//               tagId: animal.tagId,
-//               animalType: animal.animalType,
-//               gender: animal.gender
-//           },
-//           treatments: validTreatmentEntries.map(entry => ({
-//               _id: entry._id,
-//               date: entry.date,
-//               location: entry.locationShed ? {
-//                   _id: entry.locationShed._id,
-//                   name: entry.locationShed.locationShedName
-//               } : null,
-//               medications: entry.treatments.map(t => ({
-//                   _id: t.treatmentId?._id || null,
-//                   name: t.treatmentId?.name || 'Unknown Treatment',
-//                   dosage: t.volume,
-//                   unitPrice: t.treatmentId?.pricePerMl || 0,
-//                   totalCost: t.volume * (t.treatmentId?.pricePerMl || 0)
-//               }))
-//           }))
-//       };
-
-//       // Return success even if no treatments found, but with empty array
-//       return res.json({ 
-//           status: httpstatustext.SUCCESS, 
-//           data: responseData 
-//       });
-
-//   } catch (error) {
-//       console.error('Error fetching treatments:', error);
-//       return next(AppError.create('Error fetching treatment data', 500, httpstatustext.ERROR));
-//   }
-// });
-
 const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   try {
       // Find the animal by ID
@@ -930,6 +859,223 @@ const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   }
 });
 
+const importTreatmentsFromExcel = asyncwrapper(async (req, res, next) => {
+    const userId = req.user?.id || req.userId;
+    if (!userId) {
+        return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+    }
+
+    try {
+        const data = excelOps.readExcelFile(req.file.buffer);
+
+        // Skip header row
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+
+            // Skip empty rows
+            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+
+            // Extract and validate data
+            const [
+                tagId,
+                treatmentName,
+                volumeStr,
+                dateStr
+            ] = row.map(cell => cell?.toString().trim());
+
+            // Validate required fields
+            if (!tagId || !treatmentName || !volumeStr || !dateStr) {
+                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Parse volume
+            const volume = parseFloat(volumeStr);
+            if (isNaN(volume) || volume <= 0) {
+                return next(AppError.create(i18n.__('INVALID_VOLUME', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Parse date
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) {
+                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Find animal
+            const animal = await Animal.findOne({ tagId, owner: userId });
+            if (!animal) {
+                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
+            }
+
+            // Find treatment
+            const treatment = await Treatment.findOne({ 
+                name: { $regex: new RegExp(`^${treatmentName}$`, 'i') },
+                owner: userId 
+            });
+            if (!treatment) {
+                return next(AppError.create(i18n.__('TREATMENT_NOT_FOUND', { name: treatmentName, row: i + 1 }), 404, httpstatustext.FAIL));
+            }
+
+            // Check if treatment is expired
+            if (treatment.expireDate && new Date(treatment.expireDate) < new Date()) {
+                return next(AppError.create(i18n.__('TREATMENT_EXPIRED', { 
+                    name: treatmentName, 
+                    date: treatment.expireDate.toISOString().split('T')[0],
+                    row: i + 1 
+                }), 400, httpstatustext.FAIL));
+            }
+
+            // Check stock
+            if (treatment.volume < volume) {
+                return next(AppError.create(i18n.__('INSUFFICIENT_TREATMENT_VOLUME', { 
+                    name: treatmentName,
+                    available: treatment.volume,
+                    requested: volume,
+                    row: i + 1 
+                }), 400, httpstatustext.FAIL));
+            }
+
+            // Calculate cost
+            const treatmentCost = treatment.pricePerMl * volume;
+
+            // Start transaction
+            const session = await mongoose.startSession();
+            session.startTransaction();
+
+            try {
+                // Update treatment stock
+                treatment.volume -= volume;
+                await treatment.save({ session });
+
+                // Create treatment entry using animal's current location
+                const newTreatmentEntry = await TreatmentEntry.create([{
+                    treatments: [{ 
+                        treatmentId: treatment._id,
+                        volume 
+                    }],
+                    tagId,
+                    locationShed: animal.locationShed,
+                    date,
+                    owner: userId
+                }], { session });
+
+                // Update animal cost
+                await AnimalCost.findOneAndUpdate(
+                    { animalTagId: tagId },
+                    { 
+                        $inc: { treatmentCost },
+                        $setOnInsert: { 
+                            feedCost: 0,
+                            date,
+                            owner: userId
+                        }
+                    },
+                    { upsert: true, session }
+                );
+
+                await session.commitTransaction();
+                session.endSession();
+            } catch (error) {
+                await session.abortTransaction();
+                session.endSession();
+                throw error;
+            }
+        }
+
+        res.json({
+            status: httpstatustext.SUCCESS,
+            message: i18n.__('TREATMENT_ENTRIES_IMPORTED_SUCCESSFULLY')
+        });
+    } catch (error) {
+        console.error('Import error:', error);
+        return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+    }
+});
+
+const exportTreatmentsToExcel = asyncwrapper(async (req, res, next) => {
+    try {
+        const userId = req.user?.id || req.userId;
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+
+        if (!userId) {
+            return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+        }
+
+        // Build filter
+        const filter = { owner: userId };
+        if (req.query.tagId) filter.tagId = req.query.tagId;
+        
+        // Date range filtering
+        if (req.query.startDate || req.query.endDate) {
+            filter.date = {};
+            if (req.query.startDate) filter.date.$gte = new Date(req.query.startDate);
+            if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
+        }
+
+        const entries = await TreatmentEntry.find(filter)
+            .sort({ date: 1 })
+            .populate('treatments.treatmentId', 'name pricePerMl')
+            .populate('locationShed', 'locationShedName');
+
+        if (entries.length === 0) {
+            return res.status(404).json({
+                status: httpstatustext.FAIL,
+                message: i18n.__('NO_TREATMENT_RECORDS')
+            });
+        }
+
+        const headers = excelOps.headers.treatment[lang].export;
+        const sheetName = excelOps.sheetNames.treatment.export[lang];
+
+        const data = entries.map(entry => [
+            entry.tagId,
+            entry.treatments[0]?.treatmentId?.name || '',
+            entry.treatments[0]?.volume || '',
+            entry.date?.toISOString().split('T')[0] || '',
+            entry.locationShed?.locationShedName || '',
+            (entry.treatments[0]?.volume * (entry.treatments[0]?.treatmentId?.pricePerMl || 0)).toFixed(2),
+            entry.createdAt?.toISOString().split('T')[0] || ''
+        ]);
+
+        const workbook = excelOps.createExcelFile(data, headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Set column widths
+        const columnWidths = [15, 25, 15, 12, 20, 12, 12];
+        excelOps.setColumnWidths(worksheet, columnWidths);
+
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `treatment_entries_${lang}.xlsx`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Export error:', error);
+        return next(AppError.create(i18n.__('EXPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+    }
+});
+
+const downloadTreatmentTemplate = asyncwrapper(async (req, res, next) => {
+    try {
+        const lang = req.query.lang || 'en';
+
+        const headers = excelOps.headers.treatment[lang].template;
+        const exampleRow = excelOps.templateExamples.treatment[lang];
+        const sheetName = excelOps.sheetNames.treatment.template[lang];
+
+        const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
+        excelOps.setColumnWidths(worksheet, headers.map(() => 20));
+
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `treatment_template_${lang}.xlsx`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Template Download Error:', error);
+        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
+    }
+});
+
 module.exports = {
   getallTreatments,
   getsnigleTreatment,
@@ -943,5 +1089,8 @@ module.exports = {
   deleteTreatmentShed,
   updateTreatmentForAnimal,
   getTreatments,
-  getTreatmentsForSpecificAnimal
+  getTreatmentsForSpecificAnimal,
+  importTreatmentsFromExcel,
+  exportTreatmentsToExcel,
+  downloadTreatmentTemplate
 };

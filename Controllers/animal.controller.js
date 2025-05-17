@@ -1,4 +1,3 @@
-
 const Animal=require('../Models/animal.model');
 const httpstatustext=require('../utilits/httpstatustext');
 const asyncwrapper=require('../middleware/asyncwrapper');
@@ -12,6 +11,7 @@ const xlsx = require('xlsx');
 const storage = multer.memoryStorage(); // Use memory storage to get the file buffer
 const i18n = require('../i18n');
 const setLocale = require('../middleware/localeMiddleware');
+const excelOps = require('../utilits/excelOperations');
 
 const upload = multer({ storage: storage }).single('file');
 
@@ -138,67 +138,62 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
 });
 
 const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
-    upload(req, res, async function (err) {
-        if (err) {
-            return next(AppError.create(i18n.__('FILE_UPLOAD_FAILED'), 400, httpstatustext.FAIL));
-        }
+    const userId = req.user?.id || req.userId;
+    if (!userId) {
+        return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+    }
 
-        const fileBuffer = req.file.buffer;
-        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+    try {
+        const data = excelOps.readExcelFile(req.file.buffer);
 
-        // Convert sheet to JSON format (array of arrays)
-        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-        // Iterate over the rows (skip header row at index 0)
+        // Skip header row
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
 
             // Skip empty rows
-            if (!row || row.length === 0 || row.every(cell => cell === undefined || cell === null || cell === '')) {
-                continue;
-            }
+            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
 
-            // Validate essential fields
-            const tagId = row[0]?.toString().trim();
-            const breed = row[1]?.toString().trim();
-            const animalType = row[2]?.toString().trim();
-            const birthDate = new Date(row[3]?.toString().trim());
-            const purchaseDate = new Date(row[4]?.toString().trim());
-            const purchasePrice = row[5]?.toString().trim();
-            const traderName = row[6]?.toString().trim();
-            const motherId = row[7]?.toString().trim();
-            const fatherId = row[8]?.toString().trim();
-            const locationShedName = row[9]?.toString().trim(); // Extract locationShedName
-            const gender = row[10]?.toString().trim();
-            const female_Condition = row[11]?.toString().trim();
-            const teething = row[12]?.toString().trim();
+            // Extract and validate data
+            const [
+                tagId,
+                breedName,
+                animalType,
+                birthDateStr,
+                purchaseDateStr,
+                purchasePrice,
+                traderName,
+                motherId,
+                fatherId,
+                locationShedName,
+                gender,
+                female_Condition,
+                teething
+            ] = row.map(cell => cell?.toString().trim());
 
-            // Check if required fields are present
-            if (!tagId || !breed || !animalType || !gender) {
+            // Validate required fields
+            if (!tagId || !breedName || !animalType || !gender) {
                 return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Check if dates are valid
+            // Parse dates
+            const birthDate = new Date(birthDateStr);
+            const purchaseDate = new Date(purchaseDateStr);
             if (isNaN(birthDate.getTime()) || isNaN(purchaseDate.getTime())) {
                 return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Find the LocationShed document by name
-            let locationShedId = null;
-            if (locationShedName) {
-                const locationShed = await LocationShed.findOne({ locationShedName, owner: req.userId });
-                if (!locationShed) {
-                    return next(AppError.create(i18n.__('LOCATION_SHED_NOT_FOUND', { row: i + 1 }), 404, httpstatustext.FAIL));
-                }
-                locationShedId = locationShed._id;
+            // Find LocationShed and Breed
+            const locationShed = locationShedName ? await LocationShed.findOne({ locationShedName, owner: userId }) : null;
+            const breed = await Breed.findOne({ breedName, owner: userId });
+
+            if (!breed) {
+                throw new Error(i18n.__('BREED_NOT_FOUND', { breed: breedName, row: i+1 }));
             }
 
-            // Create new animal object
+            // Create and save new animal
             const newAnimal = new Animal({
                 tagId,
-                breed,
+                breed: breed._id,
                 animalType,
                 birthDate,
                 purchaseDate,
@@ -206,80 +201,115 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 traderName,
                 motherId,
                 fatherId,
-                locationShed: locationShedId, // Assign the locationShed ID
+                locationShed: locationShed?._id,
                 gender,
                 female_Condition,
                 Teething: teething,
-                owner: req.userId
+                owner: userId
             });
 
-            // Save the new animal document
             await newAnimal.save();
         }
 
-        // Return success response
         res.json({
             status: httpstatustext.SUCCESS,
-            message: i18n.__('ANIMALS_IMPORTED_SUCCESSFULLY'),
+            message: i18n.__('ANIMALS_IMPORTED_SUCCESSFULLY')
         });
-    });
+    } catch (error) {
+        console.error('Import error:', error);
+        return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+    }
+});
+
+const downloadAnimalTemplate = asyncwrapper(async (req, res, next) => {
+    try {
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+
+        const headers = excelOps.headers.animal[lang].template;
+        const exampleRow = excelOps.templateExamples.animal[lang];
+        const sheetName = excelOps.sheetNames.animal.template[lang];
+
+        const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
+        excelOps.setColumnWidths(worksheet, headers.map(() => 20));
+
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `animals_template_${lang}.xlsx`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Template Download Error:', error);
+        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
+    }
 });
 
 const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.userId;
-
-    // Fetch animals based on filter logic
-    const query = req.query;
-    const filter = { owner: userId };
-    if (query.animalType) filter.animalType = query.animalType;
-    if (query.gender) filter.gender = query.gender;
-    if (query.locationShed) filter.locationShed = query.locationShed;
-    if (query.breed) filter.breed = query.breed;
-    if (query.tagId) filter.tagId = query.tagId;
-
-    const animals = await Animal.find(filter)
-        .populate({
-            path: 'locationShed',
-            select: 'locationShedName' // Include the locationShedName field
+    try {
+        const userId = req.user?.id || req.userId;
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+        
+        if (!userId) {
+            return next(AppError.create(isArabic ? 'المستخدم غير مصرح' : 'User not authenticated', 401, httpstatustext.FAIL));
+        }
+        
+        // Build filter
+        const filter = { owner: userId };
+        ['animalType', 'gender', 'locationShed', 'breed', 'tagId'].forEach(field => {
+            if (req.query[field]) filter[field] = req.query[field];
         });
 
-    // Create a new workbook and sheet
-    const workbook = xlsx.utils.book_new();
-    const worksheetData = [
-        ['Tag ID', 'Breed', 'Animal Type', 'Birth Date', 'Age in Days', 'Purchase Date', 'Purchase Price', 'Trader Name', 'Mother ID', 'Father ID', 'Location Shed', 'Gender', 'Female Condition', 'Teething']
-    ];
+        const animals = await Animal.find(filter)
+            .populate('locationShed', 'locationShedName')
+            .populate('breed', 'breedName');
 
-    animals.forEach(animal => {
-        worksheetData.push([
+        if (animals.length === 0) {
+            return res.status(404).json({
+                status: httpstatustext.FAIL,
+                message: isArabic ? 'لم يتم العثور على حيوانات لهذا المستخدم' : 'No animals found for this user'
+            });
+        }
+
+        const headers = excelOps.headers.animal[lang].export;
+        const sheetName = excelOps.sheetNames.animal.export[lang];
+
+        const data = animals.map(animal => [
             animal.tagId,
-            animal.breed,
+            animal.breed?.breedName || '',
             animal.animalType,
-            animal.birthDate ? animal.birthDate.toISOString().split('T')[0] : '',
-            animal.ageInDays || '',  // Include ageInDays here
-            animal.purchaseDate ? animal.purchaseDate.toISOString().split('T')[0] : '',
+            animal.birthDate?.toISOString().split('T')[0] || '',
+            animal.ageInDays || '',
+            animal.purchaseDate?.toISOString().split('T')[0] || '',
             animal.purchasePrice || '',
             animal.traderName || '',
             animal.motherId || '',
             animal.fatherId || '',
-            animal.locationShed?.locationShedName || '', // Use locationShedName
-            animal.gender || '',
+            animal.locationShed?.locationShedName || '',
+            animal.gender,
             animal.female_Condition || '',
             animal.Teething || ''
         ]);
-    });
 
-    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Animals');
+        const workbook = excelOps.createExcelFile(data, headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
 
-    // Write to buffer
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        // Set column widths
+        const columnWidths = [15, 15, 15, 12, 12, 12, 12, 15, 15, 15, 15, 10, 15, 10];
+        excelOps.setColumnWidths(worksheet, columnWidths);
 
-    // Set the proper headers for file download
-    res.setHeader('Content-Disposition', 'attachment; filename="animals.xlsx"');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `animals_export_${lang}.xlsx`);
+        res.send(buffer);
 
-    // Send the file as a response
-    res.send(buffer);
+    } catch (error) {
+        console.error('Export error:', error);
+        return next(AppError.create(
+            isArabic ? 'فشل التصدير: ' + error.message : 'Export failed: ' + error.message,
+            500,
+            httpstatustext.ERROR
+        ));
+    }
 });
 
 
@@ -462,12 +492,31 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
 });
 
 
-const deleteanimal= asyncwrapper(async(req,res)=>{
-    await Animal.deleteOne({_id:req.params.tagId});
-   res.status(200).json({status:httpstatustext.SUCCESS,data:null});
+// const deleteanimal= asyncwrapper(async(req,res)=>{
+//     await Animal.deleteOne({_id:req.params.tagId});
+    
+//    res.status(200).json({status:httpstatustext.SUCCESS,data:null});
 
-})
+// })
+const deleteanimal = asyncwrapper(async (req, res, next) => {
+    const animalId =req.params.tagId; // Use consistent parameter name
+    
+    // 1. Find the animal first to check existence
+    const animal = await Animal.findById(animalId);
+    
+    if (!animal) {
+        return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
+    }
 
+    // 2. Perform cascading delete using the pre-delete hook
+    await animal.deleteOne(); // This triggers your schema's pre-delete hook
+    
+    // 3. Proper success response
+    res.status(204).json({
+        status: httpstatustext.SUCCESS,
+        data: null
+    });
+});
 const getAllLocationSheds = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id; // Get the user ID from the request (assuming it's added by authentication middleware)
 
@@ -509,4 +558,5 @@ module.exports={
     exportAnimalsToExcel,
     getAllLocationSheds,
     getAnimalStatistics,
+    downloadAnimalTemplate,
 }

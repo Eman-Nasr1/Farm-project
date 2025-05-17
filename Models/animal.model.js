@@ -95,20 +95,37 @@ Animalschema.pre('findOneAndUpdate', function (next) {
 });
 
 // Cascade delete related documents in other collections
-Animalschema.pre('remove', async function (next) {
+// Animalschema.pre('remove', async function (next) {
+//     try {
+//         // Delete related records in other collections (Breeding, Mating, Weight, etc.)
+//         await Breeding.deleteMany({ animalId: this._id });
+//         await Mating.deleteMany({ animalId: this._id });
+//         await Weight.deleteMany({ animalId: this._id });
+//         await Vaccine.deleteMany({ animalId: this._id });
+
+//         // If you want to delete records from any other related collections, add them here
+
+//         next();
+//     } catch (err) {
+//         next(err);
+//     }
+// });
+Animalschema.pre('deleteOne', { document: true, query: false }, async function(next) {
+    const animalId = this._id;
+  
     try {
-        // Delete related records in other collections (Breeding, Mating, Weight, etc.)
-        await Breeding.deleteMany({ animalId: this._id });
-        await Mating.deleteMany({ animalId: this._id });
-        await Weight.deleteMany({ animalId: this._id });
-        await Vaccine.deleteMany({ animalId: this._id });
-
-        // If you want to delete records from any other related collections, add them here
-
-        next();
+      // Delete all related data in other collections
+      await mongoose.model('Breeding').deleteMany({ animalId: animalId });
+      await mongoose.model('Mating').deleteMany({ animalId: animalId });
+      await mongoose.model('Vaccine').deleteMany({ animalId: animalId });
+      // Add more related models as needed
+      
+      next();
     } catch (err) {
-        next(err);
+      next(err);
     }
-});
+  });
+
+
 
 module.exports = mongoose.model('Animal', Animalschema);

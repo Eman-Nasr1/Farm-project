@@ -21,6 +21,9 @@ router.get('/api/treatment/getsingletreatmentforAnimals/:treatmentShedId',verify
 router.patch('/api/treatment/updatetreatmentforAnimals/:treatmentEntryId',verifytoken,treatmentController.updateTreatmentForAnimal);
 router.delete('/api/treatment/deletetreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.deleteTreatmentShed);
 
-
+// Excel operations
+router.post('/api/treatment/import', verifytoken, treatmentController.importTreatmentsFromExcel);
+router.get('/api/treatment/export', verifytoken, treatmentController.exportTreatmentsToExcel);
+router.get('/api/treatment/downloadTemplate', verifytoken, treatmentController.downloadTreatmentTemplate);
 
 module.exports=router;

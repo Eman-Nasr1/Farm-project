@@ -13,6 +13,7 @@ router.patch('/api/mating/UpdateMating/:matingId',verifytoken,matingcontroller.u
 router.delete('/api/mating/DeleteMating/:matingId',verifytoken,matingcontroller.deletemating);
 
 router.post('/api/mating/import',verifytoken, matingcontroller.importMatingFromExcel);
-router.get('/api/mating/exportmatingToExcel',verifytoken,matingcontroller.exportMatingToExcel);
+router.get('/api/mating/export',verifytoken, matingcontroller.exportMatingToExcel);
+router.get('/api/mating/downloadTemplate',verifytoken, matingcontroller.downloadMatingTemplate);
 
 module.exports=router;

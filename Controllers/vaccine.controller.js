@@ -8,6 +8,11 @@ const LocationShed=require('../Models/locationsed.model');
 const VaccineEntry=require('../Models/vaccineEntry.model');
 const mongoose = require("mongoose");
 const i18n = require('../i18n');
+const multer = require('multer');
+const xlsx = require('xlsx');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage }).single('file');
+const excelOps = require('../utilits/excelOperations');
 
 
 const addVaccine = asyncwrapper(async (req, res, next) => {
@@ -796,18 +801,232 @@ const getVaccines = asyncwrapper(async (req, res) => {
     });
 });
 
-  module.exports = {
-    addVaccine, // From your previous implementation
+const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
+    const userId = req.user?.id || req.userId;
+    if (!userId) {
+        return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+    }
+
+    try {
+        const data = excelOps.readExcelFile(req.file.buffer);
+
+        // Skip header row
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+
+            // Skip empty rows
+            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+
+            // Extract and validate data
+            const [
+                tagId,
+                vaccineName,
+                entryType,
+                dateStr
+            ] = row.map(cell => cell?.toString().trim());
+
+            // Validate required fields
+            if (!tagId || !vaccineName || !entryType || !dateStr) {
+                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Parse date
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) {
+                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Validate entry type
+            const validEntryTypes = ['First Dose', 'Booster Dose', 'Annual Dose', 'جرعة أولى', 'جرعة منشطة', 'جرعة سنوية'];
+            if (!validEntryTypes.includes(entryType)) {
+                return next(AppError.create(i18n.__('INVALID_ENTRY_TYPE', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Find animal and get its current location shed
+            const animal = await Animal.findOne({ tagId, owner: userId });
+            if (!animal) {
+                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
+            }
+
+            // Find vaccine
+            const vaccine = await Vaccine.findOne({ 
+                vaccineName: { $regex: new RegExp(`^${vaccineName}$`, 'i') },
+                owner: userId 
+            });
+            if (!vaccine) {
+                return next(AppError.create(i18n.__('VACCINE_NOT_FOUND', { name: vaccineName, row: i + 1 }), 404, httpstatustext.FAIL));
+            }
+
+            // Check stock
+            if (vaccine.stock.totalDoses < 1) {
+                return next(AppError.create(i18n.__('NO_VACCINE_DOSES', { name: vaccineName, row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Calculate cost
+            const dosePrice = vaccine.pricing.dosePrice || 
+                           (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
+
+            // Start transaction
+            const session = await mongoose.startSession();
+            session.startTransaction();
+
+            try {
+                // Update vaccine stock
+                vaccine.stock.totalDoses -= 1;
+                vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
+                await vaccine.save({ session });
+
+                // Create vaccine entry using animal's current location shed
+                const newVaccineEntry = await VaccineEntry.create([{
+                    Vaccine: vaccine._id,
+                    tagId,
+                    locationShed: animal.locationShed, // Using animal's current location shed
+                    date,
+                    entryType,
+                    owner: userId
+                }], { session });
+
+                // Update animal cost
+                await AnimalCost.findOneAndUpdate(
+                    { animalTagId: tagId },
+                    { 
+                        $inc: { vaccineCost: dosePrice },
+                        $setOnInsert: { 
+                            feedCost: 0,
+                            treatmentCost: 0,
+                            date,
+                            owner: userId
+                        }
+                    },
+                    { upsert: true, session }
+                );
+
+                await session.commitTransaction();
+                session.endSession();
+            } catch (error) {
+                await session.abortTransaction();
+                session.endSession();
+                throw error;
+            }
+        }
+
+        res.json({
+            status: httpstatustext.SUCCESS,
+            message: i18n.__('VACCINE_ENTRIES_IMPORTED_SUCCESSFULLY')
+        });
+    } catch (error) {
+        console.error('Import error:', error);
+        return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+    }
+});
+
+const exportVaccineEntriesToExcel = asyncwrapper(async (req, res, next) => {
+    try {
+        const userId = req.user?.id || req.userId;
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+
+        if (!userId) {
+            return next(AppError.create(isArabic ? 'المستخدم غير مصرح' : 'User not authenticated', 401, httpstatustext.FAIL));
+        }
+
+        // Build filter
+        const filter = { owner: userId };
+        if (req.query.tagId) filter.tagId = req.query.tagId;
+        if (req.query.entryType) filter.entryType = req.query.entryType;
+        
+        // Date range filtering
+        if (req.query.startDate || req.query.endDate) {
+            filter.date = {};
+            if (req.query.startDate) filter.date.$gte = new Date(req.query.startDate);
+            if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
+        }
+
+        const entries = await VaccineEntry.find(filter)
+            .sort({ date: 1 })
+            .populate('Vaccine', 'vaccineName pricing.dosePrice')
+            .populate('locationShed', 'locationShedName');
+
+        if (entries.length === 0) {
+            return res.status(404).json({
+                status: httpstatustext.FAIL,
+                message: isArabic ? 'لم يتم العثور على سجلات التطعيم' : 'No vaccine entries found'
+            });
+        }
+
+        const headers = excelOps.headers.vaccine[lang].export;
+        const sheetName = excelOps.sheetNames.vaccine.export[lang];
+
+        const data = entries.map(entry => [
+            entry.tagId,
+            entry.Vaccine?.vaccineName || '',
+            entry.entryType,
+            entry.date?.toISOString().split('T')[0] || '',
+            entry.locationShed?.locationShedName || '',
+            entry.Vaccine?.pricing?.dosePrice || 
+            (entry.Vaccine?.pricing?.bottlePrice / entry.Vaccine?.stock?.dosesPerBottle) || '',
+            entry.createdAt?.toISOString().split('T')[0] || ''
+        ]);
+
+        const workbook = excelOps.createExcelFile(data, headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Set column widths
+        const columnWidths = [15, 25, 20, 12, 20, 12, 12];
+        excelOps.setColumnWidths(worksheet, columnWidths);
+
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `vaccine_entries_${lang}.xlsx`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Export error:', error);
+        return next(AppError.create(
+            isArabic ? 'فشل التصدير: ' + error.message : 'Export failed: ' + error.message,
+            500,
+            httpstatustext.ERROR
+        ));
+    }
+});
+
+const downloadVaccineEntryTemplate = asyncwrapper(async (req, res, next) => {
+    try {
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+
+        const headers = excelOps.headers.vaccine[lang].template;
+        const exampleRow = excelOps.templateExamples.vaccine[lang];
+        const sheetName = excelOps.sheetNames.vaccine.template[lang];
+
+        const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
+        excelOps.setColumnWidths(worksheet, headers.map(() => 20));
+
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `vaccine_entry_template_${lang}.xlsx`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Template Download Error:', error);
+        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
+    }
+});
+
+module.exports = {
+    addVaccine,
     getVaccines,
     getVaccine,
     getAllVaccines,
     updateVaccine,
     deleteVaccine,
     addVaccineForAnimals,
-    addVaccineForAnimal ,
-    getSingleVaccineEntry ,
+    addVaccineForAnimal,
+    getSingleVaccineEntry,
     updateVaccineEntry,
     getAllVaccineEntries,
     deleteVaccineEntry,
-    getVaccinesForSpecificAnimal
-  };
+    getVaccinesForSpecificAnimal,
+    importVaccineEntriesFromExcel,
+    exportVaccineEntriesToExcel,
+    downloadVaccineEntryTemplate
+};

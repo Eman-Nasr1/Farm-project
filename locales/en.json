@@ -6,5 +6,59 @@
     "REQUIRED_FIELDS_MISSING": "Required fields are missing in row {row}",
     "INVALID_DATE_FORMAT": "Invalid date format in row {row}",
     "ANIMALS_IMPORTED_SUCCESSFULLY": "Animals imported successfully",
-    "PERMISSION_DENIED": "Permission denied"
-  }
+    "PERMISSION_DENIED": "Permission denied",
+    "TREATMENT_NOT_FOUND": "Treatment with name '{name}' not found in row {row}",
+    "TREATMENT_EXPIRED": "Treatment '{name}' is expired (Expired on {date}) in row {row}",
+    "INSUFFICIENT_TREATMENT_VOLUME": "Not enough stock for treatment '{name}'. Available: {available}, Requested: {requested} in row {row}",
+    "INVALID_VOLUME": "Invalid volume in row {row}",
+    "TREATMENT_ENTRIES_IMPORTED_SUCCESSFULLY": "Treatment entries imported successfully",
+    "UNAUTHORIZED": "User not authenticated",
+    "IMPORT_FAILED": "Import failed",
+    "TEMPLATE_GENERATION_FAILED": "Failed to generate template",
+    "NO_TREATMENT_RECORDS": "No treatment records found",
+    "EXPORT_FAILED": "Export failed",
+    "TREATMENT_ENTRY_NOT_FOUND": "Treatment entry not found",
+    "TREATMENT_UNAUTHORIZED": "You are not authorized to use this treatment",
+    "TREATMENT_STOCK_INSUFFICIENT": "Not enough treatment stock available",
+    
+    "USER_NOT_FOUND": "User not found",
+    "EMAIL_IN_USE": "Email already in use",
+    "PASSWORD_MISMATCH": "Password and confirm password do not match",
+    "USER_EXISTS": "User already exists",
+    "EMAIL_PASSWORD_REQUIRED": "Email and password are required",
+    "SOMETHING_WRONG": "Something went wrong",
+    "EMAIL_REQUIRED": "Email is required",
+    "VERIFICATION_CODE_REQUIRED": "Verification code is required",
+    "INVALID_EXPIRED_CODE": "Invalid or expired verification code",
+    "VERIFICATION_CODE_SENT": "Verification code sent to your email",
+    "VERIFICATION_CODE_VALID": "Verification code is valid",
+    "ADMIN_ACCESS_ONLY": "Admin access only",
+    
+    "BREED_NOT_FOUND": "Breed not found or unauthorized to access",
+    "BREED_DELETED": "Breed deleted successfully",
+    "BREED_UNAUTHORIZED": "Breed not found or unauthorized to update",
+    
+    "FEED_NOT_FOUND": "Feed not found",
+    "FEED_UNAUTHORIZED": "Feed information not found or unauthorized to update",
+    "INSUFFICIENT_FEED_STOCK": "Not enough stock for feed \"{name}\". Available: {available}, Required: {required}",
+    "FODDER_UPDATED": "Fodder updated successfully",
+    
+    "INVALID_HEIGHT_VALUE": "Invalid height value in row {row}",
+    "WEIGHTS_IMPORTED_SUCCESSFULLY": "Weights imported successfully",
+    
+    "MATING_IMPORTED_SUCCESSFULLY": "Mating records imported successfully",
+    "MATING_NOT_FOUND": "Mating information not found for this animal",
+    
+    "INVALID_DELIVERY_STATE": "Invalid delivery state in row {row}",
+    "INVALID_MOTHERING_ABILITY": "Invalid mothering ability in row {row}",
+    "INVALID_MILKING_STATUS": "Invalid milking status in row {row}",
+    
+    "EXCLUDED_IMPORTED_SUCCESSFULLY": "Excluded records imported successfully",
+    "EXCLUDED_NOT_FOUND": "Excluded information not found or unauthorized to delete",
+    "EXCLUDED_DELETED": "Excluded information deleted successfully",
+    
+    "VACCINE_ENTRIES_IMPORTED_SUCCESSFULLY": "Vaccine entries imported successfully",
+    "VACCINE_NOT_FOUND": "Vaccine not found",
+    "VACCINE_UNAUTHORIZED": "You are not authorized to use this vaccine",
+    "VACCINE_STOCK_INSUFFICIENT": "Not enough vaccine stock available"
+}

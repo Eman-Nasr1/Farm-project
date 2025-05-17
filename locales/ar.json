@@ -6,5 +6,59 @@
     "REQUIRED_FIELDS_MISSING": "الحقول المطلوبة مفقودة في الصف {row}",
     "INVALID_DATE_FORMAT": "تنسيق تاريخ غير صالح في الصف {row}",
     "ANIMALS_IMPORTED_SUCCESSFULLY": "تم استيراد الحيوانات بنجاح",
-    "PERMISSION_DENIED": "تم رفض الإذن"
-  }
+    "PERMISSION_DENIED": "تم رفض الإذن",
+    "TREATMENT_NOT_FOUND": "العلاج '{name}' غير موجود في الصف {row}",
+    "TREATMENT_EXPIRED": "العلاج '{name}' منتهي الصلاحية (تاريخ الانتهاء {date}) في الصف {row}",
+    "INSUFFICIENT_TREATMENT_VOLUME": "لا يوجد مخزون كافٍ للعلاج '{name}'. المتوفر: {available}، المطلوب: {requested} في الصف {row}",
+    "INVALID_VOLUME": "كمية غير صالحة في الصف {row}",
+    "TREATMENT_ENTRIES_IMPORTED_SUCCESSFULLY": "تم استيراد سجلات العلاج بنجاح",
+    "UNAUTHORIZED": "المستخدم غير مصرح",
+    "IMPORT_FAILED": "فشل الاستيراد",
+    "TEMPLATE_GENERATION_FAILED": "فشل إنشاء النموذج",
+    "NO_TREATMENT_RECORDS": "لم يتم العثور على سجلات علاج",
+    "EXPORT_FAILED": "فشل التصدير",
+    "TREATMENT_ENTRY_NOT_FOUND": "سجل العلاج غير موجود",
+    "TREATMENT_UNAUTHORIZED": "غير مصرح لك باستخدام هذا العلاج",
+    "TREATMENT_STOCK_INSUFFICIENT": "لا يوجد مخزون كافٍ من العلاج",
+    
+    "USER_NOT_FOUND": "المستخدم غير موجود",
+    "EMAIL_IN_USE": "البريد الإلكتروني مستخدم بالفعل",
+    "PASSWORD_MISMATCH": "كلمة المرور وتأكيد كلمة المرور غير متطابقين",
+    "USER_EXISTS": "المستخدم موجود بالفعل",
+    "EMAIL_PASSWORD_REQUIRED": "البريد الإلكتروني وكلمة المرور مطلوبان",
+    "SOMETHING_WRONG": "حدث خطأ ما",
+    "EMAIL_REQUIRED": "البريد الإلكتروني مطلوب",
+    "VERIFICATION_CODE_REQUIRED": "رمز التحقق مطلوب",
+    "INVALID_EXPIRED_CODE": "رمز التحقق غير صالح أو منتهي الصلاحية",
+    "VERIFICATION_CODE_SENT": "تم إرسال رمز التحقق إلى بريدك الإلكتروني",
+    "VERIFICATION_CODE_VALID": "رمز التحقق صالح",
+    "ADMIN_ACCESS_ONLY": "الوصول للمسؤول فقط",
+    
+    "BREED_NOT_FOUND": "السلالة غير موجودة أو غير مصرح بالوصول إليها",
+    "BREED_DELETED": "تم حذف السلالة بنجاح",
+    "BREED_UNAUTHORIZED": "السلالة غير موجودة أو غير مصرح بالتحديث",
+    
+    "FEED_NOT_FOUND": "العلف غير موجود",
+    "FEED_UNAUTHORIZED": "معلومات العلف غير موجودة أو غير مصرح بالتحديث",
+    "INSUFFICIENT_FEED_STOCK": "لا يوجد مخزون كافٍ من العلف \"{name}\". المتوفر: {available}، المطلوب: {required}",
+    "FODDER_UPDATED": "تم تحديث العلف المصنع بنجاح",
+    
+    "INVALID_HEIGHT_VALUE": "قيمة الارتفاع غير صالحة في الصف {row}",
+    "WEIGHTS_IMPORTED_SUCCESSFULLY": "تم استيراد سجلات الوزن بنجاح",
+    
+    "MATING_IMPORTED_SUCCESSFULLY": "تم استيراد سجلات التزاوج بنجاح",
+    "MATING_NOT_FOUND": "معلومات التزاوج غير موجودة لهذا الحيوان",
+    
+    "INVALID_DELIVERY_STATE": "حالة الولادة غير صالحة في الصف {row}",
+    "INVALID_MOTHERING_ABILITY": "قدرة الأمومة غير صالحة في الصف {row}",
+    "INVALID_MILKING_STATUS": "حالة الحلب غير صالحة في الصف {row}",
+    
+    "EXCLUDED_IMPORTED_SUCCESSFULLY": "تم استيراد سجلات الاستبعاد بنجاح",
+    "EXCLUDED_NOT_FOUND": "معلومات الاستبعاد غير موجودة أو غير مصرح بالحذف",
+    "EXCLUDED_DELETED": "تم حذف معلومات الاستبعاد بنجاح",
+    
+    "VACCINE_ENTRIES_IMPORTED_SUCCESSFULLY": "تم استيراد سجلات التطعيم بنجاح",
+    "VACCINE_NOT_FOUND": "التطعيم غير موجود",
+    "VACCINE_UNAUTHORIZED": "غير مصرح لك باستخدام هذا التطعيم",
+    "VACCINE_STOCK_INSUFFICIENT": "لا يوجد مخزون كافٍ من التطعيم"
+}

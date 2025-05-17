@@ -8,6 +8,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const storage = multer.memoryStorage(); // Use memory storage to get the file buffer
 const upload = multer({ storage: storage }).single('file');
+const i18n = require('../utilits/i18n');
 
 
 const getAllBreeding = asyncwrapper(async (req, res) => {
@@ -133,7 +134,7 @@ const downloadBreedingTemplate = asyncwrapper(async (req, res, next) => {
 
     } catch (error) {
         console.error('Template Download Error:', error);
-        next(AppError.create('Failed to generate template', 500, httpstatustext.ERROR));
+        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
     }
 });
 
@@ -184,15 +185,15 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
             };
 
             if (!validEnums.deliveryStates.includes(deliveryState)) {
-                return next(AppError.create(`Invalid delivery state in row ${i + 1}`, 400, httpstatustext.FAIL));
+                return next(AppError.create(i18n.__('INVALID_DELIVERY_STATE', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
             if (!validEnums.motheringAbilities.includes(motheringAbility)) {
-                return next(AppError.create(`Invalid mothering ability in row ${i + 1}`, 400, httpstatustext.FAIL));
+                return next(AppError.create(i18n.__('INVALID_MOTHERING_ABILITY', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
             if (!validEnums.milkingStatuses.includes(milkingStatus)) {
-                return next(AppError.create(`Invalid milking status in row ${i + 1}`, 400, httpstatustext.FAIL));
+                return next(AppError.create(i18n.__('INVALID_MILKING_STATUS', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
             const birthEntries = [];

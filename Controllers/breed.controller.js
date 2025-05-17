@@ -2,6 +2,7 @@ const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
 const AppError = require('../utilits/AppError');
 const Breed = require('../Models/breed.model');
+const i18n = require('../utilits/i18n');
 
 // Get all breeds for a user (with pagination)
 const getAllBreeds = asyncwrapper(async (req, res) => {
@@ -98,15 +99,15 @@ const addBreed = asyncwrapper(async (req, res, next) => {
 
 // Update a breed
 const updateBreed = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id; // Get the user ID from the request
-    const breedId = req.params.breedId; // Get the breed ID from the request params
-    const updatedData = req.body; // Get the updated data from the request body
+    const userId = req.user.id;
+    const breedId = req.params.breedId;
+    const updatedData = req.body;
 
     // Find the breed by ID and owner
     let breed = await Breed.findOne({ _id: breedId, owner: userId });
 
     if (!breed) {
-        const error = AppError.create('Breed not found or unauthorized to update', 404, httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('BREED_UNAUTHORIZED'), 404, httpstatustext.FAIL);
         return next(error);
     }
 
@@ -114,7 +115,7 @@ const updateBreed = asyncwrapper(async (req, res, next) => {
     breed = await Breed.findOneAndUpdate(
         { _id: breedId },
         updatedData,
-        { new: true } // Return the updated document
+        { new: true }
     );
 
     res.json({ status: httpstatustext.SUCCESS, data: { breed } });
@@ -122,20 +123,20 @@ const updateBreed = asyncwrapper(async (req, res, next) => {
 
 // Delete a breed
 const deleteBreed = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id; // Get the user ID from the request
-    const breedId = req.params.breedId; // Get the breed ID from the request params
+    const userId = req.user.id;
+    const breedId = req.params.breedId;
 
     // Find the breed by ID and owner
     const breed = await Breed.findOne({ _id: breedId, owner: userId });
 
     if (!breed) {
-        const error = AppError.create('Breed not found or unauthorized to delete', 404, httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('BREED_NOT_FOUND'), 404, httpstatustext.FAIL);
         return next(error);
     }
 
-    await Breed.deleteOne({ _id: breedId }); // Delete the breed
+    await Breed.deleteOne({ _id: breedId });
 
-    res.json({ status: httpstatustext.SUCCESS, message: 'Breed deleted successfully' });
+    res.json({ status: httpstatustext.SUCCESS, message: i18n.__('BREED_DELETED') });
 });
 
 module.exports = {

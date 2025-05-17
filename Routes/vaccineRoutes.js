@@ -21,4 +21,10 @@ router.get('/api/vaccine/getAllVaccineEntries',verifytoken,vaccinecontroller.get
 router.get('/api/vaccine/getSingleVaccineEntry/:vaccineEntryId',verifytoken,vaccinecontroller.getSingleVaccineEntry);
 router.patch('/api/vaccine/updateVaccineEntry/:vaccineEntryId',verifytoken, vaccinecontroller.updateVaccineEntry);
 router.delete('/api/vaccine/DeleteVaccineEntry/:vaccineEntryId',verifytoken,vaccinecontroller.deleteVaccineEntry);
+
+// Excel operations
+router.post('/api/vaccine/import', verifytoken, vaccinecontroller.importVaccineEntriesFromExcel);
+router.get('/api/vaccine/export', verifytoken, vaccinecontroller.exportVaccineEntriesToExcel);
+router.get('/api/vaccine/downloadTemplate', verifytoken, vaccinecontroller.downloadVaccineEntryTemplate);
+
 module.exports=router;

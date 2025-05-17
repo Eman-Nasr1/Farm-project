@@ -7,6 +7,8 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
+const i18n = require('../i18n');
+const excelOps = require('../utilits/excelOperations');
 
 
 const getAllMating = asyncwrapper(async (req, res) => {
@@ -81,134 +83,189 @@ const getAllMating = asyncwrapper(async (req, res) => {
 // in this function getmatingforspacficanimal it will get animal data and mating data 
 
 const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
+    const userId = req.user?.id || req.userId;
+    if (!userId) {
+        return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+    }
 
-    upload(req, res, async function (err) {
-        if (err) {
-            return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
-        }
+    try {
+        const data = excelOps.readExcelFile(req.file.buffer);
 
-        const fileBuffer = req.file.buffer;
-        const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-
-        // Convert sheet to JSON format (array of arrays)
-        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-        // Iterate over the rows (skip header row at index 0)
+        // Skip header row
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
 
             // Skip empty rows
-            if (!row || row.length === 0 || row.every(cell => cell === undefined || cell === null || cell === '')) {
-               // console.log(`Skipping empty row ${i}`);
-                continue;
+            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+
+            // Extract and validate data
+            const [
+                tagId,
+                maleTag_id,
+                matingType,
+                matingDateStr,
+                checkDaysStr,
+                sonarDateStr,
+                sonarRsult
+            ] = row.map(cell => cell?.toString().trim());
+
+            // Validate required fields
+            if (!tagId || !maleTag_id || !matingType || !matingDateStr) {
+                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Log the row for debugging
-          //  console.log(`Processing row ${i}:`, row);
-
-            // Validate essential fields
-            const tagId = row[0]?.toString().trim();
-            const maleTag_id = row[1]?.toString().trim();
-            const matingType = row[2]?.toString().trim();
-            const matingDate = new Date(row[3]?.toString().trim());
-            const sonarDate = new Date(row[4]?.toString().trim());
-            const sonarRsult = row[5]?.toString().trim();
-           
-
-            // Check if required fields are present
-            if (!tagId || !maleTag_id || !matingType ) {
-                return next(AppError.create(`Required fields are missing in row ${i + 1}`, 400, httpstatustext.FAIL));
+            // Parse dates
+            const matingDate = new Date(matingDateStr);
+            if (isNaN(matingDate.getTime())) {
+                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Check if dates are valid
-            if (isNaN(matingDate.getTime()) || isNaN(sonarDate.getTime())) {
-                return next(AppError.create(`Invalid date format in row ${i + 1}`, 400, httpstatustext.FAIL));
+            // Parse check days
+            let checkDays = null;
+            if (checkDaysStr) {
+                checkDays = parseInt(checkDaysStr);
+                if (![45, 60, 90].includes(checkDays)) {
+                    return next(AppError.create(i18n.__('INVALID_CHECK_DAYS', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
             }
 
-            // Create new animal object
-            
+            // Verify animal exists
+            const animal = await Animal.findOne({ tagId, owner: userId });
+            if (!animal) {
+                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
+            }
+
+            // Create mating record
             const newMating = new Mating({
                 tagId,
                 maleTag_id,
                 matingType,
                 matingDate,
-                sonarDate,
+                checkDays,
+                sonarDate: sonarDateStr ? new Date(sonarDateStr) : undefined,
                 sonarRsult,
-               
-              
+                owner: userId,
+                animalId: animal._id
             });
 
-            // Save the new animal document
             await newMating.save();
         }
 
-        // Return success response
         res.json({
             status: httpstatustext.SUCCESS,
-            message: 'Mating imported successfully',
+            message: i18n.__('MATING_IMPORTED_SUCCESSFULLY')
         });
-    });
+    } catch (error) {
+        console.error('Import error:', error);
+        return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+    }
 });
 
 
 const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    try {
+        const userId = req.user?.id || req.userId;
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
 
-    // Fetch animals based on filter logic
-    const query = req.query;
-    const filter = { owner: userId };
-    if (query.matingDate) filter.matingDate = query.matingDate;
-    if (query.sonarDate) filter.sonarDate = query.sonarDate;
-    if (query.sonarRsult) filter.sonarRsult = query.sonarRsult;
-    if (query.tagId) filter.tagId = query.tagId;
+        if (!userId) {
+            return next(AppError.create(isArabic ? 'المستخدم غير مصرح' : 'User not authenticated', 401, httpstatustext.FAIL));
+        }
 
-    const mating = await Mating.find(filter);
+        // Build filter
+        const filter = { owner: userId };
+        if (req.query.tagId) filter.tagId = req.query.tagId;
+        if (req.query.matingType) filter.matingType = req.query.matingType;
+        if (req.query.sonarRsult) filter.sonarRsult = req.query.sonarRsult;
+        
+        // Date range filtering
+        if (req.query.startDate || req.query.endDate) {
+            filter.matingDate = {};
+            if (req.query.startDate) filter.matingDate.$gte = new Date(req.query.startDate);
+            if (req.query.endDate) filter.matingDate.$lte = new Date(req.query.endDate);
+        }
 
-    // Create a new workbook and sheet
-    const workbook = xlsx.utils.book_new();
-    const worksheetData = [
-        ['Tag ID','Male tag Id', 'Mating Date',  'Mating Type', 'Sonar Date', 'Sonar Result' ,'Expected Delivery Date']
-    ];
+        const matings = await Mating.find(filter)
+            .sort({ matingDate: 1 })
+            .populate('animalId', 'tagId');
 
-    mating.forEach(mating => {
-        worksheetData.push([
+        if (matings.length === 0) {
+            return res.status(404).json({
+                status: httpstatustext.FAIL,
+                message: isArabic ? 'لم يتم العثور على سجلات التلقيح' : 'No mating records found'
+            });
+        }
+
+        const headers = excelOps.headers.mating[lang].export;
+        const sheetName = excelOps.sheetNames.mating.export[lang];
+
+        const data = matings.map(mating => [
             mating.tagId,
             mating.maleTag_id,
-            mating.matingDate ? mating.matingDate.toISOString().split('T')[0] : '',
             mating.matingType,
-            mating.sonarDate ? mating.sonarDate.toISOString().split('T')[0] : '',
+            mating.matingDate?.toISOString().split('T')[0] || '',
+            mating.checkDays || '',
+            mating.sonarDate?.toISOString().split('T')[0] || '',
             mating.sonarRsult || '',
-            mating.expectedDeliveryDate ? mating.expectedDeliveryDate.toISOString().split('T')[0] : '',
+            mating.expectedDeliveryDate?.toISOString().split('T')[0] || '',
+            mating.createdAt?.toISOString().split('T')[0] || ''
         ]);
-    });
 
-    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Mating');
+        const workbook = excelOps.createExcelFile(data, headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
 
-    // Write to buffer
-    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        // Set column widths
+        const columnWidths = [15, 15, 15, 12, 12, 12, 15, 12, 12];
+        excelOps.setColumnWidths(worksheet, columnWidths);
 
-    // Set the proper headers for file download
-    res.setHeader('Content-Disposition', 'attachment; filename="Mating.xlsx"');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `mating_records_${lang}.xlsx`);
+        res.send(buffer);
 
-    // Send the file as a response
-    res.send(buffer);
+    } catch (error) {
+        console.error('Export error:', error);
+        return next(AppError.create(
+            isArabic ? 'فشل التصدير: ' + error.message : 'Export failed: ' + error.message,
+            500,
+            httpstatustext.ERROR
+        ));
+    }
+});
+
+const downloadMatingTemplate = asyncwrapper(async (req, res, next) => {
+    try {
+        const lang = req.query.lang || 'en';
+        const isArabic = lang === 'ar';
+
+        const headers = excelOps.headers.mating[lang].template;
+        const exampleRow = excelOps.templateExamples.mating[lang];
+        const sheetName = excelOps.sheetNames.mating.template[lang];
+
+        const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
+        const worksheet = workbook.Sheets[sheetName];
+        excelOps.setColumnWidths(worksheet, headers.map(() => 20));
+
+        const buffer = excelOps.writeExcelBuffer(workbook);
+        excelOps.setExcelResponseHeaders(res, `mating_template_${lang}.xlsx`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Template Download Error:', error);
+        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
+    }
 });
 
 const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
  
     const animal = await Animal.findById(req.params.animalId);
     if (!animal) {
-        const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('ANIMAL_NOT_FOUND'), 404, httpstatustext.FAIL);
         return next(error);
     }
     const mating = await Mating.find({ animalId: animal._id });
 
     if (!mating) {
-        const error = AppError.create('Mating information not found for this animal', 404, httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('MATING_NOT_FOUND'), 404, httpstatustext.FAIL);
         return next(error);
     }
 
@@ -453,5 +510,5 @@ module.exports={
     importMatingFromExcel,
     exportMatingToExcel,
     addMatingByLocation,
-    
+    downloadMatingTemplate
 }
