@@ -10,7 +10,7 @@ const AnimalCost = require("../Models/animalCost.model");
 const Animal = require("../Models/animal.model");
 const mongoose = require("mongoose");
 const { ConsoleMessage } = require("puppeteer");
-const i18n = require("../utilits/i18n");
+const i18n = require('../i18n');
 
 const getallfeeds = asyncwrapper(async (req, res) => {
   const userId = req.user.id;

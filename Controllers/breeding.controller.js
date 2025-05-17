@@ -8,7 +8,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const storage = multer.memoryStorage(); // Use memory storage to get the file buffer
 const upload = multer({ storage: storage }).single('file');
-const i18n = require('../utilits/i18n');
+const i18n = require('../i18n');
 
 
 const getAllBreeding = asyncwrapper(async (req, res) => {

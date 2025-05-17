@@ -2,7 +2,7 @@ const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
 const AppError = require('../utilits/AppError');
 const Breed = require('../Models/breed.model');
-const i18n = require('../utilits/i18n');
+const i18n = require('../i18n');
 
 // Get all breeds for a user (with pagination)
 const getAllBreeds = asyncwrapper(async (req, res) => {
