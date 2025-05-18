@@ -6,15 +6,8 @@ const User=require('../Models/user.model');
 const LocationShed=require('../Models/locationsed.model');
 const Breed=require('../Models/breed.model');
 const mongoose = require('mongoose');
-const multer = require('multer');
-const xlsx = require('xlsx');
-const storage = multer.memoryStorage(); // Use memory storage to get the file buffer
 const i18n = require('../i18n');
-const setLocale = require('../middleware/localeMiddleware');
 const excelOps = require('../utilits/excelOperations');
-
-const upload = multer({ storage: storage }).single('file');
-
 
 const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
     try {

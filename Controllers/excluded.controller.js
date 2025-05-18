@@ -112,26 +112,18 @@ const deleteExcluded= asyncwrapper(async(req,res,next)=>{
 })
 
 const downloadExcludedTemplate = asyncwrapper(async (req, res, next) => {
-    try {
-        const lang = req.query.lang || 'en';
-        const isArabic = lang === 'ar';
+    const lang = req.query.lang || 'en';
+    const headers = excelOps.headers.excluded[lang].template;
+    const exampleRow = excelOps.templateExamples.excluded[lang];
+    const sheetName = excelOps.sheetNames.excluded.template[lang];
 
-        const headers = excelOps.headers.excluded[lang].template;
-        const exampleRow = excelOps.templateExamples.excluded[lang];
-        const sheetName = excelOps.sheetNames.excluded.template[lang];
+    const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
+    const worksheet = workbook.Sheets[sheetName];
+    excelOps.setColumnWidths(worksheet, headers.map(() => 20));
 
-        const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
-        const worksheet = workbook.Sheets[sheetName];
-        excelOps.setColumnWidths(worksheet, headers.map(() => 20));
-
-        const buffer = excelOps.writeExcelBuffer(workbook);
-        excelOps.setExcelResponseHeaders(res, `excluded_template_${lang}.xlsx`);
-        res.send(buffer);
-
-    } catch (error) {
-        console.error('Template Download Error:', error);
-        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
-    }
+    const buffer = excelOps.writeExcelBuffer(workbook);
+    excelOps.setExcelResponseHeaders(res, `excluded_template_${lang}.xlsx`);
+    res.send(buffer);
 });
 
 const importExcludedFromExcel = asyncwrapper(async (req, res, next) => {
