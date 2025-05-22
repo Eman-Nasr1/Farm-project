@@ -23,7 +23,8 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
       AnnualDose,
       bottles,
       dosesPerBottle,
-      bottlePrice
+      bottlePrice,
+      expiryDate
     } = req.body;
   
     // Validate input
@@ -31,11 +32,28 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
       !vaccineName ||
       bottles === undefined || isNaN(bottles) || bottles < 0 ||
       dosesPerBottle === undefined || isNaN(dosesPerBottle) || dosesPerBottle < 1 ||
-      bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0
+      bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0 ||
+      !expiryDate
     ) {
       return res.status(400).json({
         status: httpstatustext.FAIL,
-        message: "Valid vaccine name, bottles, doses per bottle, and bottle price are required.",
+        message: "Valid vaccine name, bottles, doses per bottle, bottle price, and expiry date are required.",
+      });
+    }
+
+    // Validate expiry date
+    const expiry = new Date(expiryDate);
+    if (isNaN(expiry.getTime())) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "Invalid expiry date format. Please use YYYY-MM-DD format.",
+      });
+    }
+
+    if (expiry < new Date()) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "Expiry date cannot be in the past.",
       });
     }
   
@@ -43,32 +61,30 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
     const totalDoses = bottles * dosesPerBottle;
     const dosePrice = bottlePrice / dosesPerBottle;
   
-    // Create new vaccine with proper nesting
+    // Create new vaccine
     const newVaccine = new Vaccine({
       vaccineName,
-      BoosterDose: BoosterDose || null,
-      AnnualDose: AnnualDose || null,
+      BoosterDose,
+      AnnualDose,
       stock: {
-        bottles: Number(bottles),
-        dosesPerBottle: Number(dosesPerBottle),
-        totalDoses: Number(totalDoses)
+        bottles,
+        dosesPerBottle,
+        totalDoses
       },
       pricing: {
-        bottlePrice: Number(bottlePrice),
-        dosePrice: Number(dosePrice)
+        bottlePrice,
+        dosePrice
       },
+      expiryDate: expiry,
       owner: userId
     });
   
-    try {
-      await newVaccine.save();
-      res.status(201).json({
-        status: httpstatustext.SUCCESS,
-        data: { vaccine: newVaccine },
-      });
-    } catch (error) {
-      return next(new AppError('Failed to save vaccine: ' + error.message, 500));
-    }
+    await newVaccine.save();
+  
+    res.json({
+      status: httpstatustext.SUCCESS,
+      data: { vaccine: newVaccine }
+    });
   });
 
   // Get all vaccines (without pagination)
@@ -270,6 +286,16 @@ const getVaccines = asyncwrapper(async (req, res) => {
         });
       }
   
+      // Check if vaccine is expired
+      if (vaccine.isExpired()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: `Vaccine "${vaccine.vaccineName}" is expired (Expired on ${vaccine.expiryDate.toISOString().split('T')[0]}).`
+        });
+      }
+  
       // Calculate vaccine cost per animal
       const vaccineCostPerAnimal = vaccine.pricing.dosePrice || 
                                  (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
@@ -387,6 +413,16 @@ const getVaccines = asyncwrapper(async (req, res) => {
         return res.status(404).json({
           status: "FAILURE",
           message: "Vaccine not found or unauthorized."
+        });
+      }
+  
+      // Check if vaccine is expired
+      if (vaccine.isExpired()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: `Vaccine "${vaccine.vaccineName}" is expired (Expired on ${vaccine.expiryDate.toISOString().split('T')[0]}).`
         });
       }
   
@@ -545,6 +581,16 @@ const getVaccines = asyncwrapper(async (req, res) => {
         return res.status(404).json({
           status: "FAILURE",
           message: "New vaccine not found or unauthorized."
+        });
+      }
+  
+      // Check if new vaccine is expired
+      if (newVaccine.isExpired()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "FAILURE",
+          message: `Vaccine "${newVaccine.vaccineName}" is expired (Expired on ${newVaccine.expiryDate.toISOString().split('T')[0]}).`
         });
       }
   
@@ -822,7 +868,8 @@ const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
                 tagId,
                 vaccineName,
                 entryType,
-                dateStr
+                dateStr,
+                locationShedName
             ] = row.map(cell => cell?.toString().trim());
 
             // Validate required fields
@@ -842,7 +889,7 @@ const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
                 return next(AppError.create(i18n.__('INVALID_ENTRY_TYPE', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Find animal and get its current location shed
+            // Find animal
             const animal = await Animal.findOne({ tagId, owner: userId });
             if (!animal) {
                 return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
@@ -857,57 +904,69 @@ const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
                 return next(AppError.create(i18n.__('VACCINE_NOT_FOUND', { name: vaccineName, row: i + 1 }), 404, httpstatustext.FAIL));
             }
 
+            // Check if vaccine is expired
+            if (vaccine.expiryDate && new Date() > vaccine.expiryDate) {
+                return next(AppError.create(i18n.__('VACCINE_EXPIRED', { 
+                    name: vaccineName, 
+                    date: vaccine.expiryDate.toISOString().split('T')[0], 
+                    row: i + 1 
+                }), 400, httpstatustext.FAIL));
+            }
+
             // Check stock
             if (vaccine.stock.totalDoses < 1) {
                 return next(AppError.create(i18n.__('NO_VACCINE_DOSES', { name: vaccineName, row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Calculate cost
+            // Find location shed if provided, otherwise use animal's current shed
+            let locationShed = animal.locationShed;
+            if (locationShedName) {
+                const shed = await LocationShed.findOne({ locationShedName, owner: userId });
+                if (!shed) {
+                    return next(AppError.create(i18n.__('LOCATION_SHED_NOT_FOUND', { name: locationShedName, row: i + 1 }), 404, httpstatustext.FAIL));
+                }
+                locationShed = shed._id;
+            }
+
+            // Calculate dose price
             const dosePrice = vaccine.pricing.dosePrice || 
                            (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
 
-            // Start transaction
-            const session = await mongoose.startSession();
-            session.startTransaction();
+            // Create new vaccine entry
+            const newVaccineEntry = new VaccineEntry({
+                Vaccine: vaccine._id,
+                tagId,
+                locationShed,
+                date,
+                entryType,
+                owner: userId
+            });
 
-            try {
-                // Update vaccine stock
-                vaccine.stock.totalDoses -= 1;
-                vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
-                await vaccine.save({ session });
+            // Update vaccine stock using findOneAndUpdate to avoid validation
+            await Vaccine.findOneAndUpdate(
+                { _id: vaccine._id },
+                { 
+                    $inc: { 'stock.totalDoses': -1 },
+                    $set: { 'stock.bottles': Math.ceil((vaccine.stock.totalDoses - 1) / vaccine.stock.dosesPerBottle) }
+                }
+            );
 
-                // Create vaccine entry using animal's current location shed
-                const newVaccineEntry = await VaccineEntry.create([{
-                    Vaccine: vaccine._id,
-                    tagId,
-                    locationShed: animal.locationShed, // Using animal's current location shed
-                    date,
-                    entryType,
-                    owner: userId
-                }], { session });
+            // Update animal cost
+            const animalCost = await AnimalCost.findOne({ animalTagId: tagId }) || new AnimalCost({
+                animalTagId: tagId,
+                feedCost: 0,
+                treatmentCost: 0,
+                vaccineCost: 0,
+                date,
+                owner: userId
+            });
+            animalCost.vaccineCost += dosePrice;
 
-                // Update animal cost
-                await AnimalCost.findOneAndUpdate(
-                    { animalTagId: tagId },
-                    { 
-                        $inc: { vaccineCost: dosePrice },
-                        $setOnInsert: { 
-                            feedCost: 0,
-                            treatmentCost: 0,
-                            date,
-                            owner: userId
-                        }
-                    },
-                    { upsert: true, session }
-                );
-
-                await session.commitTransaction();
-                session.endSession();
-            } catch (error) {
-                await session.abortTransaction();
-                session.endSession();
-                throw error;
-            }
+            // Save entries
+            await Promise.all([
+                newVaccineEntry.save(),
+                animalCost.save()
+            ]);
         }
 
         res.json({

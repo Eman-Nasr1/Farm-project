@@ -3,6 +3,7 @@ const router=express.Router();
 const vaccinecontroller=require('../Controllers/vaccine.controller');
 const verifytoken=require('../middleware/verifytoken');
 const { vaccineValidationRules, validateVaccine } = require('../middleware/vaccine.validation');
+const excelOps = require('../utilits/excelOperations');
 
 router.get('/api/vaccine/GetAllVaccine',verifytoken,vaccinecontroller.getAllVaccines);
 router.get('/api/vaccine/GetVaccine-menue',verifytoken,vaccinecontroller.getVaccines);
@@ -23,7 +24,7 @@ router.patch('/api/vaccine/updateVaccineEntry/:vaccineEntryId',verifytoken, vacc
 router.delete('/api/vaccine/DeleteVaccineEntry/:vaccineEntryId',verifytoken,vaccinecontroller.deleteVaccineEntry);
 
 // Excel operations
-router.post('/api/vaccine/import', verifytoken, vaccinecontroller.importVaccineEntriesFromExcel);
+router.post('/api/vaccine/import', verifytoken, excelOps.uploadExcelFile, vaccinecontroller.importVaccineEntriesFromExcel);
 router.get('/api/vaccine/export', verifytoken, vaccinecontroller.exportVaccineEntriesToExcel);
 router.get('/api/vaccine/downloadTemplate', verifytoken, vaccinecontroller.downloadVaccineEntryTemplate);
 

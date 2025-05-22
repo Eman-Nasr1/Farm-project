@@ -36,6 +36,10 @@ const VaccineSchema = new mongoose.Schema({
       type: Number
     }
   },
+  expiryDate: {
+    type: Date,
+    // required: [true, 'Expiry date is required']
+  },
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -46,5 +50,10 @@ const VaccineSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Add a method to check if the vaccine is expired
+VaccineSchema.methods.isExpired = function() {
+  return this.expiryDate && new Date() > this.expiryDate;
+};
 
 module.exports = mongoose.model('Vaccine', VaccineSchema);

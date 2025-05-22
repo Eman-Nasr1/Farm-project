@@ -89,6 +89,10 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
     }
 
     try {
+        if (!req.file || !req.file.buffer) {
+            return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
+        }
+
         const data = excelOps.readExcelFile(req.file.buffer);
 
         // Skip header row
@@ -114,13 +118,25 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
                 return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Parse dates
+            // Parse mating date
             const matingDate = new Date(matingDateStr);
             if (isNaN(matingDate.getTime())) {
-                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { field: 'Mating Date', row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Parse check days
+            // Parse sonar date if provided
+            let sonarDate = undefined;
+            if (sonarDateStr) {
+                sonarDate = new Date(sonarDateStr);
+                if (isNaN(sonarDate.getTime())) {
+                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { field: 'Sonar Date', row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+                if (sonarDate < matingDate) {
+                    return next(AppError.create(i18n.__('SONAR_DATE_BEFORE_MATING', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+            }
+
+            // Parse and validate check days
             let checkDays = null;
             if (checkDaysStr) {
                 checkDays = parseInt(checkDaysStr);
@@ -129,11 +145,36 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
                 }
             }
 
-            // Verify animal exists
-            const animal = await Animal.findOne({ tagId, owner: userId });
-            if (!animal) {
+            // Validate sonar result if provided
+            if (sonarRsult && !['positive', 'negative'].includes(sonarRsult.toLowerCase())) {
+                return next(AppError.create(i18n.__('INVALID_SONAR_RESULT', { row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Verify female animal exists
+            const femaleAnimal = await Animal.findOne({ tagId, owner: userId });
+            if (!femaleAnimal) {
                 return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
             }
+
+            // Verify female animal's gender
+            if (femaleAnimal.gender !== 'female') {
+                return next(AppError.create(i18n.__('ANIMAL_NOT_FEMALE', { tagId, row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Verify male animal exists
+            const maleAnimal = await Animal.findOne({ tagId: maleTag_id, owner: userId });
+            if (!maleAnimal) {
+                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId: maleTag_id, row: i + 1 }), 404, httpstatustext.FAIL));
+            }
+
+            // Verify male animal's gender
+            if (maleAnimal.gender !== 'male') {
+                return next(AppError.create(i18n.__('ANIMAL_NOT_MALE', { tagId: maleTag_id, row: i + 1 }), 400, httpstatustext.FAIL));
+            }
+
+            // Calculate expected delivery date (if mating is successful)
+            const expectedDeliveryDate = sonarRsult?.toLowerCase() === 'positive' ? 
+                new Date(matingDate.getTime() + (150 * 24 * 60 * 60 * 1000)) : undefined;
 
             // Create mating record
             const newMating = new Mating({
@@ -142,10 +183,11 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
                 matingType,
                 matingDate,
                 checkDays,
-                sonarDate: sonarDateStr ? new Date(sonarDateStr) : undefined,
-                sonarRsult,
+                sonarDate,
+                sonarRsult: sonarRsult?.toLowerCase(),
+                expectedDeliveryDate,
                 owner: userId,
-                animalId: animal._id
+                animalId: femaleAnimal._id
             });
 
             await newMating.save();
