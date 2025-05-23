@@ -1,0 +1,8 @@
+{
+    "ITEM_EXPIRED_MESSAGE": "{{type}} '{{name}}' انتهت صلاحيته في {{date}}",
+    "ITEM_EXPIRING_SOON_MESSAGE": "{{type}} '{{name}}' سينتهي خلال {{days}} يوم (في {{date}})",
+    "NOTIFICATION_NOT_FOUND": "الإشعار غير موجود",
+    "ALL_NOTIFICATIONS_MARKED_READ": "تم تحديد جميع الإشعارات كمقروءة",
+    "NOTIFICATION_DELETED": "تم حذف الإشعار بنجاح",
+    "NOTIFICATION_CHECK_FAILED": "فشل في التحقق من الإشعارات"
+} 

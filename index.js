@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const mongoose = require('mongoose');
 const httpstatustext=require('./utilits/httpstatustext');
+const cronJobs = require('./utilits/cronJobs');
 
 const notificationCron = require('./middleware/notificationCron');
 const matingNotificationCron = require('./middleware/matingNotification');
@@ -13,8 +14,9 @@ app.use(cors());
 const url=process.env.MONGO_URL;
 mongoose.connect(url).then(()=>{
     console.log("mongoose start");
+    // Start cron jobs after database connection
+    cronJobs.scheduleExpiryCheck();
 })
-
 
 app.use (express.json());
 const authrouter=require('./Routes/authRoutes');
@@ -40,10 +42,8 @@ app.use('/',weightRoutes)
 const reportRoutes=require('./Routes/reportRoutes');
 app.use('/',reportRoutes)
 
-
 const excludedRoutes=require('./Routes/excludedRoutes');
 app.use('/',excludedRoutes)
-
 
 const feedRoutes=require('./Routes/feedRoutes');
 app.use('/',feedRoutes)
@@ -60,10 +60,12 @@ app.use('/',locationshedRoutes)
 const breedRoutes=require('./Routes/breedRoutes');
 app.use('/',breedRoutes)
 
+const notificationRoutes=require('./Routes/notificationRoutes');
+app.use('/',notificationRoutes)
+
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
 })
-
 
 app.use((error, req, res, next) => {
     res.status(error.statusCode || 500).json({
@@ -75,7 +77,6 @@ app.use((error, req, res, next) => {
 //   res.json(next);
     
 })
-
 
 app.listen(process.env.PORT,()=>{
     console.log('listening on port : 5000');
