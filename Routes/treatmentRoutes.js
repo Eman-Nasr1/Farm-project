@@ -2,6 +2,7 @@ const express=require('express');
 const router=express.Router();
 const treatmentController=require('../Controllers/treatment.controller');
 const verifytoken=require('../middleware/verifytoken');
+const excelOps = require('../utilits/excelOperations');
 
 router.get('/api/treatment/getalltreatmentes',verifytoken,treatmentController.getallTreatments);
 
@@ -22,7 +23,7 @@ router.patch('/api/treatment/updatetreatmentforAnimals/:treatmentEntryId',verify
 router.delete('/api/treatment/deletetreatmentforAnimals/:treatmentShedId',verifytoken,treatmentController.deleteTreatmentShed);
 
 // Excel operations
-router.post('/api/treatment/import', verifytoken, treatmentController.importTreatmentsFromExcel);
+router.post('/api/treatment/import', verifytoken, excelOps.uploadExcelFile, treatmentController.importTreatmentsFromExcel);
 router.get('/api/treatment/export', verifytoken, treatmentController.exportTreatmentsToExcel);
 router.get('/api/treatment/downloadTemplate', verifytoken, treatmentController.downloadTreatmentTemplate);
 

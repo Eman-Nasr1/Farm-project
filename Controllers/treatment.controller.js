@@ -8,10 +8,6 @@ const Animal = require("../Models/animal.model");
 const TreatmentEntry = require("../Models/treatmentEntry.model");
 const AnimalCost = require("../Models/animalCost.model");
 const mongoose = require("mongoose");
-const multer = require('multer');
-const xlsx = require('xlsx');
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage }).single('file');
 const excelOps = require('../utilits/excelOperations');
 const i18n = require('../i18n');
 
@@ -866,6 +862,10 @@ const importTreatmentsFromExcel = asyncwrapper(async (req, res, next) => {
     }
 
     try {
+        if (!req.file || !req.file.buffer) {
+            return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
+        }
+
         const data = excelOps.readExcelFile(req.file.buffer);
 
         // Skip header row

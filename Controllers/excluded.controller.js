@@ -5,6 +5,9 @@ const Excluded=require('../Models/excluded.model');
 const Animal=require('../Models/animal.model');
 const excelOps = require('../utilits/excelOperations');
 const i18n = require('../i18n');
+const multer = require('multer');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage }).single('file');
 
 const getallexcluded =asyncwrapper(async(req,res)=>{
 
@@ -133,6 +136,10 @@ const importExcludedFromExcel = asyncwrapper(async (req, res, next) => {
     }
 
     try {
+        if (!req.file || !req.file.buffer) {
+            return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
+        }
+
         const data = excelOps.readExcelFile(req.file.buffer);
 
         // Skip header row

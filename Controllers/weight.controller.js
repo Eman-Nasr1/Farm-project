@@ -79,83 +79,93 @@ const importWeightsFromExcel = asyncwrapper(async (req, res, next) => {
         return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
     }
 
-    try {
-        const data = excelOps.readExcelFile(req.file.buffer);
-
-        // Skip header row
-        for (let i = 1; i < data.length; i++) {
-            const row = data[i];
-
-            // Skip empty rows
-            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
-
-            // Extract and validate data
-            const [
-                tagId,
-                dateStr,
-                weightStr,
-                heightStr,
-                weightType
-            ] = row.map(cell => cell?.toString().trim());
-
-            // Validate required fields
-            if (!tagId || !dateStr || !weightStr || !weightType) {
-                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
-            }
-
-            // Validate weight type
-            if (!['birth', 'Weaning', 'regular'].includes(weightType)) {
-                return next(AppError.create(i18n.__('INVALID_WEIGHT_TYPE', { row: i + 1 }), 400, httpstatustext.FAIL));
-            }
-
-            // Parse dates
-            const date = new Date(dateStr);
-            if (isNaN(date)) {
-                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
-            }
-
-            // Parse numeric values
-            const weight = parseFloat(weightStr);
-            if (isNaN(weight)) {
-                return next(AppError.create(i18n.__('INVALID_WEIGHT_VALUE', { row: i + 1 }), 400, httpstatustext.FAIL));
-            }
-
-            let height;
-            if (heightStr) {
-                height = parseFloat(heightStr);
-                if (isNaN(height)) {
-                    return next(AppError.create(i18n.__('INVALID_HEIGHT_VALUE', { row: i + 1 }), 400, httpstatustext.FAIL));
-                }
-            }
-
-            // Verify animal exists
-            const animal = await Animal.findOne({ tagId, owner: userId });
-            if (!animal) {
-                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
-            }
-
-            // Create weight record
-            const newWeight = new Weight({
-                tagId,
-                Date: date,
-                weight,
-                height,
-                weightType,
-                owner: userId,
-                animalId: animal._id
-            });
-
-            await newWeight.save();
+    upload(req, res, async function (err) {
+        if (err) {
+            return next(AppError.create('File upload failed', 400, httpstatustext.FAIL));
         }
 
-        res.json({
-            status: httpstatustext.SUCCESS,
-            message: i18n.__('WEIGHTS_IMPORTED_SUCCESSFULLY')
-        });
-    } catch (error) {
-        console.error('Import error:', error);
-        return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
-    }
+        try {
+            if (!req.file || !req.file.buffer) {
+                return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
+            }
+
+            const data = excelOps.readExcelFile(req.file.buffer);
+
+            // Skip header row
+            for (let i = 1; i < data.length; i++) {
+                const row = data[i];
+
+                // Skip empty rows
+                if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+
+                // Extract and validate data
+                const [
+                    tagId,
+                    dateStr,
+                    weightStr,
+                    heightStr,
+                    weightType
+                ] = row.map(cell => cell?.toString().trim());
+
+                // Validate required fields
+                if (!tagId || !dateStr || !weightStr || !weightType) {
+                    return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+
+                // Validate weight type
+                if (!['birth', 'Weaning', 'regular'].includes(weightType)) {
+                    return next(AppError.create(i18n.__('INVALID_WEIGHT_TYPE', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+
+                // Parse dates
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) {
+                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+
+                // Parse numeric values
+                const weight = parseFloat(weightStr);
+                if (isNaN(weight)) {
+                    return next(AppError.create(i18n.__('INVALID_WEIGHT_VALUE', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+
+                let height;
+                if (heightStr) {
+                    height = parseFloat(heightStr);
+                    if (isNaN(height)) {
+                        return next(AppError.create(i18n.__('INVALID_HEIGHT_VALUE', { row: i + 1 }), 400, httpstatustext.FAIL));
+                    }
+                }
+
+                // Verify animal exists
+                const animal = await Animal.findOne({ tagId, owner: userId });
+                if (!animal) {
+                    return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
+                }
+
+                // Create weight record
+                const newWeight = new Weight({
+                    tagId,
+                    Date: date,
+                    weight,
+                    height,
+                    weightType,
+                    owner: userId,
+                    animalId: animal._id
+                });
+
+                await newWeight.save();
+            }
+
+            res.json({
+                status: httpstatustext.SUCCESS,
+                message: i18n.__('WEIGHTS_IMPORTED_SUCCESSFULLY')
+            });
+        } catch (error) {
+            console.error('Import error:', error);
+            return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+        }
+    });
 });
 
 const getallweight =asyncwrapper(async(req,res)=>{
