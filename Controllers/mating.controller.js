@@ -3,10 +3,6 @@ const httpstatustext=require('../utilits/httpstatustext');
 const asyncwrapper=require('../middleware/asyncwrapper');
 const AppError=require('../utilits/AppError');
 const Animal=require('../Models/animal.model');
-const multer = require('multer');
-const xlsx = require('xlsx');
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage }).single('file');
 const i18n = require('../i18n');
 const excelOps = require('../utilits/excelOperations');
 
@@ -89,10 +85,6 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
     }
 
     try {
-        if (!req.file || !req.file.buffer) {
-            return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
-        }
-
         const data = excelOps.readExcelFile(req.file.buffer);
 
         // Skip header row
