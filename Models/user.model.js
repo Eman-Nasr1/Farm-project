@@ -21,6 +21,10 @@ const Userschema=new mongoose.Schema(
             type:String,
             required:true
         },
+        registerationType:{
+            type:String,
+            enum:["fattening","breeding"],
+        },
         phone:{
             type: String,
             required: true

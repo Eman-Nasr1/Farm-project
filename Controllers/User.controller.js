@@ -6,6 +6,7 @@ const bcrypt=require('bcryptjs');
 const jwt =require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer'); 
+const i18n = require('../i18n');
 
  const getallusers = asyncwrapper(async (req, res, next) => {
   if (req.user.role !== 'admin') {
@@ -59,7 +60,7 @@ const updateUser = asyncwrapper(async (req, res, next) => {
   // Find the user by ID
   const user = await User.findById(userId);
   if (!user) {
-      const error = AppError.create('User not found', 404, httpstatustext.FAIL);
+      const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.FAIL);
       return next(error);
   }
 
@@ -67,7 +68,7 @@ const updateUser = asyncwrapper(async (req, res, next) => {
   if (email && email !== user.email) {
       const emailExists = await User.findOne({ email });
       if (emailExists) {
-          const error = AppError.create('Email already in use', 400, httpstatustext.FAIL);
+          const error = AppError.create(i18n.__('EMAIL_IN_USE'), 400, httpstatustext.FAIL);
           return next(error);
       }
   }
@@ -96,7 +97,7 @@ const updateUser = asyncwrapper(async (req, res, next) => {
 });
 const deleteUser= asyncwrapper(async(req,res,next)=>{
   if (req.role !== 'admin') {
-    const error = AppError.create('Admin access only', 403, httpstatustext.ERROR);
+    const error = AppError.create(i18n.__('ADMIN_ACCESS_ONLY'), 403, httpstatustext.ERROR);
     return next(error);
   }
   await User.deleteOne({_id:req.params.userId});
@@ -136,15 +137,15 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
 });
  
  const register=asyncwrapper(async(req,res,next)=>{
-    const {name,email,password,confirmpassword,phone,country,role}=req.body;
+    const {name,email,password,confirmpassword,phone,country,role,registerationType}=req.body;
 
     const olderuser=await User.findOne({email:email});
     if(olderuser){
-        const error=AppError.create('user already exists',400,httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('USER_EXISTS'), 400, httpstatustext.FAIL);
          return next(error);
     }
     if (password !== confirmpassword) {
-        const error=AppError.create('password and confirmpassword do not match',400,httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('PASSWORD_MISMATCH'), 400, httpstatustext.FAIL);
         return next(error);
       }
 
@@ -156,10 +157,11 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
         confirmpassword:hashpassword,
         phone,
         role,
+        registerationType,
         country
      })
      const token=await jwt.sign(
-        { email: newuser.email, id: newuser._id, role: newuser.role, name:newuser.name }, // Include 'role' in the payload
+        { email: newuser.email, id: newuser._id, role: newuser.role, name:newuser.name ,registerationType:newuser.registerationType}, // Include 'role' in the payload
         process.env.JWT_SECRET_KEY,
         { expiresIn: '30d' }) 
 
@@ -173,27 +175,27 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
  const login=asyncwrapper(async(req,res,next)=>{
     const{email,password}=req.body;
     if(!email && !password){
-        const error=AppError.create('email and password are required',400,httpstatustext.FAIL);
+        const error = AppError.create(i18n.__('EMAIL_PASSWORD_REQUIRED'), 400, httpstatustext.FAIL);
         return next(error);
     }
     const user=await User.findOne({email:email});
 
     if(!user){
-      const error=AppError.create('user not found',404,httpstatustext.ERROR);
+      const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.ERROR);
       return next(error);
     }
 
     const matchedpassword=bcrypt.compare(password,user.password);
     if(user && matchedpassword){
         const token = await jwt.sign(
-          { email: user.email, id: user._id, role: user.role }, // Include 'role' in the payload
+          { email: user.email, id: user._id, role: user.role ,registerationType:user.registerationType}, // Include 'role' in the payload
           process.env.JWT_SECRET_KEY,
           { expiresIn: '30d' }
       );
         res.status(201).json({status:httpstatustext.SUCCESS,data:{token}});
       } 
       else {
-        const error=AppError.create('something wrong',500,httpstatustext.ERROR);
+        const error = AppError.create(i18n.__('SOMETHING_WRONG'), 500, httpstatustext.ERROR);
         return next(error);
       }
 
@@ -204,13 +206,13 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
   const { email } = req.body;
 
   if (!email) {
-    return next(AppError.create('Email is required', 400, httpstatustext.FAIL));
+    return next(AppError.create(i18n.__('EMAIL_REQUIRED'), 400, httpstatustext.FAIL));
   }
 
   const user = await User.findOne({ email });
 
   if (!user) {
-    return next(AppError.create('User not found', 404, httpstatustext.ERROR));
+    return next(AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.ERROR));
   }
 
   // Generate a 6-digit verification code
@@ -241,7 +243,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
 
   await transporter.sendMail(mailOptions);
 
-  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Verification code sent to your email' });
+  res.status(200).json({ status: httpstatustext.SUCCESS, message: i18n.__('VERIFICATION_CODE_SENT') });
 });
 
  
@@ -249,7 +251,7 @@ const verifyCode = asyncwrapper(async (req, res, next) => {
   const { verificationCode } = req.body;
 
   if (!verificationCode) {
-    return next(AppError.create('Verification code is required', 400, httpstatustext.FAIL));
+    return next(AppError.create(i18n.__('VERIFICATION_CODE_REQUIRED'), 400, httpstatustext.FAIL));
   }
 
   const user = await User.findOne({
@@ -258,14 +260,14 @@ const verifyCode = asyncwrapper(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(AppError.create('Invalid or expired verification code', 400, httpstatustext.ERROR));
+    return next(AppError.create(i18n.__('INVALID_EXPIRED_CODE'), 400, httpstatustext.ERROR));
   }
 
   // Generate a token (JWT) with the user's ID
   const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET_KEY, { expiresIn: '1h' });
 
   // Send the token back to the user
-  res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Verification code is valid', token });
+  res.status(200).json({ status: httpstatustext.SUCCESS, message: i18n.__('VERIFICATION_CODE_VALID'), token });
 });
 
 // Function to handle password reset  
