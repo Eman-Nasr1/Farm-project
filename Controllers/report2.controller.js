@@ -8,6 +8,7 @@ const Treatment = require('../Models/treatment.model'); // Path to the Treatment
 const TreatmentEntry = require('../Models/treatmentEntry.model');
 const Vaccine=require('../Models/vaccine.model');
 const VaccineEntry=require('../Models/vaccineEntry.model'); 
+const User = require('../Models/user.model'); // Add User model
 const asyncwrapper = require('../middleware/asyncwrapper');
 const mongoose = require('mongoose');
 const PdfPrinter = require('pdfmake');
@@ -27,6 +28,15 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
 
         const userId = new mongoose.Types.ObjectId(req.user.id);
         const { animalType, dateFrom, dateTo } = req.query;
+
+        // Get user's registration type
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'User not found'
+            });
+        }
 
         // Validate required parameters
         if (!animalType || !dateFrom || !dateTo) {
@@ -50,19 +60,8 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
         fromDate.setUTCHours(0, 0, 0, 0);
         toDate.setUTCHours(23, 59, 59, 999);
 
-        // Execute all aggregations in parallel for better performance
-        const [
-            feedConsumption,
-            remainingFeedStock,
-            treatmentConsumption,
-            remainingTreatmentStock,
-            vaccineConsumption,
-            remainingVaccineStock,
-            animalReport,
-            excludedReport,
-            positiveSonarCount,
-            birthEntriesReport
-        ] = await Promise.all([
+        // Base queries that are always executed
+        const baseQueries = [
             // Feed Consumption
             ShedEntry.aggregate([  
                 {  
@@ -271,8 +270,11 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
                         count: 1
                     }
                 }
-            ]),
-            
+            ])
+        ];
+
+        // Breeding-related queries that are only executed for breeding type
+        const breedingQueries = user.registerationType === 'breeding' ? [
             // Positive Sonar Count
             Mating.aggregate([  
                 {  
@@ -339,14 +341,37 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
                     }
                 }
             ])
-        ]);
+        ] : [
+            // Placeholder values for breeding-type data when user is fattening type
+            Promise.resolve([]), // Empty array for positiveSonarCount
+            Promise.resolve([])  // Empty array for birthEntriesReport
+        ];
 
-        // Process birth entries data
-        const birthEntriesData = birthEntriesReport[0] || {
-            totalBirthEntries: 0,
-            totalMales: 0,
-            totalFemales: 0
-        };
+        // Execute all queries
+        const [
+            feedConsumption,
+            remainingFeedStock,
+            treatmentConsumption,
+            remainingTreatmentStock,
+            vaccineConsumption,
+            remainingVaccineStock,
+            animalReport,
+            excludedReport,
+            positiveSonarCount,
+            birthEntriesReport
+        ] = await Promise.all([...baseQueries, ...breedingQueries]);
+
+        // Process birth entries data based on registration type
+        const birthEntriesData = user.registerationType === 'breeding' ? 
+            (birthEntriesReport[0] || {
+                totalBirthEntries: 0,
+                totalMales: 0,
+                totalFemales: 0
+            }) : {
+                totalBirthEntries: 0,
+                totalMales: 0,
+                totalFemales: 0
+            };
 
         // Send successful response
         res.status(200).json({
@@ -354,23 +379,22 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
             data: {
                 animalReport,
                 excludedReport,
-                pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
-                birthEntries: {
-                    totalBirthEntries: birthEntriesData.totalBirthEntries,
-                    totalMales: birthEntriesData.totalMales,
-                    totalFemales: birthEntriesData.totalFemales
-                },
-                feedConsumption,  
-                remainingFeedStock,  
-                treatmentConsumption,  
+                ...(user.registerationType === 'breeding' && {
+                    pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
+                    birthEntries: birthEntriesData
+                }),
+                feedConsumption,
+                remainingFeedStock,
+                treatmentConsumption,
                 remainingTreatmentStock,
                 vaccineConsumption,
-                remainingVaccineStock 
+                remainingVaccineStock
             },
             meta: {
                 dateFrom: dateFrom,
                 dateTo: dateTo,
                 animalType: animalType,
+                registrationType: user.registerationType,
                 generatedAt: new Date()
             }
         });
@@ -385,262 +409,163 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
     }
 });
 
-const generateCombinedPDFReport = async (req, res, next) => {  
+const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
     try {
         const userId = new mongoose.Types.ObjectId(req.user.id);
         const { animalType, dateFrom, dateTo, lang = 'en' } = req.query;
+
+        // Get user's registration type and country
+        const user = await User.findById(userId).select('registerationType country');
+        if (!user) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'User not found'
+            });
+        }
 
         const fromDate = new Date(dateFrom);
         fromDate.setUTCHours(0, 0, 0, 0);
         const toDate = new Date(dateTo);
         toDate.setUTCHours(23, 59, 59, 999);
 
-        // Fetch feed consumption  
-        const feedConsumption = await ShedEntry.aggregate([  
-            {  
-                $match: {  
-                    owner: userId,  
-                    date: { $gte: fromDate, $lte: toDate }  
-                }  
-            },  
-            {  
-                $unwind: '$feeds' // Unwind the feeds array  
-            },  
-            {  
-                $lookup: {  
-                    from: 'feeds',  
-                    localField: 'feeds.feedId',  
-                    foreignField: '_id',  
-                    as: 'feedDetails'  
-                }  
-            },  
-            {  
-                $unwind: '$feedDetails' // Unwind feed details  
-            },  
-            {  
-                $group: {  
-                    _id: '$feedDetails.name', // Group by feed name  
-                    totalConsumed: { $sum: '$feeds.quantity' } // Sum the quantities consumed  
-                }  
-            },  
-            {  
-                $project: {  
-                    _id: 0,  
-                    feedName: '$_id',  
-                    totalConsumed: 1  
-                }  
-            }  
-        ]);  
-
-        // Fetch remaining stock for feeds  
-        const remainingFeedStock = await Feed.aggregate([  
-            {  
-                $match: {  
-                    owner: userId  
-                }  
-            }  
-        ]);  
-
-        // Fetch treatment consumption  
-        const treatmentConsumption = await TreatmentEntry.aggregate([  
-            {  
-                $match: {  
-                    owner: userId,  
-                    date: { $gte: fromDate, $lte: toDate }  
-                }  
-            },  
-            {  
-                $unwind: '$treatments' // Unwind the treatments array  
-            },  
-            {  
-                $lookup: {  
-                    from: 'treatments',  
-                    localField: 'treatments.treatmentId',  
-                    foreignField: '_id',  
-                    as: 'treatmentDetails'  
-                }  
-            },  
-            {  
-                $unwind: '$treatmentDetails' // Unwind treatment details  
-            },  
-            {  
-                $group: {  
-                    _id: '$treatmentDetails.name', // Group by treatment name  
-                    totalConsumed: { $sum: '$treatments.volume' } // Sum the volumes consumed  
-                }  
-            },  
-            {  
-                $project: {  
-                    _id: 0,  
-                    treatmentName: '$_id',  
-                    totalConsumed: 1  
-                }  
-            }  
-        ]);  
-
-        // Fetch remaining stock for treatments  
-        const remainingTreatmentStock = await Treatment.aggregate([  
-            {  
-                $match: {  
-                    owner: userId  
-                }  
-            }  
-        ]);  
-
-        // Generate animal report
-        const animalReport = await Animal.aggregate([
-            {
-                $match: {
-                    owner: userId,
-                    animalType: animalType,
-                    createdAt: { $gte: fromDate, $lte: toDate }
-                }
-            },
-            {
-                $group: {
-                    _id: { gender: '$gender', animalType: '$animalType' },
-                    count: { $sum: 1 }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    gender: '$_id.gender',
-                    animalType: '$_id.animalType',
-                    count: 1
-                }
-            }
-        ]);
-
-        // Generate excluded animal report
-        const excludedReport = await Excluded.aggregate([
-            {
-                $match: {
-                    owner: userId,
-                    excludedType: { $in: ["death", "sweep", "sale"] },
-                    Date: { $gte: fromDate, $lte: toDate }
-                }
-            },
-            {
-                $lookup: {
-                    from: 'animals',
-                    localField: 'animalId',
-                    foreignField: '_id',
-                    as: 'animal'
-                }
-            },
-            {
-                $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
-            },
-            {
-                $match: { 'animal.animalType': animalType }
-            },
-            {
-                $group: {
-                    _id: { excludedType: '$excludedType', animalType: '$animal.animalType', gender: '$animal.gender' },
-                    count: { $sum: 1 }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    excludedType: '$_id.excludedType',
-                    animalType: '$_id.animalType',
-                    gender: '$_id.gender',
-                    count: 1
-                }
-            }
-        ]);
-
-        // Calculate positive sonar count
-        const positiveSonarCount = await Mating.aggregate([  
-            {  
-                $match: {  
-                    owner: userId,  
-                    sonarRsult: 'positive',  
-                    matingDate: { $gte: fromDate, $lte: toDate },  
-                    expectedDeliveryDate: { $gt: new Date() } // Check if expectedDeliveryDate is greater than today  
-                }  
-            },  
-            {  
-                $lookup: {  
-                    from: 'animals',  
-                    localField: 'animalId',  
-                    foreignField: '_id',  
-                    as: 'animal'  
-                }  
-            },  
-            {  
-                $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }  
-            },  
-            {  
-                $match: { 'animal.animalType': animalType }  
-            },  
-            {  
-                $count: 'positiveSonarCount'  
-            }  
-        ]);
-
-        // Generate birth entries report
-        const birthEntriesReport = await Breeding.aggregate([
-            {
-                $match: {
-                    owner: userId,
-                    createdAt: { $gte: fromDate, $lte: toDate }
-                }
-            },
-            {
-                $lookup: {
-                    from: 'animals',
-                    localField: 'animalId',
-                    foreignField: '_id',
-                    as: 'animal'
-                }
-            },
-            {
-                $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
-            },
-            {
-                $match: { 'animal.animalType': animalType }
-            },
-            {
-                $unwind: '$birthEntries'
-            },
-            {
-                $match: { 'birthEntries.createdAt': { $gte: fromDate, $lte: toDate } }
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalBirthEntries: { $sum: 1 },
-                    totalMales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'male'] }, 1, 0] } },
-                    totalFemales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'female'] }, 1, 0] } }
-                }
-            }
-        ]);
-
-        // Extract values from birthEntriesReport
-        const { totalBirthEntries = 0, totalMales = 0, totalFemales = 0 } = birthEntriesReport[0] || {};
-
-        // Prepare data for the PDF
-        const reportData = {
-            dateFrom: req.query.dateFrom,
-            dateTo: req.query.dateTo,
-            animalType: req.query.animalType,
-            lang: lang,
+        // Execute all queries
+        const [
             animalReport,
             excludedReport,
-            feedConsumption,  
-            remainingFeedStock,  
-            treatmentConsumption,  
+            feedConsumption,
+            remainingFeedStock,
+            treatmentConsumption,
             remainingTreatmentStock,
-            birthEntries: {
-                totalBirthEntries,
-                totalMales,
-                totalFemales
-            },
-            pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
-            vaccineConsumption: await VaccineEntry.aggregate([
+            vaccineConsumption,
+            remainingVaccineStock,
+            positiveSonarCount,
+            birthEntriesReport
+        ] = await Promise.all([
+            // Animal Report
+            Animal.aggregate([/* ... your existing animal aggregation ... */]),
+            // Excluded Report with financial data
+            Excluded.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        excludedType: { $in: ["death", "sweep", "sale"] },
+                        Date: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'animals',
+                        localField: 'animalId',
+                        foreignField: '_id',
+                        as: 'animal'
+                    }
+                },
+                {
+                    $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
+                },
+                {
+                    $match: { 'animal.animalType': animalType }
+                },
+                {
+                    $group: {
+                        _id: { excludedType: '$excludedType', animalType: '$animal.animalType', gender: '$animal.gender' },
+                        count: { $sum: 1 },
+                        value: { $sum: '$price' }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        excludedType: '$_id.excludedType',
+                        animalType: '$_id.animalType',
+                        gender: '$_id.gender',
+                        count: 1,
+                        value: 1
+                    }
+                }
+            ]),
+            // Feed consumption with costs
+            ShedEntry.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        date: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $unwind: '$feeds'
+                },
+                {
+                    $lookup: {
+                        from: 'feeds',
+                        localField: 'feeds.feedId',
+                        foreignField: '_id',
+                        as: 'feedDetails'
+                    }
+                },
+                {
+                    $unwind: '$feedDetails'
+                },
+                {
+                    $group: {
+                        _id: '$feedDetails.name',
+                        totalConsumed: { $sum: '$feeds.quantity' },
+                        totalCost: { $sum: { $multiply: ['$feeds.quantity', '$feedDetails.price'] } }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        feedName: '$_id',
+                        totalConsumed: 1,
+                        totalCost: 1
+                    }
+                }
+            ]),
+            // Remaining feed stock
+            Feed.aggregate([/* ... your existing feed stock aggregation ... */]),
+            // Treatment consumption with costs
+            TreatmentEntry.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        date: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $unwind: '$treatments'
+                },
+                {
+                    $lookup: {
+                        from: 'treatments',
+                        localField: 'treatments.treatmentId',
+                        foreignField: '_id',
+                        as: 'treatmentDetails'
+                    }
+                },
+                {
+                    $unwind: '$treatmentDetails'
+                },
+                {
+                    $group: {
+                        _id: '$treatmentDetails.name',
+                        totalConsumed: { $sum: '$treatments.volume' },
+                        totalCost: { $sum: { $multiply: ['$treatments.volume', '$treatmentDetails.pricePerMl'] } }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        treatmentName: '$_id',
+                        totalConsumed: 1,
+                        totalCost: 1
+                    }
+                }
+            ]),
+            // Remaining treatment stock
+            Treatment.aggregate([/* ... your existing treatment stock aggregation ... */]),
+            // Vaccine consumption with costs
+            VaccineEntry.aggregate([
                 {
                     $match: {
                         owner: userId,
@@ -661,60 +586,90 @@ const generateCombinedPDFReport = async (req, res, next) => {
                 {
                     $group: {
                         _id: '$vaccineDetails.vaccineName',
-                        totalConsumed: { $sum: 1 }
+                        totalConsumed: { $sum: 1 },
+                        totalCost: { $sum: '$vaccineDetails.pricing.dosePrice' }
                     }
                 },
                 {
                     $project: {
                         _id: 0,
                         vaccineName: '$_id',
-                        totalConsumed: 1
+                        totalConsumed: 1,
+                        totalCost: 1
                     }
                 }
-            ]) || [],
-            remainingVaccineStock: await Vaccine.aggregate([
-                {
-                    $match: {
-                        owner: userId
-                    }
-                },
-                {
-                    $project: {
-                        _id: 0,
-                        vaccineName: 1,
-                        'stock.bottles': 1,
-                        'stock.dosesPerBottle': 1,
-                        'stock.totalDoses': 1,
-                        'pricing.bottlePrice': 1,
-                        'pricing.dosePrice': 1
-                    }
-                }
-            ]) || []
+            ]),
+            // Remaining vaccine stock
+            Vaccine.aggregate([/* ... your existing vaccine stock aggregation ... */]),
+            // Breeding specific queries if needed
+            ...(user.registerationType === 'breeding' ? [
+                /* ... your existing breeding queries ... */
+            ] : [Promise.resolve([]), Promise.resolve([])])
+        ]);
+
+        // Process birth entries data based on registration type
+        const birthEntriesData = user.registerationType === 'breeding' ? 
+            (birthEntriesReport[0] || {
+                totalBirthEntries: 0,
+                totalMales: 0,
+                totalFemales: 0
+            }) : {
+                totalBirthEntries: 0,
+                totalMales: 0,
+                totalFemales: 0
+            };
+
+        // Prepare data for the PDF
+        const reportData = {
+            dateFrom: dateFrom,
+            dateTo: dateTo,
+            animalType: animalType,
+            lang: lang,
+            country: user.country || 'SA', // Default to Saudi Arabia if not specified
+            registrationType: user.registerationType,
+            animalReport,
+            excludedReport,
+            feedConsumption,
+            remainingFeedStock,
+            treatmentConsumption,
+            remainingTreatmentStock,
+            vaccineConsumption,
+            remainingVaccineStock,
+            ...(user.registerationType === 'breeding' && {
+                pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
+                birthEntries: birthEntriesData
+            })
         };
 
         // Generate the PDF report
         const pdfPath = await generatePDF(reportData);
 
-        // Send the PDF file as a response with language-specific filename
-        res.download(pdfPath, `combined_report_${lang}.pdf`, (err) => {  
-            if (err) {  
-                console.error("Error downloading the PDF: ", err);  
-                res.status(500).json({ status: 'error', message: 'Failed to download PDF.' });  
-            } else {  
-                fs.unlink(pdfPath, (err) => {  
-                    if (err) console.error("Error deleting the PDF file: ", err);  
-                });  
-            }  
-        });  
+        // Send the PDF file as a response
+        res.download(pdfPath, `farm_report_${lang}.pdf`, (err) => {
+            if (err) {
+                console.error("Error downloading the PDF: ", err);
+                res.status(500).json({ status: 'error', message: 'Failed to download PDF.' });
+            } else {
+                fs.unlink(pdfPath, (err) => {
+                    if (err) console.error("Error deleting the PDF file: ", err);
+                });
+            }
+        });
     } catch (error) {
-        console.error("Error in generateCombinedPDFReport: ", error);
-        res.status(500).json({ status: 'error', message: error.message });
+        console.error("Error generating combined PDF report:", error);
+        res.status(500).json({
+            status: 'error',
+            message: 'An error occurred while generating the report',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-};
+});
+
 // Function to generate the PDF
 const generatePDF = (data) => {  
     const lang = data.lang || 'en';
     const isArabic = lang === 'ar';
+    const isBreedingType = data.registrationType === 'breeding';
     
     // Translations object
     const translations = {
@@ -885,7 +840,7 @@ const generatePDF = (data) => {
                 font-weight: bold;
                 color: #2c3e50;
                 padding: 10px;
-                border-bottom: 2px solid #3498db;
+                border-bottom: 2px solidrgb(70, 174, 101);
             }  
             .report-subtitle {
                 text-align: center;
@@ -919,7 +874,7 @@ const generatePDF = (data) => {
                 border: 1px solid #ddd;
             }  
             .table th { 
-                background-color: #3498db; 
+                background-color: #21763e; 
                 color: white;
                 font-weight: bold;
             }
@@ -948,7 +903,7 @@ const generatePDF = (data) => {
             .stat-number {
                 font-size: 24px;
                 font-weight: bold;
-                color: #3498db;
+                color:  #21763e;
                 margin: 10px 0;
             }
             .stat-label {
@@ -986,14 +941,16 @@ const generatePDF = (data) => {
                     <div class="stat-number">${data.animalReport.reduce((sum, animal) => sum + animal.count, 0)}</div>
                     <div class="stat-label">${t.stats.totalAnimals}</div>
                 </div>
+                ${isBreedingType ? `
                 <div class="stat-box">
-                    <div class="stat-number">${data.pregnantAnimal}</div>
+                    <div class="stat-number">${data.pregnantAnimal || 0}</div>
                     <div class="stat-label">${t.stats.pregnantAnimals}</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-number">${data.birthEntries.totalBirthEntries}</div>
+                    <div class="stat-number">${data.birthEntries?.totalBirthEntries || 0}</div>
                     <div class="stat-label">${t.stats.totalBirths}</div>
                 </div>
+                ` : ''}
                 <div class="stat-box">
                     <div class="stat-number">${data.excludedReport.reduce((sum, excluded) => sum + excluded.count, 0)}</div>
                     <div class="stat-label">${t.stats.totalExcluded}</div>
@@ -1023,6 +980,7 @@ const generatePDF = (data) => {
             </table>
         </div>
 
+        ${isBreedingType ? `
         <div class="section">
             <h2 class="section-title">${t.births.title}</h2>
             <table class="table">  
@@ -1035,15 +993,16 @@ const generatePDF = (data) => {
                 <tbody>  
                     <tr>
                         <td>${t.births.totalMales}</td>
-                        <td>${data.birthEntries.totalMales || 0}</td>
+                        <td>${data.birthEntries?.totalMales || 0}</td>
                     </tr>
                     <tr>
                         <td>${t.births.totalFemales}</td>
-                        <td>${data.birthEntries.totalFemales || 0}</td>
+                        <td>${data.birthEntries?.totalFemales || 0}</td>
                     </tr>
                 </tbody>  
             </table>
         </div>
+        ` : ''}
 
         <div class="section">
             <h2 class="section-title">${t.excluded.title}</h2>
@@ -1117,92 +1076,12 @@ const generatePDF = (data) => {
             </table>
         </div>
 
-        <div class="section">
-            <h2 class="section-title">${t.vaccine.title}</h2>
-            <div class="stats-container">
-                <div class="stat-box">
-                    <div class="stat-number">${data.vaccineConsumption.reduce((sum, v) => sum + v.totalConsumed, 0)}</div>
-                    <div class="stat-label">${t.vaccine.totalVaccinations}</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-number">${data.remainingVaccineStock.reduce((sum, v) => sum + (v.stock.totalDoses || 0), 0)}</div>
-                    <div class="stat-label">${t.vaccine.remainingDoses}</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-number">$${data.vaccineConsumption.reduce((sum, v) => {
-                        const stock = data.remainingVaccineStock.find(s => s.vaccineName === v.vaccineName);
-                        return sum + (v.totalConsumed * (stock?.pricing?.dosePrice || 0));
-                    }, 0).toFixed(2)}</div>
-                    <div class="stat-label">${t.vaccine.vaccinationCost}</div>
-                </div>
-            </div>
-            <table class="table">  
-                <thead>  
-                    <tr>  
-                        <th>${t.vaccine.name}</th>  
-                        <th>${t.vaccine.dosesUsed}</th>  
-                        <th>${t.vaccine.remaining}</th>  
-                        <th>${t.vaccine.costPerDose}</th>
-                        <th>${t.vaccine.totalCost}</th>  
-                    </tr>  
-                </thead>  
-                <tbody>  
-                    ${data.vaccineConsumption.map(vaccine => {
-                        const stock = data.remainingVaccineStock.find(s => s.vaccineName === vaccine.vaccineName);
-                        const totalCost = vaccine.totalConsumed * (stock?.pricing?.dosePrice || 0);
-                        return `
-                            <tr>
-                                <td>${vaccine.vaccineName || "N/A"}</td>
-                                <td>${vaccine.totalConsumed || 0}</td>
-                                <td>${stock ? stock.stock.totalDoses : 0}</td>
-                                <td>$${stock ? stock.pricing.dosePrice.toFixed(2) : '0.00'}</td>
-                                <td>$${totalCost.toFixed(2)}</td>
-                            </tr>
-                        `;
-                    }).join('')}
-                    <tr class="total-row">
-                        <td colspan="4"><strong>${t.vaccine.totalVaccinationCost}</strong></td>
-                        <td><strong>$${data.vaccineConsumption.reduce((sum, v) => {
-                            const stock = data.remainingVaccineStock.find(s => s.vaccineName === v.vaccineName);
-                            return sum + (v.totalConsumed * (stock?.pricing?.dosePrice || 0));
-                        }, 0).toFixed(2)}</strong></td>
-                    </tr>
-                </tbody>  
-            </table>
-        </div>
-
-        <div class="section">
-            <h2 class="section-title">${t.financial.title}</h2>
-            <div class="stats-container">
-                <div class="stat-box">
-                    <div class="stat-number">$${data.feedConsumption.reduce((sum, feed) => {
-                        const stock = data.remainingFeedStock.find(s => s.name === feed.feedName);
-                        return sum + (feed.totalConsumed * (stock?.pricePerKg || 0));
-                    }, 0).toFixed(2)}</div>
-                    <div class="stat-label">${t.financial.feedCost}</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-number">$${data.treatmentConsumption.reduce((sum, treatment) => {
-                        const stock = data.remainingTreatmentStock.find(s => s.name === treatment.treatmentName);
-                        return sum + (treatment.totalConsumed * (stock?.pricePerMl || 0));
-                    }, 0).toFixed(2)}</div>
-                    <div class="stat-label">${t.financial.treatmentCost}</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-number">$${data.vaccineConsumption.reduce((sum, v) => {
-                        const stock = data.remainingVaccineStock.find(s => s.vaccineName === v.vaccineName);
-                        return sum + (v.totalConsumed * (stock?.pricing?.dosePrice || 0));
-                    }, 0).toFixed(2)}</div>
-                    <div class="stat-label">${t.financial.vaccineCost}</div>
-                </div>
-            </div>
-        </div>
-
+        ${isBreedingType ? `
         <div class="section">
             <h2 class="section-title">${t.health.title}</h2>
             <div class="stats-container">
                 <div class="stat-box">
-                    <div class="stat-number">${((data.vaccineConsumption.reduce((sum, v) => sum + v.totalConsumed, 0) / 
+                    <div class="stat-number">${((data.vaccineConsumption?.reduce((sum, v) => sum + v.totalConsumed, 0) / 
                         data.animalReport.reduce((sum, animal) => sum + animal.count, 0)) * 100).toFixed(1)}%</div>
                     <div class="stat-label">${t.health.vaccinationCoverage}</div>
                 </div>
@@ -1218,6 +1097,7 @@ const generatePDF = (data) => {
                 </div>
             </div>
         </div>
+        ` : ''}
 
         <div class="footer">
             <p>${t.footer.generated}: ${new Date().toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US')}</p>
@@ -1227,7 +1107,7 @@ const generatePDF = (data) => {
     </div>
     </body>  
     </html>  
-    `;  
+    `;
 
     const filePath = path.join(__dirname, `combined_report_${lang}.pdf`);  
     const options = { 
