@@ -442,7 +442,29 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
             birthEntriesReport
         ] = await Promise.all([
             // Animal Report
-            Animal.aggregate([/* ... your existing animal aggregation ... */]),
+            Animal.aggregate([
+                {
+                    $match: {
+                        owner: userId,
+                        animalType: animalType,
+                        createdAt: { $gte: fromDate, $lte: toDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { gender: '$gender', animalType: '$animalType' },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        gender: '$_id.gender',
+                        animalType: '$_id.animalType',
+                        count: 1
+                    }
+                }
+            ]),
             // Excluded Report with financial data
             Excluded.aggregate([
                 {
@@ -523,7 +545,20 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
                 }
             ]),
             // Remaining feed stock
-            Feed.aggregate([/* ... your existing feed stock aggregation ... */]),
+            Feed.aggregate([
+                {
+                    $match: {
+                        owner: userId
+                    }
+                },
+                {
+                    $project: {
+                        name: 1,
+                        quantity: 1,
+                        price: 1
+                    }
+                }
+            ]),
             // Treatment consumption with costs
             TreatmentEntry.aggregate([
                 {
@@ -563,7 +598,20 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
                 }
             ]),
             // Remaining treatment stock
-            Treatment.aggregate([/* ... your existing treatment stock aggregation ... */]),
+            Treatment.aggregate([
+                {
+                    $match: {
+                        owner: userId
+                    }
+                },
+                {
+                    $project: {
+                        name: 1,
+                        volume: 1,
+                        pricePerMl: 1
+                    }
+                }
+            ]),
             // Vaccine consumption with costs
             VaccineEntry.aggregate([
                 {
@@ -600,10 +648,90 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
                 }
             ]),
             // Remaining vaccine stock
-            Vaccine.aggregate([/* ... your existing vaccine stock aggregation ... */]),
-            // Breeding specific queries if needed
+            Vaccine.aggregate([
+                {
+                    $match: {
+                        owner: userId
+                    }
+                },
+                {
+                    $project: {
+                        vaccineName: 1,
+                        'stock.bottles': 1,
+                        'stock.dosesPerBottle': 1,
+                        'stock.totalDoses': 1,
+                        'pricing.bottlePrice': 1,
+                        'pricing.dosePrice': 1
+                    }
+                }
+            ]),
+            // Breeding specific queries
             ...(user.registerationType === 'breeding' ? [
-                /* ... your existing breeding queries ... */
+                // Positive Sonar Count
+                Mating.aggregate([
+                    {
+                        $match: {
+                            owner: userId,
+                            sonarRsult: 'positive',
+                            matingDate: { $gte: fromDate, $lte: toDate },
+                            expectedDeliveryDate: { $gt: new Date() }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'animals',
+                            localField: 'animalId',
+                            foreignField: '_id',
+                            as: 'animal'
+                        }
+                    },
+                    {
+                        $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
+                    },
+                    {
+                        $match: { 'animal.animalType': animalType }
+                    },
+                    {
+                        $count: 'positiveSonarCount'
+                    }
+                ]),
+                // Birth Entries Report
+                Breeding.aggregate([
+                    {
+                        $match: {
+                            owner: userId,
+                            createdAt: { $gte: fromDate, $lte: toDate }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'animals',
+                            localField: 'animalId',
+                            foreignField: '_id',
+                            as: 'animal'
+                        }
+                    },
+                    {
+                        $unwind: { path: '$animal', preserveNullAndEmptyArrays: true }
+                    },
+                    {
+                        $match: { 'animal.animalType': animalType }
+                    },
+                    {
+                        $unwind: '$birthEntries'
+                    },
+                    {
+                        $match: { 'birthEntries.createdAt': { $gte: fromDate, $lte: toDate } }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            totalBirthEntries: { $sum: 1 },
+                            totalMales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'male'] }, 1, 0] } },
+                            totalFemales: { $sum: { $cond: [{ $eq: ['$birthEntries.gender', 'female'] }, 1, 0] } }
+                        }
+                    }
+                ])
             ] : [Promise.resolve([]), Promise.resolve([])])
         ]);
 
@@ -938,7 +1066,7 @@ const generatePDF = (data) => {
             <h2 class="section-title">${t.stats.overview}</h2>
             <div class="stats-container">
                 <div class="stat-box">
-                    <div class="stat-number">${data.animalReport.reduce((sum, animal) => sum + animal.count, 0)}</div>
+                    <div class="stat-number">${(data.animalReport || []).reduce((sum, animal) => sum + (animal.count || 0), 0)}</div>
                     <div class="stat-label">${t.stats.totalAnimals}</div>
                 </div>
                 ${isBreedingType ? `
@@ -952,7 +1080,7 @@ const generatePDF = (data) => {
                 </div>
                 ` : ''}
                 <div class="stat-box">
-                    <div class="stat-number">${data.excludedReport.reduce((sum, excluded) => sum + excluded.count, 0)}</div>
+                    <div class="stat-number">${(data.excludedReport || []).reduce((sum, excluded) => sum + (excluded.count || 0), 0)}</div>
                     <div class="stat-label">${t.stats.totalExcluded}</div>
                 </div>
             </div>
@@ -969,7 +1097,7 @@ const generatePDF = (data) => {
                     </tr>  
                 </thead>  
                 <tbody>  
-                    ${data.animalReport.map(animal => `
+                    ${(data.animalReport || []).map(animal => `
                         <tr>
                             <td>${animal.gender || "N/A"}</td>
                             <td>${animal.animalType || "N/A"}</td>
@@ -1015,7 +1143,7 @@ const generatePDF = (data) => {
                     </tr>  
                 </thead>  
                 <tbody>  
-                    ${data.excludedReport.map(excluded => `
+                    ${(data.excludedReport || []).map(excluded => `
                         <tr>
                             <td>${excluded.excludedType || "N/A"}</td>
                             <td>${excluded.gender || "N/A"}</td>
@@ -1037,8 +1165,8 @@ const generatePDF = (data) => {
                     </tr>  
                 </thead>  
                 <tbody>  
-                    ${data.feedConsumption.map(feed => {
-                        const remainingStock = data.remainingFeedStock.find(stock => stock.name === feed.feedName);
+                    ${(data.feedConsumption || []).map(feed => {
+                        const remainingStock = (data.remainingFeedStock || []).find(stock => stock.name === feed.feedName);
                         return `
                             <tr>
                                 <td>${feed.feedName || "N/A"}</td>
@@ -1062,8 +1190,8 @@ const generatePDF = (data) => {
                     </tr>  
                 </thead>  
                 <tbody>  
-                    ${data.treatmentConsumption.map(treatment => {
-                        const remainingStock = data.remainingTreatmentStock.find(stock => stock.name === treatment.treatmentName);
+                    ${(data.treatmentConsumption || []).map(treatment => {
+                        const remainingStock = (data.remainingTreatmentStock || []).find(stock => stock.name === treatment.treatmentName);
                         return `
                             <tr>
                                 <td>${treatment.treatmentName || "N/A"}</td>
@@ -1081,18 +1209,18 @@ const generatePDF = (data) => {
             <h2 class="section-title">${t.health.title}</h2>
             <div class="stats-container">
                 <div class="stat-box">
-                    <div class="stat-number">${((data.vaccineConsumption?.reduce((sum, v) => sum + v.totalConsumed, 0) / 
-                        data.animalReport.reduce((sum, animal) => sum + animal.count, 0)) * 100).toFixed(1)}%</div>
+                    <div class="stat-number">${(((data.vaccineConsumption || []).reduce((sum, v) => sum + (v.totalConsumed || 0), 0) / 
+                        Math.max((data.animalReport || []).reduce((sum, animal) => sum + (animal.count || 0), 0), 1)) * 100).toFixed(1)}%</div>
                     <div class="stat-label">${t.health.vaccinationCoverage}</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-number">${((data.excludedReport.filter(e => e.excludedType === 'death').reduce((sum, e) => sum + e.count, 0) /
-                        data.animalReport.reduce((sum, animal) => sum + animal.count, 0)) * 100).toFixed(1)}%</div>
+                    <div class="stat-number">${((((data.excludedReport || []).filter(e => e.excludedType === 'death').reduce((sum, e) => sum + (e.count || 0), 0)) /
+                        Math.max((data.animalReport || []).reduce((sum, animal) => sum + (animal.count || 0), 0), 1)) * 100).toFixed(1)}%</div>
                     <div class="stat-label">${t.health.mortalityRate}</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-number">${((data.pregnantAnimal /
-                        data.animalReport.filter(a => a.gender === 'female').reduce((sum, animal) => sum + animal.count, 0)) * 100).toFixed(1)}%</div>
+                    <div class="stat-number">${((data.pregnantAnimal || 0) /
+                        Math.max((data.animalReport || []).filter(a => a.gender === 'female').reduce((sum, animal) => sum + (animal.count || 0), 0), 1) * 100).toFixed(1)}%</div>
                     <div class="stat-label">${t.health.pregnancyRate}</div>
                 </div>
             </div>
