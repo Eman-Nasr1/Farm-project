@@ -4,5 +4,16 @@
     "NOTIFICATION_NOT_FOUND": "الإشعار غير موجود",
     "ALL_NOTIFICATIONS_MARKED_READ": "تم تحديد جميع الإشعارات كمقروءة",
     "NOTIFICATION_DELETED": "تم حذف الإشعار بنجاح",
-    "NOTIFICATION_CHECK_FAILED": "فشل في التحقق من الإشعارات"
+    "NOTIFICATION_CHECK_FAILED": "فشل في التحقق من الإشعارات",
+    "TREATMENT_EXPIRED": "العلاج {{name}} منتهي الصلاحية! (تاريخ انتهاء الصلاحية: {{date}})",
+    "TREATMENT_EXPIRE_SOON": "العلاج {{name}} سينتهي قريباً جداً خلال {{days}} أيام (تاريخ انتهاء الصلاحية: {{date}})",
+    "TREATMENT_EXPIRE_WARNING": "العلاج {{name}} سينتهي خلال {{days}} يوم (تاريخ انتهاء الصلاحية: {{date}})",
+    "VACCINE_EXPIRED": "اللقاح {{name}} منتهي الصلاحية! (تاريخ انتهاء الصلاحية: {{date}})",
+    "VACCINE_EXPIRE_SOON": "اللقاح {{name}} سينتهي قريباً جداً خلال {{days}} أيام (تاريخ انتهاء الصلاحية: {{date}})",
+    "VACCINE_EXPIRE_WARNING": "اللقاح {{name}} سينتهي خلال {{days}} يوم (تاريخ انتهاء الصلاحية: {{date}})",
+    "IMAGE_REQUIRED": "الصورة مطلوبة",
+    "NO_IMAGE_TO_DELETE": "لا توجد صورة للحذف",
+    "IMAGE_DELETED_SUCCESSFULLY": "تم حذف صورة الحيوان بنجاح",
+    "IMAGE_UPLOAD_FAILED": "فشل في رفع الصورة",
+    "INVALID_IMAGE_FORMAT": "صيغة الصورة غير صالحة. الصيغ المسموح بها: jpg, jpeg, png, gif"
 } 

@@ -3,7 +3,10 @@ const Vaccine = require('../Models/vaccine.model');
 const i18n = require('../i18n');
 
 // Main function to check for expiring items
-const checkExpiringItems = async () => {
+const checkExpiringItems = async (lang = 'en') => {
+    // Set the language
+    i18n.setLocale(lang);
+    
     const notifications = [];
     const today = new Date();
     const warningDays = 30; // Changed to 30 days warning
@@ -20,6 +23,7 @@ const checkExpiringItems = async () => {
         for (const treatment of treatments) {
             if (treatment.expireDate) {
                 const daysUntilExpiry = Math.ceil((treatment.expireDate - today) / (1000 * 60 * 60 * 24));
+                const expireDateFormatted = treatment.expireDate.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US');
                 
                 // Notify if expired or expiring within 30 days
                 if (daysUntilExpiry <= warningDays) {
@@ -27,13 +31,24 @@ const checkExpiringItems = async () => {
                     let severity;
 
                     if (daysUntilExpiry <= 0) {
-                        message = `Treatment ${treatment.name} has expired!`;
+                        message = i18n.__('TREATMENT_EXPIRED', {
+                            name: treatment.name,
+                            date: expireDateFormatted
+                        });
                         severity = 'high';
                     } else if (daysUntilExpiry <= 7) {
-                        message = `Treatment ${treatment.name} will expire very soon (in ${daysUntilExpiry} days)`;
+                        message = i18n.__('TREATMENT_EXPIRE_SOON', {
+                            name: treatment.name,
+                            days: daysUntilExpiry,
+                            date: expireDateFormatted
+                        });
                         severity = 'high';
                     } else {
-                        message = `Treatment ${treatment.name} will expire in ${daysUntilExpiry} days`;
+                        message = i18n.__('TREATMENT_EXPIRE_WARNING', {
+                            name: treatment.name,
+                            days: daysUntilExpiry,
+                            date: expireDateFormatted
+                        });
                         severity = 'medium';
                     }
 
@@ -60,6 +75,7 @@ const checkExpiringItems = async () => {
         for (const vaccine of vaccines) {
             if (vaccine.expiryDate) {
                 const daysUntilExpiry = Math.ceil((vaccine.expiryDate - today) / (1000 * 60 * 60 * 24));
+                const expireDateFormatted = vaccine.expiryDate.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US');
                 
                 // Notify if expired or expiring within 30 days
                 if (daysUntilExpiry <= warningDays) {
@@ -67,13 +83,24 @@ const checkExpiringItems = async () => {
                     let severity;
 
                     if (daysUntilExpiry <= 0) {
-                        message = `Vaccine ${vaccine.vaccineName} has expired!`;
+                        message = i18n.__('VACCINE_EXPIRED', {
+                            name: vaccine.vaccineName,
+                            date: expireDateFormatted
+                        });
                         severity = 'high';
                     } else if (daysUntilExpiry <= 7) {
-                        message = `Vaccine ${vaccine.vaccineName} will expire very soon (in ${daysUntilExpiry} days)`;
+                        message = i18n.__('VACCINE_EXPIRE_SOON', {
+                            name: vaccine.vaccineName,
+                            days: daysUntilExpiry,
+                            date: expireDateFormatted
+                        });
                         severity = 'high';
                     } else {
-                        message = `Vaccine ${vaccine.vaccineName} will expire in ${daysUntilExpiry} days`;
+                        message = i18n.__('VACCINE_EXPIRE_WARNING', {
+                            name: vaccine.vaccineName,
+                            days: daysUntilExpiry,
+                            date: expireDateFormatted
+                        });
                         severity = 'medium';
                     }
 

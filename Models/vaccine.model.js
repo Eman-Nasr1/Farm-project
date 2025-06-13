@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const VaccineSchema = new mongoose.Schema({
+  vaccineType: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'VaccineType',
+    required: true
+  },
   vaccineName: {
     type: String,
     required: true
@@ -38,7 +43,7 @@ const VaccineSchema = new mongoose.Schema({
   },
   expiryDate: {
     type: Date,
-    // required: [true, 'Expiry date is required']
+    required: [true, 'Expiry date is required']
   },
   owner: {
     type: mongoose.Schema.Types.ObjectId,

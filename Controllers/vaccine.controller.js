@@ -1,11 +1,12 @@
-const httpstatustext=require('../utilits/httpstatustext');
-const asyncwrapper=require('../middleware/asyncwrapper');
-const AppError=require('../utilits/AppError');
-const Vaccine=require('../Models/vaccine.model');
-const Animal=require('../Models/animal.model');
+const httpstatustext = require('../utilits/httpstatustext');
+const asyncwrapper = require('../middleware/asyncwrapper');
+const AppError = require('../utilits/AppError');
+const Vaccine = require('../Models/vaccine.model');
+const VaccineType = require('../Models/vaccineType.model');
+const Animal = require('../Models/animal.model');
 const AnimalCost = require("../Models/animalCost.model");
-const LocationShed=require('../Models/locationsed.model');
-const VaccineEntry=require('../Models/vaccineEntry.model');
+const LocationShed = require('../Models/locationsed.model');
+const VaccineEntry = require('../Models/vaccineEntry.model');
 const mongoose = require("mongoose");
 const i18n = require('../i18n');
 const multer = require('multer');
@@ -14,13 +15,10 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 const excelOps = require('../utilits/excelOperations');
 
-
 const addVaccine = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const { 
-      vaccineName,
-      BoosterDose,
-      AnnualDose,
+      vaccineTypeId,
       bottles,
       dosesPerBottle,
       bottlePrice,
@@ -29,7 +27,7 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
   
     // Validate input
     if (
-      !vaccineName ||
+      !vaccineTypeId ||
       bottles === undefined || isNaN(bottles) || bottles < 0 ||
       dosesPerBottle === undefined || isNaN(dosesPerBottle) || dosesPerBottle < 1 ||
       bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0 ||
@@ -37,7 +35,7 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
     ) {
       return res.status(400).json({
         status: httpstatustext.FAIL,
-        message: "Valid vaccine name, bottles, doses per bottle, bottle price, and expiry date are required.",
+        message: "Valid vaccine type, bottles, doses per bottle, bottle price, and expiry date are required.",
       });
     }
 
@@ -56,6 +54,15 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
         message: "Expiry date cannot be in the past.",
       });
     }
+
+    // Verify vaccine type exists
+    const selectedVaccineType = await VaccineType.findById(vaccineTypeId);
+    if (!selectedVaccineType) {
+      return res.status(404).json({
+        status: httpstatustext.FAIL,
+        message: "Vaccine type not found.",
+      });
+    }
   
     // Calculate derived values
     const totalDoses = bottles * dosesPerBottle;
@@ -63,9 +70,7 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
   
     // Create new vaccine
     const newVaccine = new Vaccine({
-      vaccineName,
-      BoosterDose,
-      AnnualDose,
+      vaccineType: vaccineTypeId,
       stock: {
         bottles,
         dosesPerBottle,
@@ -85,14 +90,14 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
       status: httpstatustext.SUCCESS,
       data: { vaccine: newVaccine }
     });
-  });
+});
 
-  // Get all vaccines (without pagination)
+// Get all vaccines (without pagination)
 const getVaccines = asyncwrapper(async (req, res) => {
     const userId = req.user.id;
-    const vaccines = await Vaccine.find({ owner: userId }, { __v: false }).sort({
-      createdAt: -1,
-    });
+    const vaccines = await Vaccine.find({ owner: userId }, { __v: false })
+      .populate('vaccineType')
+      .sort({ createdAt: -1 });
     res.json({
       status: httpstatustext.SUCCESS,
       data: { vaccines },
@@ -101,7 +106,8 @@ const getVaccines = asyncwrapper(async (req, res) => {
   
   // Get single vaccine
   const getVaccine = asyncwrapper(async (req, res, next) => {
-    const vaccine = await Vaccine.findById(req.params.vaccineId);
+    const vaccine = await Vaccine.findById(req.params.vaccineId)
+      .populate('vaccineType');
     if (!vaccine) {
       const error = AppError.create(
         "Vaccine not found",
@@ -122,11 +128,19 @@ const getVaccines = asyncwrapper(async (req, res) => {
     const skip = (page - 1) * limit;
     const filter = { owner: userId };
   
-    if (query.vaccineName) {
-      filter.vaccineName = { $regex: query.vaccineName, $options: 'i' };
+    if (query.search) {
+      const vaccineTypes = await VaccineType.find({
+        $or: [
+          { englishName: { $regex: query.search, $options: 'i' } },
+          { arabicName: { $regex: query.search, $options: 'i' } }
+        ]
+      });
+      
+      filter.vaccineType = { $in: vaccineTypes.map(vt => vt._id) };
     }
   
     const vaccines = await Vaccine.find(filter, { __v: false })
+      .populate('vaccineType')
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });
@@ -153,6 +167,7 @@ const getVaccines = asyncwrapper(async (req, res) => {
     const userId = req.user.id;
     const vaccineId = req.params.vaccineId;
     const { 
+      vaccineTypeId,
       bottles,
       dosesPerBottle,
       bottlePrice,
@@ -169,6 +184,18 @@ const getVaccines = asyncwrapper(async (req, res) => {
         httpstatustext.FAIL
       );
       return next(error);
+    }
+
+    // If vaccine type is being updated, verify it exists
+    if (vaccineTypeId) {
+      const vaccineType = await VaccineType.findById(vaccineTypeId);
+      if (!vaccineType) {
+        return res.status(404).json({
+          status: httpstatustext.FAIL,
+          message: "Vaccine type not found.",
+        });
+      }
+      vaccine.vaccineType = vaccineTypeId;
     }
   
     // Update stock and pricing if provided

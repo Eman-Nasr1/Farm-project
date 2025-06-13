@@ -4,5 +4,16 @@
     "NOTIFICATION_NOT_FOUND": "Notification not found",
     "ALL_NOTIFICATIONS_MARKED_READ": "All notifications marked as read",
     "NOTIFICATION_DELETED": "Notification deleted successfully",
-    "NOTIFICATION_CHECK_FAILED": "Failed to check for notifications"
+    "NOTIFICATION_CHECK_FAILED": "Failed to check for notifications",
+    "TREATMENT_EXPIRED": "Treatment {{name}} has expired! (Expiration date: {{date}})",
+    "TREATMENT_EXPIRE_SOON": "Treatment {{name}} will expire very soon in {{days}} days (Expiration date: {{date}})",
+    "TREATMENT_EXPIRE_WARNING": "Treatment {{name}} will expire in {{days}} days (Expiration date: {{date}})",
+    "VACCINE_EXPIRED": "Vaccine {{name}} has expired! (Expiration date: {{date}})",
+    "VACCINE_EXPIRE_SOON": "Vaccine {{name}} will expire very soon in {{days}} days (Expiration date: {{date}})",
+    "VACCINE_EXPIRE_WARNING": "Vaccine {{name}} will expire in {{days}} days (Expiration date: {{date}})",
+    "IMAGE_REQUIRED": "Image file is required",
+    "NO_IMAGE_TO_DELETE": "No image found to delete",
+    "IMAGE_DELETED_SUCCESSFULLY": "Animal image deleted successfully",
+    "IMAGE_UPLOAD_FAILED": "Failed to upload image",
+    "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif"
 } 

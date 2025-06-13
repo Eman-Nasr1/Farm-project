@@ -19,6 +19,10 @@ mongoose.connect(url).then(()=>{
 })
 
 app.use (express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 const authrouter=require('./Routes/authRoutes');
 app.use('/',authrouter)
 
@@ -35,6 +39,9 @@ app.use('/',breedingRoutes)
 
 const vaccineRoutes=require('./Routes/vaccineRoutes');
 app.use('/',vaccineRoutes)
+
+const vaccineTypeRoutes=require('./Routes/vaccineTypeRoutes');
+app.use('/',vaccineTypeRoutes)
 
 const weightRoutes=require('./Routes/weightRoutes');
 app.use('/',weightRoutes)
