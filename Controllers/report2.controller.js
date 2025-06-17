@@ -373,6 +373,11 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
                 totalFemales: 0
             };
 
+        // Calculate financial totals
+        const totalFeedCost = feedConsumption.reduce((sum, feed) => sum + (feed.totalCost || 0), 0);
+        const totalTreatmentCost = treatmentConsumption.reduce((sum, t) => sum + (t.totalCost || 0), 0);
+        const totalVaccineCost = vaccineConsumption.reduce((sum, v) => sum + (v.totalCost || 0), 0);
+
         // Send successful response
         res.status(200).json({
             status: 'success',
@@ -388,7 +393,10 @@ const generateCombinedReport = asyncwrapper(async (req, res, next) => {
                 treatmentConsumption,
                 remainingTreatmentStock,
                 vaccineConsumption,
-                remainingVaccineStock
+                remainingVaccineStock,
+                totalFeedCost,
+                totalTreatmentCost,
+                totalVaccineCost
             },
             meta: {
                 dateFrom: dateFrom,
@@ -747,6 +755,11 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
                 totalFemales: 0
             };
 
+        // Calculate financial totals
+        const totalFeedCost = feedConsumption.reduce((sum, feed) => sum + (feed.totalCost || 0), 0);
+        const totalTreatmentCost = treatmentConsumption.reduce((sum, t) => sum + (t.totalCost || 0), 0);
+        const totalVaccineCost = vaccineConsumption.reduce((sum, v) => sum + (v.totalCost || 0), 0);
+
         // Prepare data for the PDF
         const reportData = {
             dateFrom: dateFrom,
@@ -763,6 +776,9 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res, next) => {
             remainingTreatmentStock,
             vaccineConsumption,
             remainingVaccineStock,
+            totalFeedCost,
+            totalTreatmentCost,
+            totalVaccineCost,
             ...(user.registerationType === 'breeding' && {
                 pregnantAnimal: positiveSonarCount[0]?.positiveSonarCount || 0,
                 birthEntries: birthEntriesData
@@ -996,15 +1012,27 @@ const generatePDF = (data) => {
                 border-collapse: collapse;
                 margin-bottom: 20px;
             }  
+            .table th, .table td {
+                vertical-align: middle;
+            }
             .table td, .table th { 
                 padding: 12px; 
                 text-align: left; 
                 border: 1px solid #ddd;
             }  
             .table th { 
-                background-color: #21763e; 
-                color: white;
+                background-color: #14532d !important;
+                color: #fff !important;
                 font-weight: bold;
+                font-size: 16px;
+                letter-spacing: 0.5px;
+                font-family: Arial, Helvetica, sans-serif;
+                padding: 14px 8px;
+            }
+            .table td {
+                font-size: 15px;
+                font-family: Arial, Helvetica, sans-serif;
+                vertical-align: middle;
             }
             .table tr:nth-child(even) {
                 background-color: #f9f9f9;
@@ -1226,6 +1254,26 @@ const generatePDF = (data) => {
             </div>
         </div>
         ` : ''}
+
+        <div class="section">
+            <h2 class="section-title">${t.financial.title}</h2>
+            <table class="table">
+                <tbody>
+                    <tr>
+                        <td>${t.financial.feedCost}</td>
+                        <td>${data.totalFeedCost || 0}</td>
+                    </tr>
+                    <tr>
+                        <td>${t.financial.treatmentCost}</td>
+                        <td>${data.totalTreatmentCost || 0}</td>
+                    </tr>
+                    <tr>
+                        <td>${t.financial.vaccineCost}</td>
+                        <td>${data.totalVaccineCost || 0}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
         <div class="footer">
             <p>${t.footer.generated}: ${new Date().toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US')}</p>
