@@ -394,25 +394,42 @@ const getsingleanimal = asyncwrapper(async (req, res, next) => {
 
 const addanimal = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const { locationShedName, breed, ...animalData } = req.body;
+    const { locationShedName, breed, birthDate, age, ...animalData } = req.body;
+
+    // Validate input: either birthDate or age must be provided
+    if (!birthDate && !age) {
+        return next(AppError.create('Either birthDate or age must be provided', 400, httpstatustext.FAIL));
+    }
 
     // Find LocationShed by name
     const locationShed = await LocationShed.findOne({ locationShedName, owner: userId });
     if (!locationShed) {
-        const error = AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL);
-        return next(error);
+        return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
     }
 
-    // Find Breed by name (changed from _id to breedName)
+    // Find Breed by name
     const breedDoc = await Breed.findOne({ breedName: breed, owner: userId });
     if (!breedDoc) {
-        const error = AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL);
-        return next(error);
+        return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
     }
 
-    // Create new animal
+    // Calculate birthDate if not provided but age is
+    let finalBirthDate = null;
+    if (birthDate) {
+        finalBirthDate = new Date(birthDate);
+    } else if (age && (age.years || age.months || age.days)) {
+        const now = new Date();
+        finalBirthDate = new Date(
+            now.getFullYear() - (age.years || 0),
+            now.getMonth() - (age.months || 0),
+            now.getDate() - (age.days || 0)
+        );
+    }
+
+    // Create the animal
     const newanimal = new Animal({
         ...animalData,
+        birthDate: finalBirthDate,
         locationShed: locationShed._id,
         breed: breedDoc._id,
         owner: userId
@@ -428,58 +445,58 @@ const addanimal = asyncwrapper(async (req, res, next) => {
 });
 
 
+
+
 const updateanimal = asyncwrapper(async (req, res, next) => {
     const animalId = req.params.tagId;
-    const { locationShedName, breedName, ...updateData } = req.body; // Extract locationShedName and breedName from the request body
+    const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
 
-    // If locationShedName is provided, find the corresponding LocationShed document
+    // Handle location shed update if name is provided
     if (locationShedName) {
         const locationShed = await LocationShed.findOne({ locationShedName, owner: req.user.id });
-
         if (!locationShed) {
-            const error = AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL);
-            return next(error);
+            return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
         }
-
-        // Add the locationShed ID to the update data
         updateData.locationShed = locationShed._id;
     }
 
-    // If breedName is provided, find the corresponding Breed document
+    // Handle breed update if name is provided
     if (breedName) {
         const breed = await Breed.findOne({ breedName, owner: req.user.id });
-
         if (!breed) {
-            const error = AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL);
-            return next(error);
+            return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
         }
-
-        // Add the breed ID to the update data
         updateData.breed = breed._id;
     }
 
-    // Update the animal document
+    // Handle birthDate or age
+    if (birthDate) {
+        updateData.birthDate = new Date(birthDate);
+    } else if (age && (age.years || age.months || age.days)) {
+        const now = new Date();
+        const calculatedDate = new Date(
+            now.getFullYear() - (age.years || 0),
+            now.getMonth() - (age.months || 0),
+            now.getDate() - (age.days || 0)
+        );
+        updateData.birthDate = calculatedDate;
+    }
+
+    // Perform the update
     const updatedanimal = await Animal.findOneAndUpdate(
-        { _id: animalId, owner: req.user.id }, // Ensure the user owns the animal
+        { _id: animalId, owner: req.user.id },
         { $set: updateData },
         { new: true, runValidators: true }
     );
 
     if (!updatedanimal) {
-        const error = AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL);
-        return next(error);
+        return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
     }
 
-    // Populate the locationShed and breed fields in the response
+    // Populate fields for response
     const populatedAnimal = await Animal.findById(updatedanimal._id)
-        .populate({
-            path: 'locationShed',
-            select: 'locationShedName' // Only include the locationShedName field
-        })
-        .populate({
-            path: 'breed',
-            select: 'breedName' // Only include the breedName field
-        });
+        .populate('locationShed', 'locationShedName')
+        .populate('breed', 'breedName');
 
     return res.status(200).json({ status: httpstatustext.SUCCESS, data: { animal: populatedAnimal } });
 });

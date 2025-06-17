@@ -51,10 +51,7 @@ const Animalschema = new mongoose.Schema({
     female_Condition: {
         type: String
     },
-    Teething: {
-        type: String,
-        enum: ["two", "four", "six"],
-    },
+
     owner: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
@@ -64,6 +61,9 @@ const Animalschema = new mongoose.Schema({
         type: Date,
         default: Date.now
     }
+}, {
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 // Compound index to ensure unique tagId per user  
 Animalschema.index({ owner: 1, tagId: 1 }, { unique: true });  
@@ -77,6 +77,21 @@ Animalschema.pre('save', function (next) {
         this.ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
     }
     next();
+});
+
+
+Animalschema.virtual('age').get(function () {
+    if (!this.birthDate) return null;
+
+    const now = new Date();
+    const ageInMilliseconds = now - new Date(this.birthDate);
+    const ageInDays = Math.floor(ageInMilliseconds / (1000 * 60 * 60 * 24));
+
+    const years = Math.floor(ageInDays / 365);
+    const months = Math.floor((ageInDays % 365) / 30);
+    const days = ageInDays % 30;
+
+    return { years, months, days };
 });
 
 // Pre-update hook to update ageInDays when birthDate is updated
