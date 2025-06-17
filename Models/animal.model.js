@@ -45,7 +45,7 @@ const Animalschema = new mongoose.Schema({
     },
     gender: {
         type: String,
-        enum: ["male", "female"],
+        enum: ['male', 'female', 'ذكر', 'أنثى'],
         required: true
     },
     female_Condition: {
