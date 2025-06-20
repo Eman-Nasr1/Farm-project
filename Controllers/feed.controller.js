@@ -240,6 +240,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
     const { shedEntryId } = req.params;
     const { locationShed, feeds, date } = req.body;
 
+    // Validate input
     if (!shedEntryId || !locationShed || !Array.isArray(feeds) || feeds.length === 0) {
       await session.abortTransaction();
       session.endSession();
@@ -249,6 +250,17 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
+    // Validate ObjectId formats
+    if (!mongoose.Types.ObjectId.isValid(shedEntryId) || !mongoose.Types.ObjectId.isValid(locationShed)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        status: "FAILURE",
+        message: "Invalid ID format.",
+      });
+    }
+
+    // Check if shed exists
     const shed = await LocationShed.findById(locationShed).session(session);
     if (!shed) {
       await session.abortTransaction();
@@ -259,6 +271,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
+    // Check if shed entry exists
     const existingShedEntry = await ShedEntry.findById(shedEntryId).session(session);
     if (!existingShedEntry) {
       await session.abortTransaction();
@@ -269,6 +282,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
+    // Check if there are animals in the shed
     const animals = await Animal.find({ locationShed }).session(session);
     if (animals.length === 0) {
       await session.abortTransaction();
@@ -279,9 +293,11 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
       });
     }
 
+    // Process each feed in the request
     for (const feedItem of feeds) {
       const { feedId, quantity: newQuantity } = feedItem;
 
+      // Validate feed item
       if (!feedId || !newQuantity || isNaN(newQuantity) || newQuantity <= 0) {
         await session.abortTransaction();
         session.endSession();
@@ -291,18 +307,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         });
       }
 
-      const oldFeed = existingShedEntry.feeds.find((feed) => feed.feedId.toString() === feedId);
-      if (!oldFeed) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(404).json({
-          status: "FAILURE",
-          message: `Feed with ID "${feedId}" not found in the shed entry.`,
-        });
-      }
-
-      const oldQuantity = oldFeed.quantity;
-
+      // Find the feed in database
       const feed = await Feed.findById(feedId).session(session);
       if (!feed) {
         await session.abortTransaction();
@@ -313,6 +318,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         });
       }
 
+      // Check feed ownership
       if (feed.owner.toString() !== userId.toString()) {
         await session.abortTransaction();
         session.endSession();
@@ -322,67 +328,79 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
         });
       }
 
-      const quantityDifference = newQuantity - oldQuantity;
+      // Find existing feed in shed entry
+      const existingFeedIndex = existingShedEntry.feeds.findIndex(
+        f => f.feedId.toString() === feedId.toString()
+      );
 
-      if (quantityDifference > 0) {
-        if (feed.quantity < quantityDifference) {
+      if (existingFeedIndex >= 0) {
+        // Update existing feed
+        const oldQuantity = existingShedEntry.feeds[existingFeedIndex].quantity;
+        const quantityDifference = newQuantity - oldQuantity;
+
+        if (quantityDifference > 0) {
+          // Increasing quantity - check stock
+          if (feed.quantity < quantityDifference) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              status: "FAILURE",
+              message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Required: ${quantityDifference}.`,
+            });
+          }
+          feed.quantity -= quantityDifference;
+        } else if (quantityDifference < 0) {
+          // Decreasing quantity - return to stock
+          feed.quantity += Math.abs(quantityDifference);
+        }
+
+        existingShedEntry.feeds[existingFeedIndex].quantity = newQuantity;
+      } else {
+        // Add new feed to shed entry
+        if (feed.quantity < newQuantity) {
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
             status: "FAILURE",
-            message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Required: ${quantityDifference}.`,
+            message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Required: ${newQuantity}.`,
           });
         }
-        feed.quantity -= quantityDifference;
-      } else if (quantityDifference < 0) {
-        feed.quantity += Math.abs(quantityDifference);
+
+        feed.quantity -= newQuantity;
+        existingShedEntry.feeds.push({
+          feedId: feed._id,
+          quantity: newQuantity
+        });
       }
 
       await feed.save({ session });
-
-      oldFeed.quantity = newQuantity;
     }
 
-    existingShedEntry.date = new Date(date);
+    // Update date if provided
+    if (date) {
+      existingShedEntry.date = new Date(date);
+    }
+
     await existingShedEntry.save({ session });
 
+    // Calculate costs
     const totalFeedCost = await existingShedEntry.feeds.reduce(async (sumPromise, feed) => {
       const sum = await sumPromise;
       const feedData = await Feed.findById(feed.feedId).session(session);
-      if (!feedData) {
-        throw new Error(`Feed with ID "${feed.feedId}" not found.`);
-      }
-      const feedCost = feedData.price * feed.quantity;
-      return sum + feedCost;
+      return sum + (feedData.price * feed.quantity);
     }, Promise.resolve(0));
-
-    if (isNaN(totalFeedCost)) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(500).json({
-        status: "FAILURE",
-        message: "Failed to calculate total feed cost.",
-      });
-    }
 
     const perAnimalFeedCost = totalFeedCost / animals.length;
 
-    if (isNaN(perAnimalFeedCost)) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(500).json({
-        status: "FAILURE",
-        message: "Failed to calculate per animal feed cost.",
-      });
-    }
-
+    // Update animal costs
     for (const animal of animals) {
       let animalCostEntry = await AnimalCost.findOne({
-        animalTagId: animal.tagId,
+        animalTagId: animal.tagId
       }).session(session);
 
       if (animalCostEntry) {
-        animalCostEntry.feedCost = perAnimalFeedCost;
+        animalCostEntry.feedCost = (animalCostEntry.feedCost || 0) + perAnimalFeedCost;
+        animalCostEntry.date = new Date(date);
       } else {
         animalCostEntry = new AnimalCost({
           animalTagId: animal.tagId,

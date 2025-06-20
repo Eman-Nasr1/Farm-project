@@ -133,6 +133,8 @@ Animalschema.pre('deleteOne', { document: true, query: false }, async function(n
       await mongoose.model('Breeding').deleteMany({ animalId: animalId });
       await mongoose.model('Mating').deleteMany({ animalId: animalId });
       await mongoose.model('Vaccine').deleteMany({ animalId: animalId });
+      await mongoose.model('Weight').deleteMany({ animalId: animalId });
+      await mongoose.model('Treatment').deleteMany({ animalId: animalId });
       // Add more related models as needed
       
       next();
