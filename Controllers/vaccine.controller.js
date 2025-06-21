@@ -22,7 +22,9 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
       bottles,
       dosesPerBottle,
       bottlePrice,
-      expiryDate
+      expiryDate,
+      BoosterDose,
+      AnnualDose
     } = req.body;
   
     // Validate input
@@ -36,6 +38,21 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
       return res.status(400).json({
         status: httpstatustext.FAIL,
         message: "Valid vaccine type, bottles, doses per bottle, bottle price, and expiry date are required.",
+      });
+    }
+
+    // Validate BoosterDose and AnnualDose if provided
+    if (BoosterDose !== undefined && (isNaN(BoosterDose) || BoosterDose < 0)) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "BoosterDose must be a non-negative number.",
+      });
+    }
+
+    if (AnnualDose !== undefined && (isNaN(AnnualDose) || AnnualDose < 0)) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "AnnualDose must be a non-negative number.",
       });
     }
 
@@ -71,6 +88,8 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
     // Create new vaccine
     const newVaccine = new Vaccine({
       vaccineType: vaccineTypeId,
+      BoosterDose: BoosterDose || null,
+      AnnualDose: AnnualDose || null,
       stock: {
         bottles,
         dosesPerBottle,
@@ -171,6 +190,8 @@ const getVaccines = asyncwrapper(async (req, res) => {
       bottles,
       dosesPerBottle,
       bottlePrice,
+      BoosterDose,
+      AnnualDose,
       ...updatedData 
     } = req.body;
   
@@ -184,6 +205,21 @@ const getVaccines = asyncwrapper(async (req, res) => {
         httpstatustext.FAIL
       );
       return next(error);
+    }
+
+    // Validate BoosterDose and AnnualDose if provided
+    if (BoosterDose !== undefined && (isNaN(BoosterDose) || BoosterDose < 0)) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "BoosterDose must be a non-negative number.",
+      });
+    }
+
+    if (AnnualDose !== undefined && (isNaN(AnnualDose) || AnnualDose < 0)) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "AnnualDose must be a non-negative number.",
+      });
     }
 
     // If vaccine type is being updated, verify it exists
@@ -202,6 +238,10 @@ const getVaccines = asyncwrapper(async (req, res) => {
     if (bottles !== undefined) vaccine.stock.bottles = bottles;
     if (dosesPerBottle !== undefined) vaccine.stock.dosesPerBottle = dosesPerBottle;
     if (bottlePrice !== undefined) vaccine.pricing.bottlePrice = bottlePrice;
+  
+    // Update BoosterDose and AnnualDose if provided
+    if (BoosterDose !== undefined) vaccine.BoosterDose = BoosterDose;
+    if (AnnualDose !== undefined) vaccine.AnnualDose = AnnualDose;
   
     // Recalculate derived values if any stock/pricing fields changed
     if (bottles !== undefined || dosesPerBottle !== undefined || bottlePrice !== undefined) {
