@@ -52,9 +52,6 @@ const addVaccineType = asyncwrapper(async (req, res) => {
 // Get all vaccine types
 const getAllVaccineTypes = asyncwrapper(async (req, res) => {
     const query = req.query;
-    const limit = parseInt(query.limit) || 10;
-    const page = parseInt(query.page) || 1;
-    const skip = (page - 1) * limit;
 
     let filter = {};
     if (query.diseaseType) {
@@ -67,26 +64,14 @@ const getAllVaccineTypes = asyncwrapper(async (req, res) => {
         ];
     }
 
-    const vaccineTypes = await VaccineType.find(filter)
-        .limit(limit)
-        .skip(skip)
-        .sort({ createdAt: -1 });
-
-    const total = await VaccineType.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
+    const vaccineTypes = await VaccineType.find(filter).sort({ createdAt: -1 });
 
     res.json({
         status: httpstatustext.SUCCESS,
-        data: { vaccineTypes },
-        pagination: {
-            currentPage: page,
-            totalPages,
-            totalItems: total,
-            hasNext: page < totalPages,
-            hasPrev: page > 1
-        }
+        data: vaccineTypes
     });
 });
+
 
 // Get a single vaccine type
 const getVaccineType = asyncwrapper(async (req, res, next) => {
