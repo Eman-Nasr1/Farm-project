@@ -10,14 +10,31 @@ const TreatmentSchema = new mongoose.Schema({
         type: String,  
         required: true  
     },  
-    volume: {  
-        type: Number,  
-        required: true // Ensures that every treatment has a volume  
-    },  
-    price: {  
-        type: Number,  
-        required: true // Make it required to ensure every treatment has a price  
-    },  
+    stock: {  // Properly nest stock properties
+        bottles: {
+          type: Number,
+          required: [true, 'Number of bottles is required'],
+          min: [0, 'Bottles cannot be negative']
+        },
+        dosesPerBottle: {
+          type: Number,
+          required: [true, 'Doses per bottle is required'],
+          min: [1, 'At least 1 dose per bottle required']
+        },
+        totalDoses: {
+          type: Number
+        }
+      },
+      pricing: {  // Properly nest pricing properties
+        bottlePrice: {
+          type: Number,
+          required: [true, 'Bottle price is required'],
+          min: [0, 'Price cannot be negative']
+        },
+        dosePrice: {
+          type: Number
+        }
+      },  
     expireDate:{
         type: Date 
     },

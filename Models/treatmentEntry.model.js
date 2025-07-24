@@ -17,12 +17,29 @@ const treatmentEntrySchema = new mongoose.Schema({
                 ref: "Treatment", // Reference to the Treatment model  
                 required: true,  
             },  
-            volume: {  
+            doses: {  
                 type: Number,  
                 required: true,  
             },  
         },  
-    ],  
+    ], 
+    eyeCheck: {
+        type: Boolean,
+        default: false,
+      },
+      rectalCheck: {
+        type: Boolean,
+        default: false,
+      },
+      respiratoryCheck: {
+        type: Boolean,
+        default: false,
+      },
+      rumenCheck: {
+        type: Boolean,
+        default: false,
+      },
+       
     tagId: {  
         type: String, // Optional field for tag identifier  
     },  
