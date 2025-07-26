@@ -169,10 +169,19 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             }
 
             // Parse dates
-            const birthDate = new Date(birthDateStr);
-            const purchaseDate = new Date(purchaseDateStr);
-            if (isNaN(birthDate.getTime()) || isNaN(purchaseDate.getTime())) {
-                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+            let birthDate = undefined;
+            let purchaseDate = undefined;
+            if (birthDateStr) {
+                birthDate = new Date(birthDateStr);
+                if (isNaN(birthDate.getTime())) {
+                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
+            }
+            if (purchaseDateStr) {
+                purchaseDate = new Date(purchaseDateStr);
+                if (isNaN(purchaseDate.getTime())) {
+                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+                }
             }
 
             // Find LocationShed and Breed
@@ -197,7 +206,6 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 locationShed: locationShed?._id,
                 gender,
                 female_Condition,
-                Teething: teething,
                 owner: userId
             });
 
