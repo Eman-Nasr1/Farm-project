@@ -4,7 +4,10 @@ const VaccineSchema = new mongoose.Schema({
   vaccineType: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VaccineType',
-    required: true
+  },
+  otherVaccineName: {
+    type: String,
+    trim: true
   },
   BoosterDose: {
     type: Number 

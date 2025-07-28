@@ -8,7 +8,7 @@
     "ANIMALS_IMPORTED_SUCCESSFULLY": "Animals imported successfully",
     "PERMISSION_DENIED": "Permission denied",
     "TREATMENT_NOT_FOUND": "Treatment with name '{name}' not found in row {row}",
-    "TREATMENT_EXPIRED": "Treatment '{name}' is expired (Expired on {date}) in row {row}",
+   
     "INSUFFICIENT_TREATMENT_VOLUME": "Not enough stock for treatment '{name}'. Available: {available}, Requested: {requested} in row {row}",
     "INVALID_VOLUME": "Invalid volume in row {row}",
     "TREATMENT_ENTRIES_IMPORTED_SUCCESSFULLY": "Treatment entries imported successfully",
@@ -60,5 +60,23 @@
     "VACCINE_ENTRIES_IMPORTED_SUCCESSFULLY": "Vaccine entries imported successfully",
     "VACCINE_NOT_FOUND": "Vaccine not found",
     "VACCINE_UNAUTHORIZED": "You are not authorized to use this vaccine",
-    "VACCINE_STOCK_INSUFFICIENT": "Not enough vaccine stock available"
+    "VACCINE_STOCK_INSUFFICIENT": "Not enough vaccine stock available",
+
+    "ITEM_EXPIRED_MESSAGE": "{{type}} '{{name}}' has expired on {{date}}",
+    "ITEM_EXPIRING_SOON_MESSAGE": "{{type}} '{{name}}' will expire in {{days}} days (on {{date}})",
+    "NOTIFICATION_NOT_FOUND": "Notification not found",
+    "ALL_NOTIFICATIONS_MARKED_READ": "All notifications marked as read",
+    "NOTIFICATION_DELETED": "Notification deleted successfully",
+    "NOTIFICATION_CHECK_FAILED": "Failed to check for notifications",
+    "TREATMENT_EXPIRED": "Treatment {{name}} has expired! (Expiration date: {{date}})",
+    "TREATMENT_EXPIRE_SOON": "Treatment {{name}} will expire very soon in {{days}} days (Expiration date: {{date}})",
+    "TREATMENT_EXPIRE_WARNING": "Treatment {{name}} will expire in {{days}} days (Expiration date: {{date}})",
+    "VACCINE_EXPIRED": "Vaccine {{name}} has expired! (Expiration date: {{date}})",
+    "VACCINE_EXPIRE_SOON": "Vaccine {{name}} will expire very soon in {{days}} days (Expiration date: {{date}})",
+    "VACCINE_EXPIRE_WARNING": "Vaccine {{name}} will expire in {{days}} days (Expiration date: {{date}})",
+    "IMAGE_REQUIRED": "Image file is required",
+    "NO_IMAGE_TO_DELETE": "No image found to delete",
+    "IMAGE_DELETED_SUCCESSFULLY": "Animal image deleted successfully",
+    "IMAGE_UPLOAD_FAILED": "Failed to upload image",
+    "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif"
 }

@@ -23,7 +23,9 @@ const checkExpiringItems = async (lang = 'en') => {
         for (const treatment of treatments) {
             if (treatment.expireDate) {
                 const daysUntilExpiry = Math.ceil((treatment.expireDate - today) / (1000 * 60 * 60 * 24));
-                const expireDateFormatted = treatment.expireDate.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US');
+                const d = new Date(treatment.expiryDate);
+                const expireDateFormatted = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+                
                 
                 // Notify if expired or expiring within 30 days
                 if (daysUntilExpiry <= warningDays) {
@@ -75,7 +77,9 @@ const checkExpiringItems = async (lang = 'en') => {
         for (const vaccine of vaccines) {
             if (vaccine.expiryDate) {
                 const daysUntilExpiry = Math.ceil((vaccine.expiryDate - today) / (1000 * 60 * 60 * 24));
-                const expireDateFormatted = vaccine.expiryDate.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US');
+                const d = new Date(vaccine.expiryDate);
+                const expireDateFormatted = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+                
                 
                 // Notify if expired or expiring within 30 days
                 if (daysUntilExpiry <= warningDays) {

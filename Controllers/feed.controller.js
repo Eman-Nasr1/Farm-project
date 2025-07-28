@@ -203,6 +203,9 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
         animalTagId: animal.tagId,
         feedCost: perAnimalFeedCost,
         treatmentCost: 0,
+        vaccineCost:0,
+        purchasePrice:0,
+        marketValue:0,
         date: date,
         owner: userId,
       });
