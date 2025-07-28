@@ -16,63 +16,63 @@ const upload = multer({ storage: storage }).single('file');
 const excelOps = require('../utilits/excelOperations');
 
 const addVaccine = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
-    const { 
-      vaccineTypeId,
-      bottles,
-      dosesPerBottle,
-      bottlePrice,
-      expiryDate,
-      BoosterDose,
-      AnnualDose
-    } = req.body;
-  
-    // Validate input
-    if (
-      !vaccineTypeId ||
-      bottles === undefined || isNaN(bottles) || bottles < 0 ||
-      dosesPerBottle === undefined || isNaN(dosesPerBottle) || dosesPerBottle < 1 ||
-      bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0 ||
-      !expiryDate
-    ) {
-      return res.status(400).json({
-        status: httpstatustext.FAIL,
-        message: "Valid vaccine type, bottles, doses per bottle, bottle price, and expiry date are required.",
-      });
-    }
+  const userId = req.user.id;
+  const { 
+    vaccineTypeId,
+    otherVaccineName,
+    bottles,
+    dosesPerBottle,
+    bottlePrice,
+    expiryDate,
+    BoosterDose,
+    AnnualDose
+  } = req.body;
 
-    // Validate BoosterDose and AnnualDose if provided
-    if (BoosterDose !== undefined && (isNaN(BoosterDose) || BoosterDose < 0)) {
-      return res.status(400).json({
-        status: httpstatustext.FAIL,
-        message: "BoosterDose must be a non-negative number.",
-      });
-    }
+  // ✅ Ensure either vaccineTypeId or otherVaccineName is provided
+  if (!vaccineTypeId && !otherVaccineName) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: "Either vaccineTypeId or otherVaccineName must be provided.",
+    });
+  }
 
-    if (AnnualDose !== undefined && (isNaN(AnnualDose) || AnnualDose < 0)) {
-      return res.status(400).json({
-        status: httpstatustext.FAIL,
-        message: "AnnualDose must be a non-negative number.",
-      });
-    }
+  // Validate quantities and prices
+  if (
+    bottles === undefined || isNaN(bottles) || bottles < 0 ||
+    dosesPerBottle === undefined || isNaN(dosesPerBottle) || dosesPerBottle < 1 ||
+    bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0 ||
+    !expiryDate
+  ) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: "Valid bottles, doses per bottle, bottle price, and expiry date are required.",
+    });
+  }
 
-    // Validate expiry date
-    const expiry = new Date(expiryDate);
-    if (isNaN(expiry.getTime())) {
-      return res.status(400).json({
-        status: httpstatustext.FAIL,
-        message: "Invalid expiry date format. Please use YYYY-MM-DD format.",
-      });
-    }
+  if (BoosterDose !== undefined && (isNaN(BoosterDose) || BoosterDose < 0)) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: "BoosterDose must be a non-negative number.",
+    });
+  }
 
-    if (expiry < new Date()) {
-      return res.status(400).json({
-        status: httpstatustext.FAIL,
-        message: "Expiry date cannot be in the past.",
-      });
-    }
+  if (AnnualDose !== undefined && (isNaN(AnnualDose) || AnnualDose < 0)) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: "AnnualDose must be a non-negative number.",
+    });
+  }
 
-    // Verify vaccine type exists
+  const expiry = new Date(expiryDate);
+  if (isNaN(expiry.getTime()) || expiry < new Date()) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: "Invalid or past expiry date.",
+    });
+  }
+
+  // If vaccineTypeId provided, validate it
+  if (vaccineTypeId) {
     const selectedVaccineType = await VaccineType.findById(vaccineTypeId);
     if (!selectedVaccineType) {
       return res.status(404).json({
@@ -80,35 +80,36 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
         message: "Vaccine type not found.",
       });
     }
-  
-    // Calculate derived values
-    const totalDoses = bottles * dosesPerBottle;
-    const dosePrice = bottlePrice / dosesPerBottle;
-  
-    // Create new vaccine
-    const newVaccine = new Vaccine({
-      vaccineType: vaccineTypeId,
-      BoosterDose: BoosterDose || null,
-      AnnualDose: AnnualDose || null,
-      stock: {
-        bottles,
-        dosesPerBottle,
-        totalDoses
-      },
-      pricing: {
-        bottlePrice,
-        dosePrice
-      },
-      expiryDate: expiry,
-      owner: userId
-    });
-  
-    await newVaccine.save();
-  
-    res.json({
-      status: httpstatustext.SUCCESS,
-      data: { vaccine: newVaccine }
-    });
+  }
+
+  // Derived values
+  const totalDoses = bottles * dosesPerBottle;
+  const dosePrice = bottlePrice / dosesPerBottle;
+
+  const newVaccine = new Vaccine({
+    vaccineType: vaccineTypeId || undefined,
+    otherVaccineName: otherVaccineName || undefined,
+    BoosterDose: BoosterDose || null,
+    AnnualDose: AnnualDose || null,
+    stock: {
+      bottles,
+      dosesPerBottle,
+      totalDoses
+    },
+    pricing: {
+      bottlePrice,
+      dosePrice
+    },
+    expiryDate: expiry,
+    owner: userId
+  });
+
+  await newVaccine.save();
+
+  res.json({
+    status: httpstatustext.SUCCESS,
+    data: { vaccine: newVaccine }
+  });
 });
 
 // Get all vaccines (without pagination)
@@ -185,28 +186,24 @@ const getVaccines = asyncwrapper(async (req, res) => {
   const updateVaccine = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const vaccineId = req.params.vaccineId;
-    const { 
+  
+    const {
       vaccineTypeId,
+      otherVaccineName,
       bottles,
       dosesPerBottle,
       bottlePrice,
       BoosterDose,
       AnnualDose,
-      ...updatedData 
+      ...updatedData
     } = req.body;
   
-    // Find the vaccine owned by the user
     let vaccine = await Vaccine.findOne({ _id: vaccineId, owner: userId });
   
     if (!vaccine) {
-      const error = AppError.create(
-        "Vaccine not found or unauthorized to update",
-        404,
-        httpstatustext.FAIL
-      );
-      return next(error);
+      return next(AppError.create("Vaccine not found or unauthorized to update", 404, httpstatustext.FAIL));
     }
-
+  
     // Validate BoosterDose and AnnualDose if provided
     if (BoosterDose !== undefined && (isNaN(BoosterDose) || BoosterDose < 0)) {
       return res.status(400).json({
@@ -214,15 +211,15 @@ const getVaccines = asyncwrapper(async (req, res) => {
         message: "BoosterDose must be a non-negative number.",
       });
     }
-
+  
     if (AnnualDose !== undefined && (isNaN(AnnualDose) || AnnualDose < 0)) {
       return res.status(400).json({
         status: httpstatustext.FAIL,
         message: "AnnualDose must be a non-negative number.",
       });
     }
-
-    // If vaccine type is being updated, verify it exists
+  
+    // Handle vaccine type or other name
     if (vaccineTypeId) {
       const vaccineType = await VaccineType.findById(vaccineTypeId);
       if (!vaccineType) {
@@ -232,30 +229,32 @@ const getVaccines = asyncwrapper(async (req, res) => {
         });
       }
       vaccine.vaccineType = vaccineTypeId;
+      vaccine.otherVaccineName = undefined; // clear custom name if type is used
+    } else if (otherVaccineName) {
+      vaccine.otherVaccineName = otherVaccineName;
+      vaccine.vaccineType = undefined; // clear reference if using custom name
     }
   
-    // Update stock and pricing if provided
+    // Update stock and pricing
     if (bottles !== undefined) vaccine.stock.bottles = bottles;
     if (dosesPerBottle !== undefined) vaccine.stock.dosesPerBottle = dosesPerBottle;
     if (bottlePrice !== undefined) vaccine.pricing.bottlePrice = bottlePrice;
   
-    // Update BoosterDose and AnnualDose if provided
     if (BoosterDose !== undefined) vaccine.BoosterDose = BoosterDose;
     if (AnnualDose !== undefined) vaccine.AnnualDose = AnnualDose;
   
-    // Recalculate derived values if any stock/pricing fields changed
     if (bottles !== undefined || dosesPerBottle !== undefined || bottlePrice !== undefined) {
       vaccine.stock.totalDoses = vaccine.stock.bottles * vaccine.stock.dosesPerBottle;
       vaccine.pricing.dosePrice = vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle;
     }
   
-    // Apply other updates
     Object.assign(vaccine, updatedData);
   
     await vaccine.save();
   
     res.json({ status: httpstatustext.SUCCESS, data: { vaccine } });
   });
+  
   
   // Delete vaccine
   const deleteVaccine = asyncwrapper(async (req, res, next) => {
