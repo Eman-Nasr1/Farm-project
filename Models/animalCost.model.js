@@ -13,7 +13,15 @@ const AnimalCostSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
-    vaccineCost: {  // New field for vaccine costs
+    vaccineCost: {
+        type: Number,
+        default: 0,
+    },
+    purchasePrice: {
+        type: Number,
+        default: 0,
+    },
+    marketValue: {
         type: Number,
         default: 0,
     },
@@ -34,9 +42,20 @@ const AnimalCostSchema = new mongoose.Schema({
     },
 });
 
+
 // Update the pre-save hook to include vaccineCost in total calculation
 AnimalCostSchema.pre('save', function (next) {
-    this.totalCost = this.feedCost + this.treatmentCost + this.vaccineCost;
+    const baseCost = this.feedCost + this.treatmentCost + this.vaccineCost;
+
+    // Add either purchasePrice or marketValue to the total cost
+    if (this.purchasePrice && this.purchasePrice > 0) {
+        this.totalCost = baseCost + this.purchasePrice;
+    } else if (this.marketValue && this.marketValue > 0) {
+        this.totalCost = baseCost + this.marketValue;
+    } else {
+        this.totalCost = baseCost;
+    }
+
     next();
 });
 

@@ -20,5 +20,5 @@ router.delete('/api/animal/deleteanimal/:tagId',verifytoken,animalcontroller.del
 router.post('/api/animal/import', verifytoken, excelOps.uploadExcelFile, animalcontroller.importAnimalsFromExcel);
 
 router.get('/api/animal/getanimalCost',verifytoken,animalCostController.getallanimalscost);
-
+router.get('/api/animal/males',verifytoken,animalcontroller.getAllMaleAnimalTagIds);
 module.exports=router;

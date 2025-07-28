@@ -46,6 +46,4 @@ const getallanimalscost = asyncwrapper(async (req, res,next) => {
 
 module.exports={
     getallanimalscost,
-   
-    
 }

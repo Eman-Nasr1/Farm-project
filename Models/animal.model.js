@@ -43,9 +43,13 @@ const Animalschema = new mongoose.Schema({
           type: mongoose.Schema.Types.ObjectId,
           ref: 'LocationShed'
     },
+    marketValue: {
+        type: Number,
+        default: 0
+    },
     gender: {
         type: String,
-        enum: ['male', 'female', 'ذكر', 'أنثى'],
+        enum: ['male', 'female'],
         required: true
     },
     female_Condition: {

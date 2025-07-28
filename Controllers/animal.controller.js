@@ -5,6 +5,7 @@ const AppError=require('../utilits/AppError');
 const User=require('../Models/user.model');
 const LocationShed=require('../Models/locationsed.model');
 const Breed=require('../Models/breed.model');
+const AnimalCost=require('../Models/animalCost.model');
 const mongoose = require('mongoose');
 const i18n = require('../i18n');
 const excelOps = require('../utilits/excelOperations');
@@ -402,7 +403,9 @@ const getsingleanimal = asyncwrapper(async (req, res, next) => {
 
 const addanimal = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const { locationShedName, breed, birthDate, age, ...animalData } = req.body;
+    //const { locationShedName, breed, birthDate, age, ...animalData } = req.body;
+    const { locationShedName, breed, birthDate, age, marketValue, ...animalData } = req.body;
+
 
     // Validate input: either birthDate or age must be provided
     if (!birthDate && !age) {
@@ -435,16 +438,26 @@ const addanimal = asyncwrapper(async (req, res, next) => {
     }
 
     // Create the animal
+    
     const newanimal = new Animal({
         ...animalData,
         birthDate: finalBirthDate,
         locationShed: locationShed._id,
         breed: breedDoc._id,
-        owner: userId
+        owner: userId,
+        marketValue // include this line
     });
 
     await newanimal.save();
 
+    if (newanimal.purchasePrice > 0 || newanimal.marketValue > 0) {
+        await AnimalCost.create({
+            animalTagId: newanimal.tagId,
+            purchasePrice: newanimal.purchasePrice || 0,
+            marketValue: newanimal.marketValue || 0,
+            owner: userId
+        });
+    }
     const populatedAnimal = await Animal.findById(newanimal._id)
         .populate('locationShed', 'locationShedName')
         .populate('breed', 'breedName');
@@ -452,12 +465,11 @@ const addanimal = asyncwrapper(async (req, res, next) => {
     res.json({ status: httpstatustext.SUCCESS, data: { animal: populatedAnimal } });
 });
 
-
-
-
 const updateanimal = asyncwrapper(async (req, res, next) => {
     const animalId = req.params.tagId;
+    //const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
     const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
+
 
     // Handle location shed update if name is provided
     if (locationShedName) {
@@ -500,7 +512,27 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
     if (!updatedanimal) {
         return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
     }
+    // Update corresponding AnimalCost record if marketValue or purchasePrice changed
+    if (marketValue !== undefined || purchasePrice !== undefined) {
+        const updateCostData = {};
+        if (marketValue !== undefined) updateCostData.marketValue = marketValue;
+        if (purchasePrice !== undefined) updateCostData.purchasePrice = purchasePrice;
 
+        // Recalculate totalCost if needed
+        if (purchasePrice !== undefined) {
+            const existingCost = await AnimalCost.findOne({ animalTagId: updatedanimal.tagId });
+            if (existingCost) {
+                updateCostData.totalCost = purchasePrice + existingCost.feedCost + 
+                                          existingCost.treatmentCost + existingCost.vaccineCost;
+            }
+        }
+
+        await AnimalCost.findOneAndUpdate(
+            { animalTagId: updatedanimal.tagId, owner: req.user.id },
+            { $set: updateCostData },
+            { new: true, runValidators: true }
+        );
+    }
     // Populate fields for response
     const populatedAnimal = await Animal.findById(updatedanimal._id)
         .populate('locationShed', 'locationShedName')
@@ -509,13 +541,6 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
     return res.status(200).json({ status: httpstatustext.SUCCESS, data: { animal: populatedAnimal } });
 });
 
-
-// const deleteanimal= asyncwrapper(async(req,res)=>{
-//     await Animal.deleteOne({_id:req.params.tagId});
-    
-//    res.status(200).json({status:httpstatustext.SUCCESS,data:null});
-
-// })
 const deleteanimal = asyncwrapper(async (req, res, next) => {
     const animalId =req.params.tagId; // Use consistent parameter name
     
@@ -565,6 +590,27 @@ const getAllLocationSheds = asyncwrapper(async (req, res, next) => {
     res.json({ status: httpstatustext.SUCCESS, data: { locationSheds } });
 });
 
+const getAllMaleAnimalTagIds = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
+
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
+
+    const animals = await Animal.find({
+        owner: userId,
+        gender: 'male'
+    }).select('tagId -_id');
+
+    const tagIds = animals.map(animal => animal.tagId); // extract only tagId
+
+    res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        count: tagIds.length,
+        data: tagIds
+    });
+});
+
 
 module.exports={
     getallanimals,
@@ -577,4 +623,5 @@ module.exports={
     getAllLocationSheds,
     getAnimalStatistics,
     downloadAnimalTemplate,
+    getAllMaleAnimalTagIds,
 }
