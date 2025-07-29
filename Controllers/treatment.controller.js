@@ -77,58 +77,57 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
     name,
     type,
     bottles,
-    dosesPerBottle,
+    volumePerBottle,
+    unitOfMeasure,
     bottlePrice,
     expireDate
   } = req.body;
 
-  // Validate input
+  // Validate inputs
   if (
     !name ||
     !type ||
     bottles === undefined || isNaN(bottles) || bottles < 0 ||
-    dosesPerBottle === undefined || isNaN(dosesPerBottle) || dosesPerBottle < 1 ||
+    volumePerBottle === undefined || isNaN(volumePerBottle) || volumePerBottle <= 0 ||
+    !unitOfMeasure || !['ml', 'cm³', 'ampoule'].includes(unitOfMeasure) ||
     bottlePrice === undefined || isNaN(bottlePrice) || bottlePrice < 0 ||
     !expireDate
   ) {
     return res.status(400).json({
       status: httpstatustext.FAIL,
-      message: "Valid name, type, bottles, doses per bottle, bottle price, and expiry date are required.",
+      message: "Valid name, type, bottles, volume per bottle, unit, bottle price, and expiry date are required.",
     });
   }
 
   // Validate expiry date
   const expiry = new Date(expireDate);
-  if (isNaN(expiry.getTime())) {
+  if (isNaN(expiry.getTime()) || expiry < new Date()) {
     return res.status(400).json({
       status: httpstatustext.FAIL,
-      message: "Invalid expiry date format. Please use YYYY-MM-DD format.",
-    });
-  }
-  if (expiry < new Date()) {
-    return res.status(400).json({
-      status: httpstatustext.FAIL,
-      message: "Expiry date cannot be in the past.",
+      message: "Invalid or past expiry date.",
     });
   }
 
-  // Calculate derived values
-  const totalDoses = bottles * dosesPerBottle;
-  const dosePrice = bottlePrice / dosesPerBottle;
+  // Derived calculations
+  const totalVolume = bottles * volumePerBottle;
+  let pricePerMl = null;
+  if (['ml', 'cm³'].includes(unitOfMeasure)) {
+    pricePerMl = bottlePrice / volumePerBottle;
+  }
 
-  // Create new treatment
   const newTreatment = new Treatment({
     name,
     type,
     stock: {
       bottles,
-      dosesPerBottle,
-      totalDoses
+      volumePerBottle,
+      unitOfMeasure,
+      totalVolume
     },
     pricing: {
-      bottlePrice,
-      dosePrice
+      bottlePrice
     },
+    pricePerMl,
     expireDate: expiry,
     owner: userId
   });
@@ -144,37 +143,58 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
 const updateTreatment = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const treatmentId = req.params.treatmentId;
-  const { price, volume, ...updatedData } = req.body; // Extract price & volume separately
+  const {
+    name,
+    type,
+    bottles,
+    volumePerBottle,
+    unitOfMeasure,
+    bottlePrice,
+    expireDate
+  } = req.body;
 
-  // Find the treatment owned by the user
-  let treatment = await Treatment.findOne({ _id: treatmentId, owner: userId });
-
+  const treatment = await Treatment.findOne({ _id: treatmentId, owner: userId });
   if (!treatment) {
     const error = AppError.create(
-      "Treatment information not found or unauthorized to update",
+      "Treatment not found or not authorized.",
       404,
       httpstatustext.FAIL
     );
     return next(error);
   }
 
-  // Update treatment fields if provided
-  if (price) treatment.price = price;
-  if (volume) treatment.volume = volume;
+  // Apply updates
+  if (name) treatment.name = name;
+  if (type) treatment.type = type;
 
-  // Recalculate pricePerMl if price or volume is updated
-  if (price || volume) {
-    treatment.pricePerMl = treatment.price / treatment.volume;
+  if (bottles !== undefined) treatment.stock.bottles = bottles;
+  if (volumePerBottle !== undefined) treatment.stock.volumePerBottle = volumePerBottle;
+  if (unitOfMeasure) treatment.stock.unitOfMeasure = unitOfMeasure;
+  if (bottlePrice !== undefined) treatment.pricing.bottlePrice = bottlePrice;
+
+  if (expireDate) {
+    const expiry = new Date(expireDate);
+    if (isNaN(expiry.getTime()) || expiry < new Date()) {
+      return res.status(400).json({
+        status: httpstatustext.FAIL,
+        message: "Invalid or past expiry date.",
+      });
+    }
+    treatment.expireDate = expiry;
   }
 
-  // Apply other updates
-  Object.assign(treatment, updatedData);
+  // Recalculate pricePerMl if unit is ml or cm³
+  if (['ml', 'cm³'].includes(treatment.stock.unitOfMeasure)) {
+    treatment.pricePerMl = treatment.pricing.bottlePrice / treatment.stock.volumePerBottle;
+  } else {
+    treatment.pricePerMl = null;
+  }
 
-  // Save the updated treatment
   await treatment.save();
 
   res.json({ status: httpstatustext.SUCCESS, data: { treatment } });
 });
+
 
 const deleteTreatment = asyncwrapper(async (req, res) => {
   await Treatment.deleteOne({ _id: req.params.treatmentId });
