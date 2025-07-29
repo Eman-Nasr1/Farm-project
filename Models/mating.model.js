@@ -20,15 +20,15 @@ const MatingSchema = new mongoose.Schema(
         sonarNotificationSent: {
             type: Boolean,
             default: false
-          },
-          deliveryNotificationSent: {
+        },
+        deliveryNotificationSent: {
             type: Boolean,
             default: false
-          },
+        },
         checkDays: {
             type: Number,
-            enum: [45, 60, 90], // Only allow these specific values
-            required: false // Optional field
+            enum: [45, 60, 90],
+            required: false
         },
         sonarDate: {
             type: Date
@@ -36,6 +36,17 @@ const MatingSchema = new mongoose.Schema(
         sonarRsult: {
             type: String,
             enum: ["positive", "negative"],
+        },
+        // Number of fetuses (optional)
+        fetusCount: {
+            type: Number,
+            min: 1
+        },
+        // Pregnancy age in days (optional)
+        pregnancyAge: {
+            type: Number,
+            min: 0,
+            max: 147 // Maximum pregnancy duration
         },
         expectedDeliveryDate: {
             type: Date
@@ -64,9 +75,14 @@ MatingSchema.pre('save', function (next) {
         this.sonarDate = sonarDate;
     }
 
-    // Calculate expectedDeliveryDate if sonarResult is positive
-    if (this.sonarRsult === 'positive' && this.matingDate) {
-        const daysToAdd = 147; // 147 days after mating for expected delivery
+    // Calculate expectedDeliveryDate based on pregnancyAge if provided
+    if (this.pregnancyAge && this.matingDate) {
+        const remainingDays = 147 - this.pregnancyAge;
+        this.expectedDeliveryDate = new Date(this.matingDate.getTime() + remainingDays * 24 * 60 * 60 * 1000);
+    }
+    // Otherwise calculate normally if sonarResult is positive
+    else if (this.sonarRsult === 'positive' && this.matingDate) {
+        const daysToAdd = 147;
         this.expectedDeliveryDate = new Date(this.matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
     }
 
@@ -81,11 +97,9 @@ MatingSchema.pre('findOneAndUpdate', async function (next) {
     if (update.checkDays) {
         let matingDate;
         
-        // If matingDate is provided in the update, use that
         if (update.matingDate) {
             matingDate = new Date(update.matingDate);
         } else {
-            // Otherwise, get the current matingDate from the document
             const doc = await this.model.findOne(this.getQuery());
             matingDate = doc?.matingDate;
         }
@@ -97,8 +111,24 @@ MatingSchema.pre('findOneAndUpdate', async function (next) {
         }
     }
 
-    // Calculate expectedDeliveryDate if sonarResult is being updated to positive
-    if (update.sonarRsult === 'positive') {
+    // Handle expectedDeliveryDate calculation based on pregnancyAge
+    if (update.pregnancyAge !== undefined) {
+        let matingDate;
+        
+        if (update.matingDate) {
+            matingDate = new Date(update.matingDate);
+        } else {
+            const doc = await this.model.findOne(this.getQuery());
+            matingDate = doc?.matingDate;
+        }
+
+        if (matingDate && !isNaN(matingDate.getTime())) {
+            const remainingDays = 147 - update.pregnancyAge;
+            update.expectedDeliveryDate = new Date(matingDate.getTime() + remainingDays * 24 * 60 * 60 * 1000);
+        }
+    }
+    // Otherwise calculate normally if sonarResult is positive
+    else if (update.sonarRsult === 'positive') {
         let matingDate;
         
         if (update.matingDate) {

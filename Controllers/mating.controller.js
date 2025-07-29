@@ -195,7 +195,6 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
     }
 });
 
-
 const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
     try {
         const userId = req.user?.id || req.userId;
@@ -310,12 +309,22 @@ const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
 
 const addmating = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const { tagId, checkDays, ...matingData } = req.body;
+    const { tagId, checkDays, pregnancyAge, ...matingData } = req.body;
 
     // Validate checkDays if provided
     if (checkDays && ![45, 60, 90].includes(checkDays)) {
         const error = AppError.create(
             'checkDays must be one of: 45, 60, or 90', 
+            400, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
+
+    // Validate pregnancyAge if provided
+    if (pregnancyAge && (pregnancyAge < 0 || pregnancyAge > 147)) {
+        const error = AppError.create(
+            'pregnancyAge must be between 0 and 147 days', 
             400, 
             httpstatustext.FAIL
         );
@@ -337,20 +346,34 @@ const addmating = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
-    // Calculate sonarDate if checkDays is provided and matingDate exists
-    if (checkDays && matingData.matingDate) {
+    // Calculate dates based on provided data
+    if (matingData.matingDate) {
         const matingDate = new Date(matingData.matingDate);
-        if (!isNaN(matingDate.getTime())) {
-            const sonarDate = new Date(matingDate);
-            sonarDate.setDate(sonarDate.getDate() + checkDays);
-            matingData.sonarDate = sonarDate;
-        } else {
+        if (isNaN(matingDate.getTime())) {
             const error = AppError.create(
                 'Invalid matingDate provided', 
                 400, 
                 httpstatustext.FAIL
             );
             return next(error);
+        }
+
+        // Calculate sonarDate if checkDays is provided
+        if (checkDays) {
+            const sonarDate = new Date(matingDate);
+            sonarDate.setDate(sonarDate.getDate() + checkDays);
+            matingData.sonarDate = sonarDate;
+        }
+
+        // Calculate expectedDeliveryDate based on pregnancyAge if provided
+        if (pregnancyAge) {
+            const remainingDays = 147 - pregnancyAge;
+            matingData.expectedDeliveryDate = new Date(matingDate.getTime() + remainingDays * 24 * 60 * 60 * 1000);
+        } 
+        // Otherwise calculate normally if sonarResult is positive
+        else if (matingData.sonarRsult === 'positive') {
+            const daysToAdd = 147;
+            matingData.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
         }
     }
 
@@ -359,6 +382,7 @@ const addmating = asyncwrapper(async (req, res, next) => {
         owner: userId, 
         tagId, 
         checkDays,
+        pregnancyAge,
         animalId: animal._id 
     });
 
@@ -372,7 +396,7 @@ const addmating = asyncwrapper(async (req, res, next) => {
 
 const addMatingByLocation = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
-    const { locationShed, checkDays, ...matingData } = req.body; // Changed to locationShedId
+    const { locationShed, checkDays, pregnancyAge, ...matingData } = req.body;
 
     // Validate checkDays if provided
     if (checkDays && ![45, 60, 90].includes(checkDays)) {
@@ -384,8 +408,18 @@ const addMatingByLocation = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
+    // Validate pregnancyAge if provided
+    if (pregnancyAge && (pregnancyAge < 0 || pregnancyAge > 147)) {
+        const error = AppError.create(
+            'pregnancyAge must be between 0 and 147 days', 
+            400, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
+
     const femaleAnimals = await Animal.find({ 
-        locationShed: locationShed, // Using the ObjectId directly
+        locationShed: locationShed,
         gender: 'female',
         owner: userId
     });
@@ -399,20 +433,34 @@ const addMatingByLocation = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
-    // Calculate sonarDate if checkDays and matingDate are provided
-    if (checkDays && matingData.matingDate) {
+    // Calculate dates based on provided data
+    if (matingData.matingDate) {
         const matingDate = new Date(matingData.matingDate);
-        if (!isNaN(matingDate.getTime())) {
-            const sonarDate = new Date(matingDate);
-            sonarDate.setDate(sonarDate.getDate() + checkDays);
-            matingData.sonarDate = sonarDate;
-        } else {
+        if (isNaN(matingDate.getTime())) {
             const error = AppError.create(
                 'Invalid matingDate provided', 
                 400, 
                 httpstatustext.FAIL
             );
             return next(error);
+        }
+
+        // Calculate sonarDate if checkDays is provided
+        if (checkDays) {
+            const sonarDate = new Date(matingDate);
+            sonarDate.setDate(sonarDate.getDate() + checkDays);
+            matingData.sonarDate = sonarDate;
+        }
+
+        // Calculate expectedDeliveryDate based on pregnancyAge if provided
+        if (pregnancyAge) {
+            const remainingDays = 147 - pregnancyAge;
+            matingData.expectedDeliveryDate = new Date(matingDate.getTime() + remainingDays * 24 * 60 * 60 * 1000);
+        } 
+        // Otherwise calculate normally if sonarResult is positive
+        else if (matingData.sonarRsult === 'positive') {
+            const daysToAdd = 147;
+            matingData.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
         }
     }
 
@@ -422,6 +470,7 @@ const addMatingByLocation = asyncwrapper(async (req, res, next) => {
             const newMating = new Mating({
                 ...matingData,
                 checkDays,
+                pregnancyAge,
                 owner: userId,
                 tagId: animal.tagId,
                 animalId: animal._id,
@@ -470,7 +519,7 @@ const deletemating= asyncwrapper(async(req,res,next)=>{
 const updatemating = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const matingId = req.params.matingId;
-    const updatedData = req.body;
+    const {pregnancyAge, ...updatedData } = req.body;
 
     // First verify the mating exists and belongs to the user
     const existingMating = await Mating.findOne({ _id: matingId, owner: userId });
@@ -483,12 +532,21 @@ const updatemating = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
-    // If checkDays is being updated but matingDate isn't, we need the existing matingDate
+    // Validate pregnancyAge if provided
+    if (pregnancyAge !== undefined && (pregnancyAge < 0 || pregnancyAge > 147)) {
+        const error = AppError.create(
+            'pregnancyAge must be between 0 and 147 days', 
+            400, 
+            httpstatustext.FAIL
+        );
+        return next(error);
+    }
+
+    // Handle checkDays and sonarDate calculations
     if (updatedData.checkDays && !updatedData.matingDate) {
         updatedData.matingDate = existingMating.matingDate;
     }
 
-    // If checkDays is provided without matingDate, and there isn't an existing matingDate
     if (updatedData.checkDays && !updatedData.matingDate) {
         const error = AppError.create(
             'Cannot calculate sonarDate: matingDate is required when providing checkDays', 
@@ -498,33 +556,54 @@ const updatemating = asyncwrapper(async (req, res, next) => {
         return next(error);
     }
 
-    // If matingDate is being updated and checkDays exists (either in update or existing)
+    // Handle date calculations
+    let matingDateToUse;
     if (updatedData.matingDate) {
+        matingDateToUse = new Date(updatedData.matingDate);
+        if (isNaN(matingDateToUse.getTime())) {
+            const error = AppError.create(
+                'Invalid matingDate provided', 
+                400, 
+                httpstatustext.FAIL
+            );
+            return next(error);
+        }
+
+        // Calculate sonarDate if checkDays is provided
         const checkDaysToUse = updatedData.checkDays || existingMating.checkDays;
         if (checkDaysToUse) {
-            const matingDate = new Date(updatedData.matingDate);
-            if (!isNaN(matingDate.getTime())) {
-                const sonarDate = new Date(matingDate);
-                sonarDate.setDate(sonarDate.getDate() + checkDaysToUse);
-                updatedData.sonarDate = sonarDate;
-            } else {
-                const error = AppError.create(
-                    'Invalid matingDate provided', 
-                    400, 
-                    httpstatustext.FAIL
-                );
-                return next(error);
-            }
+            const sonarDate = new Date(matingDateToUse);
+            sonarDate.setDate(sonarDate.getDate() + checkDaysToUse);
+            updatedData.sonarDate = sonarDate;
         }
+    } else if (existingMating.matingDate) {
+        matingDateToUse = new Date(existingMating.matingDate);
+    }
+
+    // Handle pregnancyAge and expectedDeliveryDate calculations
+    if (pregnancyAge !== undefined && matingDateToUse) {
+        const remainingDays = 147 - pregnancyAge;
+        updatedData.expectedDeliveryDate = new Date(matingDateToUse.getTime() + remainingDays * 24 * 60 * 60 * 1000);
+    } 
+    // If sonarResult is being updated to positive and we have matingDate
+    else if (updatedData.sonarRsult === 'positive' && matingDateToUse) {
+        const daysToAdd = 147;
+        updatedData.expectedDeliveryDate = new Date(matingDateToUse.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+    } 
+    // If sonarResult is being updated to negative
+    else if (updatedData.sonarRsult === 'negative') {
+        updatedData.expectedDeliveryDate = null;
+        updatedData.pregnancyAge = null;
+        updatedData.fetusCount = null;
     }
 
     // Perform the update
     const updatedMating = await Mating.findOneAndUpdate(
-        { _id: matingId, owner: userId }, // Ensure we only update if owner matches
-        updatedData, 
+        { _id: matingId, owner: userId },
+        { ...updatedData, ...(pregnancyAge !== undefined && { pregnancyAge }) },
         { 
-            new: true, // Return the updated document
-            runValidators: true // Ensure schema validations run
+            new: true,
+            runValidators: true
         }
     );
 
