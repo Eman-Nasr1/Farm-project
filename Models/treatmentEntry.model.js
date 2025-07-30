@@ -1,54 +1,60 @@
-const mongoose = require("mongoose");  
+const mongoose = require("mongoose");
 
-const treatmentEntrySchema = new mongoose.Schema({  
-   locationShed: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'LocationShed'
-      }, 
-    owner: {  
-        type: mongoose.Schema.Types.ObjectId,  
-        ref: "User",  
-        required: true,  
-    },  
-    treatments: [  
-        {  
-            treatmentId: {  
-                type: mongoose.Schema.Types.ObjectId,  
-                ref: "Treatment", // Reference to the Treatment model  
-                required: true,  
-            },  
-            doses: {  
-                type: Number,  
-                required: true,  
-            },  
-        },  
-    ], 
-    eyeCheck: {
-        type: Boolean,
-        default: false,
-      },
-      rectalCheck: {
-        type: Boolean,
-        default: false,
-      },
-      respiratoryCheck: {
-        type: Boolean,
-        default: false,
-      },
-      rumenCheck: {
-        type: Boolean,
-        default: false,
-      },
-       
-    tagId: {  
-        type: String, // Optional field for tag identifier  
-    },  
-    date: {  
-        type: Date,  
-        default: Date.now,  
-    },  
-}, { timestamps: true });  
+const doseSchema = new mongoose.Schema({
+  date: { type: Date, required: true },
+  taken: { type: Boolean, default: false }
+});
 
-const TreatmentEntry = mongoose.model("TreatmentEntry", treatmentEntrySchema);  
+const treatmentPlanSchema = new mongoose.Schema({
+  treatmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Treatment",
+    required: true,
+  },
+  volumePerAnimal: {
+    type: Number,
+    required: true,
+  },
+  numberOfDoses: {
+    type: Number,
+    required: true,
+  },
+  doses: [doseSchema]  // detailed tracking
+});
+
+const treatmentEntrySchema = new mongoose.Schema({
+  locationShed: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LocationShed',
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  tagId: {
+    type: String,
+    required: true
+  },
+  date: {
+    type: Date,
+    default: Date.now,
+  },
+
+  // First examination
+  eyeCheck:  { type: String },
+  rectalCheck:  { type: String },
+  respiratoryCheck: { type: String },
+  rumenCheck:  { type: String },
+  // Diagnosis
+  diagnosis: { type: String },
+  temperature: { type: Number },
+
+  // Treatments
+  treatments: [treatmentPlanSchema],
+
+}, { timestamps: true });
+
+const TreatmentEntry = mongoose.model("TreatmentEntry", treatmentEntrySchema);
 
 module.exports = TreatmentEntry;
