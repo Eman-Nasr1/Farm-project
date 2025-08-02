@@ -278,27 +278,26 @@ const getAnimalWithGrowthData = asyncwrapper(async (req, res, next) => {
 const getAllAnimalsWithGrowthData = asyncwrapper(async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const { tagId = '', page = 1, limit = 10 } = req.query;
 
-        // 1. Get all animals for the user
-        const animals = await Animal.find({ owner: userId });
+        const currentPage = parseInt(page);
+        const perPage = parseInt(limit);
 
-        if (!animals || animals.length === 0) {
-            return res.status(200).json({
-                status: httpstatustext.SUCCESS,
-                data: []
-            });
+        const filter = { owner: userId };
+        if (tagId) {
+            filter.tagId = { $regex: tagId, $options: 'i' };
         }
 
-        // 2. Get growth data for each animal
+        // جلب كل الحيوانات (بدون pagination هنا)
+        const animals = await Animal.find(filter);
+
         const animalsWithGrowthData = await Promise.all(
             animals.map(async (animal) => {
-                // Get first and last weights
                 const [firstWeight, lastWeight] = await Promise.all([
                     Weight.findOne({ animalId: animal._id }).sort({ Date: 1 }),
                     Weight.findOne({ animalId: animal._id }).sort({ Date: -1 })
                 ]);
 
-                // Calculate growth metrics
                 let ADG = null;
                 let conversionEfficiency = null;
                 let growthPeriodDays = null;
@@ -317,7 +316,6 @@ const getAllAnimalsWithGrowthData = asyncwrapper(async (req, res, next) => {
                     _id: animal._id,
                     tagId: animal.tagId,
                     name: animal.name,
-                    // include other animal fields as needed
                     growthData: {
                         firstWeight: firstWeight ? {
                             date: firstWeight.Date,
@@ -342,15 +340,27 @@ const getAllAnimalsWithGrowthData = asyncwrapper(async (req, res, next) => {
             })
         );
 
-        // 3. Filter animals that have ADG and conversionEfficiency data
-        const animalsWithValidGrowthData = animalsWithGrowthData.filter(animal => 
-            animal.growthData.overallGrowth.ADG !== null && 
+        // فلترة اللي ليهم بيانات نمو فقط
+        const validAnimals = animalsWithGrowthData.filter(animal =>
+            animal.growthData.overallGrowth.ADG !== null &&
             animal.growthData.overallGrowth.conversionEfficiency !== null
         );
 
+        const total = validAnimals.length;
+        const totalPages = Math.ceil(total / perPage);
+
+        // Apply pagination بعد الفلترة
+        const paginatedData = validAnimals.slice((currentPage - 1) * perPage, currentPage * perPage);
+
         res.json({
             status: httpstatustext.SUCCESS,
-            data: animalsWithValidGrowthData
+            data: paginatedData,
+            pagination: {
+                total,
+                page: currentPage,
+                limit: perPage,
+                totalPages
+            }
         });
 
     } catch (error) {
@@ -358,6 +368,9 @@ const getAllAnimalsWithGrowthData = asyncwrapper(async (req, res, next) => {
         return next(AppError.create('Failed to fetch animals growth data', 500, httpstatustext.ERROR));
     }
 });
+
+
+
 const exportWeightsToExcel = asyncwrapper(async (req, res, next) => {
     try {
         const userId = req.user?.id || req.userId;
