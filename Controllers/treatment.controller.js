@@ -1017,60 +1017,93 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
 });
 const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
-  const { treatmentShedId } = req.params; // ID of the treatment entry to delete
+  const { treatmentShedId } = req.params;
 
-  // Find the treatment entry
-  const treatmentEntry = await TreatmentEntry.findById(treatmentShedId);
-  if (!treatmentEntry) {
-    return res.status(404).json({
-      status: "FAILURE",
-      message: "Treatment entry not found.",
-    });
-  }
+  // Start a transaction session
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  // Ensure the user is authorized to delete the treatment entry
-  if (treatmentEntry.owner.toString() !== userId.toString()) {
-    return res.status(403).json({
-      status: "FAILURE",
-      message: "You are not authorized to delete this treatment entry.",
-    });
-  }
-
-  // Iterate through each treatment in the entry and restore stock
-  for (const treatmentItem of treatmentEntry.treatments) {
-    const treatment = await Treatment.findById(treatmentItem.treatmentId);
-    if (treatment) {
-      treatment.stock.totalDoses += treatmentItem.doses; // Restore deducted doses
-      await treatment.save();
+  try {
+    // Find the treatment entry with session
+    const treatmentEntry = await TreatmentEntry.findById(treatmentShedId).session(session);
+    if (!treatmentEntry) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        status: "FAILURE",
+        message: "Treatment entry not found.",
+      });
     }
-  }
 
-  // Delete the treatment entry
-  await TreatmentEntry.findByIdAndDelete(treatmentShedId);
+    // Verify ownership
+    if (treatmentEntry.owner.toString() !== userId.toString()) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        status: "FAILURE",
+        message: "You are not authorized to delete this treatment entry.",
+      });
+    }
 
-  // Update the treatment cost for the animal
-  let animalCostEntry = await AnimalCost.findOne({
-    animalTagId: treatmentEntry.tagId,
-  });
+    let totalRestoredVolume = 0;
+    let totalDeductedCost = 0;
 
-  if (animalCostEntry) {
-    // Deduct the treatment cost from the total treatment cost
-    const deductedCost = treatmentEntry.treatments.reduce((sum, item) => {
-      return sum + item.doses * (treatmentEntry.pricePerMl || 0);
-    }, 0);
+    // Process each treatment in the entry
+    for (const treatmentItem of treatmentEntry.treatments) {
+      const treatment = await Treatment.findById(treatmentItem.treatmentId).session(session);
+      if (!treatment) continue;
 
-    animalCostEntry.treatmentCost = Math.max(
-      0,
-      animalCostEntry.treatmentCost - deductedCost
+      // Calculate restored volume (using volumePerAnimal * doses count)
+      const restoredVolume = treatmentItem.volumePerAnimal * treatmentItem.numberOfDoses;
+      totalRestoredVolume += restoredVolume;
+
+      // Restore stock
+      treatment.stock.totalVolume += restoredVolume;
+      treatment.stock.bottles = Math.ceil(treatment.stock.totalVolume / treatment.stock.volumePerBottle);
+      await treatment.save({ session });
+
+      // Calculate cost to deduct
+      const treatmentCost = restoredVolume * treatment.pricePerMl;
+      totalDeductedCost += treatmentCost;
+    }
+
+    // Update animal cost
+    await AnimalCost.findOneAndUpdate(
+      { animalTagId: treatmentEntry.tagId },
+      { 
+        $inc: { treatmentCost: -totalDeductedCost },
+        $set: { date: new Date() } // Update the modification date
+      },
+      { session }
     );
-    await animalCostEntry.save();
-  }
 
-  // Respond with success message
-  res.status(200).json({
-    status: "SUCCESS",
-    message: "Treatment entry deleted successfully.",
-  });
+    // Delete the treatment entry
+    await TreatmentEntry.findByIdAndDelete(treatmentShedId).session(session);
+
+    // Commit the transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      status: "SUCCESS",
+      message: "Treatment entry deleted successfully.",
+      data: {
+        restoredVolume: totalRestoredVolume,
+        deductedCost: totalDeductedCost,
+        deletedEntryId: treatmentShedId
+      }
+    });
+
+  } catch (error) {
+    // Abort transaction on error
+    await session.abortTransaction();
+    session.endSession();
+    
+    console.error("Error deleting treatment entry:", error);
+    res.status(500).json({
+      status: "ERROR",
+      message: "An error occurred while deleting the treatment entry.",
+      error: error.message
+    });
+  }
 });
 
 const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {

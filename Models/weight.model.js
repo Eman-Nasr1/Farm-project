@@ -24,7 +24,8 @@ const Weightschema=new mongoose.Schema(
             enum:["birth","Weaning","regular"],
             required: true
         },
-
+        ADG: { type: Number },
+        conversionEfficiency: { type: Number },
         owner: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
