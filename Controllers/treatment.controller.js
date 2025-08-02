@@ -364,21 +364,30 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     treatments,
     tagId,
     date,
-    eyeCheck,
-    rectalCheck,
-    respiratoryCheck,
-    rumenCheck,
-    diagnosis,
-    temperature,
+    eyeCheck = "",
+    rectalCheck = "",
+    respiratoryCheck = "",
+    rumenCheck = "",
+    diagnosis = "",
+    temperature = null,
   } = req.body;
 
-  if (!Array.isArray(treatments) || treatments.length === 0 || !tagId || !date) {
+  // Basic validation
+  if (!Array.isArray(treatments) || treatments.length === 0) {
     return res.status(400).json({
       status: "FAILURE",
-      message: "treatments (array), tagId, and date are required.",
+      message: "Treatments must be a non-empty array.",
     });
   }
 
+  if (!tagId || !date) {
+    return res.status(400).json({
+      status: "FAILURE",
+      message: "tagId and date are required fields.",
+    });
+  }
+
+  // Find the animal
   const animal = await Animal.findOne({ tagId, owner: userId });
   if (!animal) {
     return res.status(404).json({
@@ -390,25 +399,32 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   let totalTreatmentCost = 0;
   const createdTreatments = [];
 
+  // Process each treatment
   for (const treatmentItem of treatments) {
-    const { treatmentId, volumePerAnimal, numberOfDoses, doses } = treatmentItem;
+    const { 
+      treatmentId, 
+      volumePerAnimal, 
+      numberOfDoses, 
+      doses = [] 
+    } = treatmentItem;
 
-    // Validate required fields
-    if (!treatmentId || !volumePerAnimal || (!numberOfDoses && !doses)) {
+    // Validate treatment fields
+    if (!treatmentId || typeof volumePerAnimal !== 'number') {
       return res.status(400).json({
         status: "FAILURE",
-        message: "Each treatment must have treatmentId, volumePerAnimal, and either numberOfDoses or doses array.",
+        message: "Each treatment must have a valid treatmentId and volumePerAnimal.",
       });
     }
 
-    // Validate doses array if provided
-    if (doses && (!Array.isArray(doses) || doses.length === 0)) {
+    // Validate doses configuration
+    if ((!numberOfDoses || numberOfDoses < 1) && (!Array.isArray(doses) || doses.length === 0)) {
       return res.status(400).json({
         status: "FAILURE",
-        message: "If doses array is provided, it must contain at least one dose.",
+        message: "Each treatment must specify either numberOfDoses (≥1) or a non-empty doses array.",
       });
     }
 
+    // Find the treatment
     const treatment = await Treatment.findById(treatmentId);
     if (!treatment) {
       return res.status(404).json({
@@ -417,13 +433,7 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    if (treatment.expireDate && new Date(treatment.expireDate) < new Date()) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Treatment "${treatment.name}" is expired (Expired on ${treatment.expireDate.toISOString().split("T")[0]}).`,
-      });
-    }
-
+    // Check treatment ownership
     if (treatment.owner.toString() !== userId.toString()) {
       return res.status(403).json({
         status: "FAILURE",
@@ -431,27 +441,40 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // Calculate required volume based on actual number of doses
-    const actualNumberOfDoses = doses ? doses.length : numberOfDoses;
-    const requiredVolume = volumePerAnimal * actualNumberOfDoses;
-
-    if (!treatment.stock || treatment.stock.totalVolume < requiredVolume) {
+    // Check expiration
+    if (treatment.expireDate && new Date(treatment.expireDate) < new Date()) {
       return res.status(400).json({
         status: "FAILURE",
-        message: `Not enough stock for treatment "${treatment.name}". Available: ${
-          treatment.stock ? treatment.stock.totalVolume : 0
-        } mL, Required: ${requiredVolume} mL.`,
+        message: `Treatment "${treatment.name}" expired on ${treatment.expireDate.toISOString().split('T')[0]}.`,
       });
     }
 
-    // Process doses - use provided or generate default ones
-    const processedDoses = doses 
-      ? doses.map(dose => ({
-          date: new Date(dose.date),
-          taken: dose.taken || false
-        }))
-      : Array(numberOfDoses).fill().map(() => ({
-          date: new Date(date),
+    // Calculate required volume
+    const actualDoseCount = doses.length > 0 ? doses.length : numberOfDoses;
+    const requiredVolume = volumePerAnimal * actualDoseCount;
+
+    // Check stock availability
+    if (!treatment.stock || treatment.stock.totalVolume < requiredVolume) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: `Insufficient stock for "${treatment.name}". Required: ${requiredVolume} mL, Available: ${treatment.stock?.totalVolume || 0} mL.`,
+      });
+    }
+
+    // Process doses - handle both ISO and date-only formats
+    const processedDoses = doses.length > 0
+      ? doses.map(dose => {
+          const doseDate = dose.date.includes('T') 
+            ? new Date(dose.date) 
+            : new Date(`${dose.date}T00:00:00Z`);
+          
+          return {
+            date: doseDate,
+            taken: dose.taken === true // Ensure boolean
+          };
+        })
+      : Array.from({ length: numberOfDoses }, (_, i) => ({
+          date: new Date(new Date(date).getTime() + (i * 24 * 60 * 60 * 1000)),
           taken: false
         }));
 
@@ -460,51 +483,49 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     treatment.stock.bottles = Math.ceil(treatment.stock.totalVolume / treatment.stock.volumePerBottle);
     await treatment.save();
 
-    // Calculate treatment cost
+    // Calculate cost
     const treatmentCost = requiredVolume * treatment.pricePerMl;
     totalTreatmentCost += treatmentCost;
 
-    // Create treatment plan
+    // Create treatment entry
     const treatmentPlan = {
       treatmentId,
       volumePerAnimal,
-      numberOfDoses: actualNumberOfDoses,
+      numberOfDoses: actualDoseCount,
       doses: processedDoses,
     };
 
-    // Create treatment entry
     const newTreatmentEntry = new TreatmentEntry({
       treatments: [treatmentPlan],
       tagId: animal.tagId,
       locationShed: animal.locationShed || null,
       date: new Date(date),
       owner: userId,
-      eyeCheck: eyeCheck || "",
-      rectalCheck: rectalCheck || "",
-      respiratoryCheck: respiratoryCheck || "",
-      rumenCheck: rumenCheck || "",
-      diagnosis: diagnosis || "",
-      temperature: temperature || null,
+      eyeCheck,
+      rectalCheck,
+      respiratoryCheck,
+      rumenCheck,
+      diagnosis,
+      temperature,
     });
 
     await newTreatmentEntry.save();
     createdTreatments.push(newTreatmentEntry);
 
     // Update animal costs
-    let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId });
-    if (animalCostEntry) {
-      animalCostEntry.treatmentCost += treatmentCost;
-      animalCostEntry.date = new Date(date);
-    } else {
-      animalCostEntry = new AnimalCost({
-        animalTagId: animal.tagId,
-        treatmentCost,
-        feedCost: 0,
-        date: new Date(date),
-        owner: userId,
-      });
-    }
-    await animalCostEntry.save();
+    await AnimalCost.findOneAndUpdate(
+      { animalTagId: animal.tagId },
+      {
+        $inc: { treatmentCost },
+        $set: { date: new Date(date) },
+        $setOnInsert: { 
+          animalTagId: animal.tagId,
+          feedCost: 0,
+          owner: userId 
+        }
+      },
+      { upsert: true, new: true }
+    );
   }
 
   res.status(201).json({
