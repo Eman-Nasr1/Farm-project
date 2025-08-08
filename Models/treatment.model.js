@@ -44,6 +44,10 @@ const TreatmentSchema = new mongoose.Schema({
   pricePerMl: {
     type: Number
   },
+  supplier: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier'
+},
   owner: {  
     type: mongoose.Schema.Types.ObjectId,  
     ref: 'User'  

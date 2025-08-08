@@ -70,6 +70,10 @@ app.use('/',breedRoutes)
 const notificationRoutes=require('./Routes/notificationRoutes');
 app.use('/',notificationRoutes)
 
+const supplierRoutes=require('./Routes/supplierRoutes');
+app.use('/',supplierRoutes)
+
+
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
 })

@@ -19,6 +19,10 @@ const Feedschema = new mongoose.Schema({
     concentrationOfDryMatter: { // New field added here  
         type: Number, // Percentage represented as a number  
         required:true,  
+    },
+    supplier: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Supplier'
     }, 
     owner: {
         type: mongoose.Schema.Types.ObjectId,
