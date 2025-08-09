@@ -7,16 +7,60 @@ const Feed = require('../Models/feed.model');
 
 // Get all suppliers with populated treatments and feeds
 const getSuppliers = asyncwrapper(async (req, res) => {
-  const suppliers = await Supplier.find({ owner: req.user.id })
+  const userId = req.user.id;
+  const query = req.query;
+  const limit = parseInt(query.limit) || 10;
+  const page = parseInt(query.page) || 1;
+  const skip = (page - 1) * limit;
+
+  // Base filter - always filter by owner
+  const filter = { owner: userId };
+
+  // Add optional filters
+  if (query.name) {
+    filter.name = { $regex: query.name, $options: 'i' }; // Case-insensitive search
+  }
+
+  if (query.company) {
+    filter.company = { $regex: query.company, $options: 'i' };
+  }
+
+  if (query.email) {
+    filter.email = { $regex: query.email, $options: 'i' };
+  }
+
+
+  if (query.createdAtTo) {
+    filter.createdAt = { 
+      ...filter.createdAt, 
+      $lte: new Date(query.createdAtTo) 
+    };
+  }
+
+  // Get total count for pagination
+  const totalCount = await Supplier.countDocuments(filter);
+
+  // Get paginated results
+  const suppliers = await Supplier.find(filter, { "__v": false })
     .populate('treatments')
-    .populate('feeds');
-    
+    .populate('feeds')
+    .sort({ createdAt: -1 }) // Newest first
+    .limit(limit)
+    .skip(skip);
+
   res.json({
     status: httpstatustext.SUCCESS,
-    data: { suppliers }
+    data: {
+      suppliers,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    }
   });
 });
-
 // Get single supplier with populated treatments and feeds
 const getSingleSupplier = asyncwrapper(async (req, res, next) => {
   const supplier = await Supplier.findOne({
