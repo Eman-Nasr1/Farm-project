@@ -25,7 +25,6 @@ const VaccineEntrySchema = new mongoose.Schema({
     entryType: {
        
             type: String,
-            enum: ['First Dose', 'Booster Dose', 'Annual Dose','جرعة أولى', 'جرعة منشطة', 'جرعة سنوية'],
             required: true
          
    }

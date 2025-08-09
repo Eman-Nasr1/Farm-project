@@ -282,6 +282,278 @@ const deleteVaccine = asyncwrapper(async (req, res, next) => {
   });
 });
 //--------------------------------vaccine entry----------------------------------------
+const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
+  const userId = req.user.id;
+  const { limit = 10, page = 1, tagId, locationShed, entryType, dateFrom, dateTo, vaccineId, lang = 'en' } = req.query;
+
+  // Build filter object
+  const filter = { owner: userId };
+  if (tagId) filter.tagId = tagId;
+  if (entryType) filter.entryType = entryType;
+  if (vaccineId) filter.Vaccine = vaccineId;
+
+  // Date range filtering
+  if (dateFrom || dateTo) {
+    filter.date = {};
+    if (dateFrom) filter.date.$gte = new Date(dateFrom);
+    if (dateTo) filter.date.$lte = new Date(dateTo);
+  }
+
+  // Location shed filtering
+  if (locationShed) {
+    const shed = await LocationShed.findOne({ 
+      $or: [
+        { locationShedName: locationShed },
+        { _id: mongoose.Types.ObjectId.isValid(locationShed) ? locationShed : null }
+      ],
+      owner: userId
+    });
+    
+    if (!shed) {
+      return res.status(404).json({
+        status: "FAIL",
+        message: lang === 'ar' ? "لم يتم العثور على سقيفة الموقع" : "Location shed not found",
+        data: null,
+      });
+    }
+    filter.locationShed = shed._id;
+  }
+
+  // Get total count for pagination
+  const total = await VaccineEntry.countDocuments(filter);
+
+  // Get paginated results
+  const entries = await VaccineEntry.find(filter)
+    .populate({
+      path: 'Vaccine',
+      select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
+      populate: {
+        path: 'vaccineType',
+        select: 'englishName arabicName englishDiseaseType arabicDiseaseType'
+      }
+    })
+    .populate('locationShed', 'locationShedName')
+    .sort({ date: -1 })
+    .limit(parseInt(limit))
+    .skip((parseInt(page) - 1) * parseInt(limit));
+
+  // Format response with bilingual support
+  const formattedEntries = entries.map(entry => ({
+    _id: entry._id,
+    tagId: entry.tagId,
+    date: entry.date,
+    entryType: entry.entryType,
+    vaccine: entry.Vaccine ? {
+      _id: entry.Vaccine._id,
+      name: entry.Vaccine.otherVaccineName || 
+           (lang === 'ar' 
+             ? entry.Vaccine.vaccineType?.arabicName 
+             : entry.Vaccine.vaccineType?.englishName) || 
+           (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
+      diseaseType: lang === 'ar' 
+        ? entry.Vaccine.vaccineType?.arabicDiseaseType 
+        : entry.Vaccine.vaccineType?.englishDiseaseType || 
+          (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
+      dosePrice: entry.Vaccine.pricing?.dosePrice,
+      expiryDate: entry.Vaccine.expiryDate,
+      isExpired: entry.Vaccine.expiryDate < new Date()
+    } : null,
+    locationShed: entry.locationShed ? {
+      _id: entry.locationShed._id,
+      name: entry.locationShed.locationShedName
+    } : null
+  }));
+
+  res.json({
+    status: "SUCCESS",
+    message: lang === 'ar' ? 'تم جلب البيانات بنجاح' : 'Data retrieved successfully',
+    data: {
+      entries: formattedEntries,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    },
+  });
+});
+const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
+  const userId = req.user.id;
+  const { animalId } = req.params;
+  const { limit = 10, page = 1, lang = 'en' } = req.query;
+
+  // Find animal and verify ownership
+  const animal = await Animal.findOne({
+    _id: animalId,
+    owner: userId
+  });
+
+  if (!animal) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: lang === 'ar' 
+        ? "لم يتم العثور على الحيوان أو غير مصرح به" 
+        : "Animal not found or unauthorized"
+    });
+  }
+
+  // Get total count
+  const total = await VaccineEntry.countDocuments({ tagId: animal.tagId });
+
+  // Get paginated vaccine entries
+  const vaccineEntries = await VaccineEntry.find({ tagId: animal.tagId })
+    .populate({
+      path: 'Vaccine',
+      select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
+      populate: {
+        path: 'vaccineType',
+        select: 'englishName arabicName englishDiseaseType arabicDiseaseType'
+      }
+    })
+    .populate('locationShed', 'locationShedName')
+    .sort({ date: -1 })
+    .limit(parseInt(limit))
+    .skip((parseInt(page) - 1) * parseInt(limit));
+
+  if (vaccineEntries.length === 0) {
+    return res.status(404).json({
+      status: "FAILURE",
+      message: lang === 'ar' 
+        ? "لا توجد سجلات تطعيم لهذا الحيوان" 
+        : "No vaccine records found for this animal"
+    });
+  }
+
+  // Format response with bilingual support
+  const responseData = {
+    animal: {
+      _id: animal._id,
+      tagId: animal.tagId,
+      animalType: animal.animalType,
+      gender: animal.gender
+    },
+    vaccines: vaccineEntries.map(entry => ({
+      _id: entry._id,
+      date: entry.date,
+      entryType: entry.entryType,
+      vaccine: entry.Vaccine ? {
+        _id: entry.Vaccine._id,
+        name: entry.Vaccine.otherVaccineName || 
+             (lang === 'ar' 
+               ? entry.Vaccine.vaccineType?.arabicName 
+               : entry.Vaccine.vaccineType?.englishName) || 
+             (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
+        diseaseType: lang === 'ar' 
+          ? entry.Vaccine.vaccineType?.arabicDiseaseType 
+          : entry.Vaccine.vaccineType?.englishDiseaseType || 
+            (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
+        dosePrice: entry.Vaccine.pricing?.dosePrice,
+        isExpired: entry.Vaccine.expiryDate < new Date(),
+        boosterDose: entry.Vaccine.BoosterDose,
+        annualDose: entry.Vaccine.AnnualDose
+      } : null,
+      locationShed: entry.locationShed ? {
+        _id: entry.locationShed._id,
+        name: entry.locationShed.locationShedName
+      } : null
+    })),
+    pagination: {
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit))
+    }
+  };
+
+  res.json({
+    status: "SUCCESS",
+    message: lang === 'ar' ? 'تم جلب البيانات بنجاح' : 'Data retrieved successfully',
+    data: responseData
+  });
+});
+const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
+  const userId = req.user.id;
+  const { vaccineEntryId } = req.params;
+  const { lang = 'en' } = req.query;
+
+  try {
+    // Find vaccine entry and verify ownership
+    const vaccineEntry = await VaccineEntry.findOne({
+      _id: vaccineEntryId,
+      owner: userId
+    })
+    .populate({
+      path: 'Vaccine',
+      select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
+      populate: {
+        path: 'vaccineType',
+        select: 'englishName arabicName englishDiseaseType arabicDiseaseType'
+      }
+    })
+    .populate('locationShed', 'locationShedName');
+
+    if (!vaccineEntry) {
+      return res.status(404).json({
+        status: "FAILURE",
+        message: lang === 'ar' 
+          ? "لم يتم العثور على سجل التطعيم أو غير مصرح به" 
+          : "Vaccine entry not found or unauthorized"
+      });
+    }
+
+    // Find associated animal
+    const animal = await Animal.findOne({ 
+      tagId: vaccineEntry.tagId,
+      owner: userId
+    }).select('animalType gender');
+
+    // Format response with bilingual support
+    const response = {
+      _id: vaccineEntry._id,
+      tagId: vaccineEntry.tagId,
+      animal: animal ? {
+        animalType: animal.animalType,
+        gender: animal.gender
+      } : null,
+      locationShed: vaccineEntry.locationShed ? {
+        _id: vaccineEntry.locationShed._id,
+        name: vaccineEntry.locationShed.locationShedName
+      } : null,
+      date: vaccineEntry.date,
+      entryType: vaccineEntry.entryType,
+      vaccine: vaccineEntry.Vaccine ? {
+        _id: vaccineEntry.Vaccine._id,
+        name: vaccineEntry.Vaccine.otherVaccineName || 
+             (lang === 'ar' 
+               ? vaccineEntry.Vaccine.vaccineType?.arabicName 
+               : vaccineEntry.Vaccine.vaccineType?.englishName) || 
+             (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
+        diseaseType: lang === 'ar' 
+          ? vaccineEntry.Vaccine.vaccineType?.arabicDiseaseType 
+          : vaccineEntry.Vaccine.vaccineType?.englishDiseaseType || 
+            (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
+        dosePrice: vaccineEntry.Vaccine.pricing?.dosePrice,
+        isExpired: vaccineEntry.Vaccine.expiryDate < new Date(),
+        boosterDose: vaccineEntry.Vaccine.BoosterDose,
+        annualDose: vaccineEntry.Vaccine.AnnualDose,
+        expiryDate: vaccineEntry.Vaccine.expiryDate
+      } : null,
+      createdAt: vaccineEntry.createdAt,
+      updatedAt: vaccineEntry.updatedAt
+    };
+
+    res.json({
+      status: "SUCCESS",
+      message: lang === 'ar' ? 'تم جلب البيانات بنجاح' : 'Data retrieved successfully',
+      data: { vaccineEntry: response }
+    });
+
+  } catch (error) {
+    console.error("Error fetching vaccine entry:", error);
+    next(error);
+  }
+});
 
 const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
@@ -561,45 +833,7 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
     next(error);
   }
 });
-const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
-  try {
-    const vaccineEntry = await VaccineEntry.findById(req.params.vaccineEntryId)
-      .populate('Vaccine', 'vaccineName BoosterDose AnnualDose pricing.dosePrice')
-      .populate('locationShed', 'locationShedName');
 
-    if (!vaccineEntry) {
-      return res.status(404).json({
-        status: "FAILURE",
-        message: "Vaccine entry not found."
-      });
-    }
-
-    const response = {
-      _id: vaccineEntry._id,
-      tagId: vaccineEntry.tagId,
-      locationShed: vaccineEntry.locationShed ? {
-        _id: vaccineEntry.locationShed._id,
-        locationShedName: vaccineEntry.locationShed.locationShedName
-      } : null,
-      date: vaccineEntry.date,
-      entryType: vaccineEntry.entryType,
-      vaccine: vaccineEntry.Vaccine ? {  // Changed from vaccineEntry.vaccine to vaccineEntry.Vaccine
-        _id: vaccineEntry.Vaccine._id,
-        name: vaccineEntry.Vaccine.vaccineName,  // Fixed typo from vaccineName
-        dosePrice: vaccineEntry.Vaccine.pricing?.dosePrice  // Optional chaining
-      } : null
-    };
-
-    res.json({
-      status: "SUCCESS",
-      data: { vaccineEntry: response }
-    });
-
-  } catch (error) {
-    console.error("Error fetching vaccine entry:", error);
-    next(error);
-  }
-});
 const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -655,14 +889,14 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
         message: "New vaccine not found or unauthorized."
       });
     }
-    const vaccineName = vaccine.otherVaccineName || (vaccine.vaccineType?.englishName || "Unnamed Vaccine");
+    const vaccineName = Vaccine.otherVaccineName || (Vaccine.vaccineType?.englishName || "Unnamed Vaccine");
     // Check if new vaccine is expired
     if (newVaccine.isExpired()) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
         status: "FAILURE",
-        message: `Vaccine "${vaccineName}" is expired (Expired on ${vaccine.expiryDate.toISOString().split('T')[0]}).`
+        message: `Vaccine "${vaccineName}" is expired (Expired on ${Vaccine.expiryDate.toISOString().split('T')[0]}).`
       });
     }
 
@@ -757,49 +991,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
     next(error);
   }
 });
-const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
-  const { limit = 10, page = 1, tagId, locationShed, entryType } = req.query;
 
-  const filter = { owner: userId };
-  if (tagId) filter.tagId = tagId;
-  if (entryType) filter.entryType = entryType;
-
-  // If locationShed is provided, find its ObjectId first
-  if (locationShed) {
-    const shed = await LocationShed.findOne({ locationShedName: locationShed });
-    if (!shed) {
-      return res.status(404).json({
-        status: "FAIL",
-        message: "Location shed not found",
-        data: null,
-      });
-    }
-    filter.locationShed = shed._id; // Now using ObjectId
-  }
-
-  const entries = await VaccineEntry.find(filter)
-    .populate('Vaccine', 'vaccineName pricing.dosePrice')
-    .populate('locationShed', 'locationShedName')
-    .limit(parseInt(limit))
-    .skip((parseInt(page) - 1) * parseInt(limit))
-    .sort({ date: -1 });
-
-  const total = await VaccineEntry.countDocuments(filter);
-
-  res.json({
-    status: "SUCCESS",
-    data: {
-      entries,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
-    },
-  });
-});
 const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -870,54 +1062,7 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
 });
 
 
-const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
-  const animal = await Animal.findById(req.params.animalId);
-  if (!animal) {
-    const error = AppError.create('Animal not found', 404, httpstatustext.FAIL);
-    return next(error);
-  }
 
-
-  const vaccineEntries = await VaccineEntry.find({
-    tagId: animal.tagId // Changed from animalId to tagId
-  })
-    .populate('Vaccine') // Matches your schema definition
-    .populate('locationShed', 'locationShedName'); // Optional if you need shed info
-
-  if (!vaccineEntries || vaccineEntries.length === 0) {
-    console.warn(`No vaccines found for animal ${animal._id} with tag ${animal.tagId}`);
-    const error = AppError.create('No vaccine records found for this animal', 404, httpstatustext.FAIL);
-    return next(error);
-  }
-
-  // Format the response data
-  const responseData = {
-    animal: {
-      _id: animal._id,
-      tagId: animal.tagId,
-      animalType: animal.animalType,
-      gender: animal.gender
-    },
-    vaccines: vaccineEntries.map(entry => ({
-      _id: entry._id,
-      date: entry.date,
-      entryType: entry.entryType,
-      vaccine: entry.Vaccine ? {
-        _id: entry.Vaccine._id,
-        name: entry.Vaccine.vaccineName
-      } : null,
-      locationShed: entry.locationShed ? {
-        _id: entry.locationShed._id,
-        name: entry.locationShed.locationShedName
-      } : null
-    }))
-  };
-
-  return res.json({
-    status: httpstatustext.SUCCESS,
-    data: responseData
-  });
-});
 
 const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
   const userId = req.user?.id || req.userId;
