@@ -21,12 +21,12 @@ const getAllMating = asyncwrapper(async (req, res) => {
     }
 
     if (query.matingDate) {
-        filter.matingDate = new Date(query.matingDate); // Convert to Date object
-      }
+        filter.matingDate = new Date(query.matingDate);
+    }
     
-      if (query.sonarDate) {
-        filter.sonarDate = new Date(query.sonarDate); // Convert to Date object
-      }
+    if (query.sonarDate) {
+        filter.sonarDate = new Date(query.sonarDate);
+    }
 
     if (query.sonarRsult) {
         filter.sonarRsult = query.sonarRsult;
@@ -35,12 +35,13 @@ const getAllMating = asyncwrapper(async (req, res) => {
     // Get the total count of documents that match the filter
     const totalCount = await Mating.countDocuments(filter);
 
-    // Find the paginated results
+    // Find the paginated results with sorting by createdAt in descending order
     const matingData = await Mating.find(filter, { "__v": false })
         .populate({
-            path: 'animalId', // This is the field in the Mating schema that references Animal
-            select: 'animalType' // Select only the animalType field from the Animal model
+            path: 'animalId',
+            select: 'animalType'
         })
+        .sort({ createdAt: -1 }) // Sort by createdAt in descending order (newest first)
         .limit(limit)
         .skip(skip);
       
@@ -74,10 +75,8 @@ const getAllMating = asyncwrapper(async (req, res) => {
             }
         }
     });
-}); 
-
+});
 // in this function getmatingforspacficanimal it will get animal data and mating data 
-
 const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
     const userId = req.user?.id || req.userId;
     if (!userId) {
@@ -86,15 +85,16 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
 
     try {
         const data = excelOps.readExcelFile(req.file.buffer);
+        const updateMode = req.query.mode === 'update';
 
-        // Skip header row
+        let insertedCount = 0;
+        let updatedCount = 0;
+        let skippedRows = [];
+
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
-
-            // Skip empty rows
             if (!row || row.length === 0 || row.every(cell => !cell)) continue;
 
-            // Extract and validate data
             const [
                 tagId,
                 maleTag_id,
@@ -102,92 +102,175 @@ const importMatingFromExcel = asyncwrapper(async (req, res, next) => {
                 matingDateStr,
                 checkDaysStr,
                 sonarDateStr,
-                sonarRsult
+                sonarRsult,
+                pregnancyAgeStr,
+                fetusCountStr
             ] = row.map(cell => cell?.toString().trim());
 
             // Validate required fields
             if (!tagId || !maleTag_id || !matingType || !matingDateStr) {
-                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+                skippedRows.push({ row: i + 1, reason: 'Required fields missing' });
+                continue;
             }
 
-            // Parse mating date
+            // Parse dates and numbers
             const matingDate = new Date(matingDateStr);
             if (isNaN(matingDate.getTime())) {
-                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { field: 'Mating Date', row: i + 1 }), 400, httpstatustext.FAIL));
+                skippedRows.push({ row: i + 1, reason: 'Invalid matingDate format' });
+                continue;
             }
 
-            // Parse sonar date if provided
-            let sonarDate = undefined;
-            if (sonarDateStr) {
-                sonarDate = new Date(sonarDateStr);
-                if (isNaN(sonarDate.getTime())) {
-                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { field: 'Sonar Date', row: i + 1 }), 400, httpstatustext.FAIL));
-                }
-                if (sonarDate < matingDate) {
-                    return next(AppError.create(i18n.__('SONAR_DATE_BEFORE_MATING', { row: i + 1 }), 400, httpstatustext.FAIL));
-                }
-            }
-
-            // Parse and validate check days
             let checkDays = null;
             if (checkDaysStr) {
                 checkDays = parseInt(checkDaysStr);
                 if (![45, 60, 90].includes(checkDays)) {
-                    return next(AppError.create(i18n.__('INVALID_CHECK_DAYS', { row: i + 1 }), 400, httpstatustext.FAIL));
+                    skippedRows.push({ row: i + 1, reason: 'Invalid checkDays' });
+                    continue;
                 }
             }
 
-            // Validate sonar result if provided
-            if (sonarRsult && !['positive', 'negative'].includes(sonarRsult.toLowerCase())) {
-                return next(AppError.create(i18n.__('INVALID_SONAR_RESULT', { row: i + 1 }), 400, httpstatustext.FAIL));
+            let sonarDate = null;
+            if (sonarDateStr) {
+                sonarDate = new Date(sonarDateStr);
+                if (isNaN(sonarDate.getTime())) {
+                    skippedRows.push({ row: i + 1, reason: 'Invalid sonarDate format' });
+                    continue;
+                }
+                if (sonarDate < matingDate) {
+                    skippedRows.push({ row: i + 1, reason: 'Sonar date before mating date' });
+                    continue;
+                }
+            } else if (checkDays) {
+                sonarDate = new Date(matingDate);
+                sonarDate.setDate(sonarDate.getDate() + checkDays);
             }
 
-            // Verify female animal exists
+            let pregnancyAge = null;
+            if (pregnancyAgeStr) {
+                pregnancyAge = parseInt(pregnancyAgeStr);
+                if (isNaN(pregnancyAge) || pregnancyAge < 0 || pregnancyAge > 147) {
+                    skippedRows.push({ row: i + 1, reason: 'Invalid pregnancyAge' });
+                    continue;
+                }
+            }
+
+            let fetusCount = null;
+            if (fetusCountStr) {
+                fetusCount = parseInt(fetusCountStr);
+                if (isNaN(fetusCount) || fetusCount < 1) {
+                    skippedRows.push({ row: i + 1, reason: 'Invalid fetusCount' });
+                    continue;
+                }
+            }
+
+            // Validate sonar result
+            let sonarRsultLower = sonarRsult ? sonarRsult.toLowerCase() : undefined;
+            if (sonarRsultLower && !['positive', 'negative'].includes(sonarRsultLower)) {
+                skippedRows.push({ row: i + 1, reason: 'Invalid sonarRsult' });
+                continue;
+            }
+
+            // Find animals
             const femaleAnimal = await Animal.findOne({ tagId, owner: userId });
             if (!femaleAnimal) {
-                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
+                skippedRows.push({ row: i + 1, reason: `Female animal ${tagId} not found` });
+                continue;
             }
-
-            // Verify female animal's gender
             if (femaleAnimal.gender !== 'female') {
-                return next(AppError.create(i18n.__('ANIMAL_NOT_FEMALE', { tagId, row: i + 1 }), 400, httpstatustext.FAIL));
+                skippedRows.push({ row: i + 1, reason: `${tagId} is not female` });
+                continue;
             }
 
-            // Verify male animal exists
             const maleAnimal = await Animal.findOne({ tagId: maleTag_id, owner: userId });
             if (!maleAnimal) {
-                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId: maleTag_id, row: i + 1 }), 404, httpstatustext.FAIL));
+                skippedRows.push({ row: i + 1, reason: `Male animal ${maleTag_id} not found` });
+                continue;
             }
-
-            // Verify male animal's gender
             if (maleAnimal.gender !== 'male') {
-                return next(AppError.create(i18n.__('ANIMAL_NOT_MALE', { tagId: maleTag_id, row: i + 1 }), 400, httpstatustext.FAIL));
+                skippedRows.push({ row: i + 1, reason: `${maleTag_id} is not male` });
+                continue;
             }
 
-            // Calculate expected delivery date (if mating is successful)
-            const expectedDeliveryDate = sonarRsult?.toLowerCase() === 'positive' ? 
-                new Date(matingDate.getTime() + (150 * 24 * 60 * 60 * 1000)) : undefined;
+            // Calculate expected delivery date
+            let expectedDeliveryDate = null;
+            if (pregnancyAge) {
+                const remainingDays = 147 - pregnancyAge;
+                expectedDeliveryDate = new Date(matingDate.getTime() + remainingDays * 86400000);
+            } else if (sonarRsultLower === 'positive') {
+                expectedDeliveryDate = new Date(matingDate.getTime() + 147 * 86400000);
+            }
 
-            // Create mating record
-            const newMating = new Mating({
-                tagId,
+            // Prepare update data
+            const updateData = {
                 maleTag_id,
                 matingType,
-                matingDate,
                 checkDays,
                 sonarDate,
-                sonarRsult: sonarRsult?.toLowerCase(),
+                sonarRsult: sonarRsultLower,
+                pregnancyAge,
+                fetusCount,
                 expectedDeliveryDate,
-                owner: userId,
                 animalId: femaleAnimal._id
-            });
+            };
 
-            await newMating.save();
+            if (updateMode) {
+                // Flexible matching criteria
+                const matchingCriteria = {
+                    tagId,
+                    owner: userId,
+                    $or: [
+                        { maleTag_id },
+                        { 
+                            matingDate: { 
+                                $gte: new Date(matingDate.setHours(0, 0, 0, 0)),
+                                $lte: new Date(matingDate.setHours(23, 59, 59, 999))
+                            } 
+                        }
+                    ]
+                };
+
+                const updated = await Mating.findOneAndUpdate(
+                    matchingCriteria,
+                    updateData,
+                    { new: true, upsert: false } // Don't create new if not found
+                );
+
+                if (updated) {
+                    updatedCount++;
+                } else {
+                    // If no record found to update, create new if needed
+                    const newMating = new Mating({
+                        ...updateData,
+                        tagId,
+                        matingDate,
+                        owner: userId
+                    });
+                    await newMating.save();
+                    insertedCount++;
+                }
+            } else {
+                // Insert new record
+                const newMating = new Mating({
+                    ...updateData,
+                    tagId,
+                    matingDate,
+                    owner: userId
+                });
+                await newMating.save();
+                insertedCount++;
+            }
         }
 
         res.json({
             status: httpstatustext.SUCCESS,
-            message: i18n.__('MATING_IMPORTED_SUCCESSFULLY')
+            message: updateMode
+                ? i18n.__('MATING_UPDATED_SUCCESSFULLY')
+                : i18n.__('MATING_IMPORTED_SUCCESSFULLY'),
+            summary: { 
+                inserted: insertedCount, 
+                updated: updatedCount, 
+                skipped: skippedRows 
+            }
         });
     } catch (error) {
         console.error('Import error:', error);
@@ -240,15 +323,17 @@ const exportMatingToExcel = asyncwrapper(async (req, res, next) => {
             mating.checkDays || '',
             mating.sonarDate?.toISOString().split('T')[0] || '',
             mating.sonarRsult || '',
-            mating.expectedDeliveryDate?.toISOString().split('T')[0] || '',
-            mating.createdAt?.toISOString().split('T')[0] || ''
+            mating.pregnancyAge || '',
+            mating.fetusCount || '',
+            mating.expectedDeliveryDate?.toISOString().split('T')[0] || ''
+
         ]);
 
         const workbook = excelOps.createExcelFile(data, headers, sheetName);
         const worksheet = workbook.Sheets[sheetName];
 
         // Set column widths
-        const columnWidths = [15, 15, 15, 12, 12, 12, 15, 12, 12];
+        const columnWidths = [15, 15, 15, 12, 12, 12, 15, 12, 12, 12, 12];
         excelOps.setColumnWidths(worksheet, columnWidths);
 
         const buffer = excelOps.writeExcelBuffer(workbook);
@@ -305,7 +390,6 @@ const getmatingforspacficanimal =asyncwrapper(async( req, res, next)=>{
     return res.json({ status: httpstatustext.SUCCESS, data: { animal, mating } });
 
 })
-
 
 const addmating = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;

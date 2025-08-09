@@ -207,7 +207,9 @@ const headers = {
                 'Mating Date (YYYY-MM-DD)',
                 'Check Days (45, 60, 90)',
                 'Sonar Date (YYYY-MM-DD)',
-                'Sonar Result (positive, negative)'
+                'Sonar Result (positive, negative)',
+                'Pregnancy Age (0-147)',
+                'Fetus Count'
             ],
             export: [
                 'Tag ID',
@@ -217,8 +219,10 @@ const headers = {
                 'Check Days',
                 'Sonar Date',
                 'Sonar Result',
+                'Pregnancy Age',
+                'Fetus Count',
                 'Expected Delivery Date',
-                'Created At'
+                
             ]
         },
         ar: {
@@ -229,7 +233,9 @@ const headers = {
                 'تاريخ التلقيح (YYYY-MM-DD)',
                 'أيام الفحص (45, 60, 90)',
                 'تاريخ السونار (YYYY-MM-DD)',
-                'نتيجة السونار (positive, negative)'
+                'نتيجة السونار (positive, negative)',
+                'عمر الحمل (0-147)',
+                'عدد الأجنة'
             ],
             export: [
                 'رقم التعريف',
@@ -239,6 +245,8 @@ const headers = {
                 'أيام الفحص',
                 'تاريخ السونار',
                 'نتيجة السونار',
+                'عمر الحمل',
+                'عدد الأجنة',
                 'تاريخ الولادة المتوقع',
                 'تاريخ الإنشاء'
             ]
