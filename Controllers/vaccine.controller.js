@@ -381,7 +381,7 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
 const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const { animalId } = req.params;
-  const { limit = 10, page = 1, lang = 'en' } = req.query;
+  const { lang = 'en' } = req.query;
 
   // Find animal and verify ownership
   const animal = await Animal.findOne({
@@ -398,10 +398,7 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  // Get total count
-  const total = await VaccineEntry.countDocuments({ tagId: animal.tagId });
-
-  // Get paginated vaccine entries
+  // Get all vaccine entries for this animal
   const vaccineEntries = await VaccineEntry.find({ tagId: animal.tagId })
     .populate({
       path: 'Vaccine',
@@ -412,9 +409,7 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
       }
     })
     .populate('locationShed', 'locationShedName')
-    .sort({ date: -1 })
-    .limit(parseInt(limit))
-    .skip((parseInt(page) - 1) * parseInt(limit));
+    .sort({ date: -1 });
 
   if (vaccineEntries.length === 0) {
     return res.status(404).json({
@@ -457,13 +452,7 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
         _id: entry.locationShed._id,
         name: entry.locationShed.locationShedName
       } : null
-    })),
-    pagination: {
-      total,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalPages: Math.ceil(total / parseInt(limit))
-    }
+    }))
   };
 
   res.json({
@@ -472,6 +461,7 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
     data: responseData
   });
 });
+
 const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const { vaccineEntryId } = req.params;
