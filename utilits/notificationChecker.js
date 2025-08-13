@@ -23,7 +23,7 @@ const checkExpiringItems = async (lang = 'en') => {
         for (const treatment of treatments) {
             if (treatment.expireDate) {
                 const daysUntilExpiry = Math.ceil((treatment.expireDate - today) / (1000 * 60 * 60 * 24));
-                const d = new Date(treatment.expiryDate);
+                const d = new Date(treatment.expireDate);
                 const expireDateFormatted = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
                 
                 
