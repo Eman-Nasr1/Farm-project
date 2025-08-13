@@ -15,5 +15,7 @@
     "NO_IMAGE_TO_DELETE": "لا توجد صورة للحذف",
     "IMAGE_DELETED_SUCCESSFULLY": "تم حذف صورة الحيوان بنجاح",
     "IMAGE_UPLOAD_FAILED": "فشل في رفع الصورة",
-    "INVALID_IMAGE_FORMAT": "صيغة الصورة غير صالحة. الصيغ المسموح بها: jpg, jpeg, png, gif"
+    "INVALID_IMAGE_FORMAT": "صيغة الصورة غير صالحة. الصيغ المسموح بها: jpg, jpeg, png, gif",
+    "NOTIFICATION_MARKED_READ": "تم وضع علامة مقروء على الإشعار",
+    "FAILED_TO_CHECK_NOTIFICATIONS": "فشل التحقق من الإشعارات"
 } 

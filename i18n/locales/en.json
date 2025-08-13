@@ -15,5 +15,7 @@
     "NO_IMAGE_TO_DELETE": "No image found to delete",
     "IMAGE_DELETED_SUCCESSFULLY": "Animal image deleted successfully",
     "IMAGE_UPLOAD_FAILED": "Failed to upload image",
-    "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif"
+    "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif",
+    "NOTIFICATION_MARKED_READ": "Notification marked as read",
+    "FAILED_TO_CHECK_NOTIFICATIONS": "Failed to check for notifications"
 } 

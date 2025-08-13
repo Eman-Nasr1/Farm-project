@@ -2,20 +2,15 @@ const express = require('express');
 const router = express.Router();
 const notificationController = require('../Controllers/notification.controller');
 const verifytoken = require('../middleware/verifytoken');
+const setLocale = require('../middleware/setLocale');
 
-// Get all notifications
-router.get('/api/notifications', verifytoken, notificationController.getNotifications);
 
-// Check for new notifications
-router.get('/api/notifications/check', verifytoken, notificationController.checkNotifications);
+router.use(verifytoken, setLocale); // apply to all routes below
 
-// Mark notification as read
-router.patch('/api/notifications/:notificationId/read', verifytoken, notificationController.markAsRead);
+router.get('/api/notifications', notificationController.getNotifications);
+router.get('/api/notifications/check', notificationController.checkNotifications);
+router.patch('/api/notifications/:notificationId/read', notificationController.markAsRead);
+router.patch('/api/notifications/read-all', notificationController.markAllAsRead);
+router.delete('/api/notifications/:notificationId', notificationController.deleteNotification);
 
-// Mark all notifications as read
-router.patch('/api/notifications/read-all', verifytoken, notificationController.markAllAsRead);
-
-// Delete notification
-router.delete('/api/notifications/:notificationId', verifytoken, notificationController.deleteNotification);
-
-module.exports = router; 
+module.exports = router;

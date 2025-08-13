@@ -7,99 +7,106 @@ const i18n = require('../i18n');
 
 // Get all notifications for the current user
 const getNotifications = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
-    
-    // Get unread notifications first, then read ones
-    const notifications = await Notification.find({ owner: userId })
-        .sort({ isRead: 1, createdAt: -1 });
+  const userId = req.user.id;
+  const notifications = await Notification.find({ owner: userId })
+    .sort({ isRead: 1, createdAt: -1 });
 
-    res.json({
-        status: httpstatustext.SUCCESS,
-        data: { notifications }
-    });
+  res.json({
+    status: httpstatustext.SUCCESS,
+    data: { notifications }
+  });
 });
 
 // Mark notification as read
 const markAsRead = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
-    const notificationId = req.params.notificationId;
+  const userId = req.user.id;
+  const notificationId = req.params.notificationId;
 
-    await Notification.findOneAndUpdate(
-        { _id: notificationId, owner: userId },
-        { isRead: true }
-    );
+  await Notification.findOneAndUpdate(
+    { _id: notificationId, owner: userId },
+    { isRead: true }
+  );
 
-    res.json({
-        status: httpstatustext.SUCCESS,
-        message: 'Notification marked as read'
-    });
+  res.json({
+    status: httpstatustext.SUCCESS,
+    message: i18n.__('NOTIFICATION_MARKED_READ')
+  });
 });
 
 // Mark all notifications as read
 const markAllAsRead = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
+  const userId = req.user.id;
 
-    await Notification.updateMany(
-        { owner: userId, isRead: false },
-        { isRead: true }
-    );
+  await Notification.updateMany(
+    { owner: userId, isRead: false },
+    { isRead: true }
+  );
 
-    res.json({
-        status: httpstatustext.SUCCESS,
-        message: 'All notifications marked as read'
-    });
+  res.json({
+    status: httpstatustext.SUCCESS,
+    message: i18n.__('ALL_NOTIFICATIONS_MARKED_READ')
+  });
 });
 
 // Delete a notification
 const deleteNotification = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
-    const notificationId = req.params.notificationId;
+  const userId = req.user.id;
+  const notificationId = req.params.notificationId;
 
-    const notification = await Notification.findOneAndDelete({
-        _id: notificationId,
-        owner: userId
-    });
+  const notification = await Notification.findOneAndDelete({
+    _id: notificationId,
+    owner: userId
+  });
 
-    if (!notification) {
-        return next(AppError.create(i18n.__('NOTIFICATION_NOT_FOUND'), 404, httpstatustext.FAIL));
-    }
+  if (!notification) {
+    return next(AppError.create(i18n.__('NOTIFICATION_NOT_FOUND'), 404, httpstatustext.FAIL));
+  }
 
-    res.json({
-        status: httpstatustext.SUCCESS,
-        message: i18n.__('NOTIFICATION_DELETED')
-    });
+  res.json({
+    status: httpstatustext.SUCCESS,
+    message: i18n.__('NOTIFICATION_DELETED')
+  });
 });
 
 // Check for new notifications
 const checkNotifications = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
-    
-    try {
-        const notifications = await notificationChecker.checkExpiringItems();
-        const userNotifications = notifications.filter(n => n.owner.toString() === userId);
-        
-        // Save new notifications
-        await Promise.all(userNotifications.map(notification => 
-            Notification.create(notification)
-        ));
+  const userId = req.user.id;
+  const lang = req.lang || req.user?.language || 'en';  // from middleware or user
 
-        res.json({
-            status: httpstatustext.SUCCESS,
-            data: { notifications: userNotifications }
-        });
-    } catch (error) {
-        console.error('Error checking notifications:', error);
-        res.status(500).json({
-            status: httpstatustext.ERROR,
-            message: 'Failed to check for notifications'
-        });
-    }
+  try {
+    // ⬇️ Pass lang so messages come out localized
+    const notifications = await notificationChecker.checkExpiringItems(lang);
+
+    const userNotifications = notifications.filter(n => n.owner.toString() === userId);
+
+    // (Optional) prevent duplicates by upserting on (type,itemId,expiryDate)
+    await Promise.all(
+      userNotifications.map(n =>
+        Notification.updateOne(
+          { owner: userId, type: n.type, itemId: n.itemId, expiryDate: n.expiryDate },
+          { $setOnInsert: n },
+          { upsert: true }
+        )
+      )
+    );
+
+    res.json({
+      status: httpstatustext.SUCCESS,
+      data: { notifications: userNotifications }
+    });
+  } catch (error) {
+    console.error('Error checking notifications:', error);
+    res.status(500).json({
+      status: httpstatustext.ERROR,
+      message: i18n.__('FAILED_TO_CHECK_NOTIFICATIONS')
+    });
+  }
 });
 
 module.exports = {
-    getNotifications,
-    markAsRead,
-    markAllAsRead,
-    deleteNotification,
-    checkNotifications
-}; 
+  getNotifications,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  checkNotifications
+};
