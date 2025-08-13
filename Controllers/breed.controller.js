@@ -6,40 +6,40 @@ const i18n = require('../i18n');
 
 // Get all breeds for a user (with pagination)
 const getAllBreeds = asyncwrapper(async (req, res) => {
-    const userId = req.user.id; // Get the user ID from the request
+    const userId = req.user.id;
     const query = req.query;
-    const limit = query.limit || 10; // Default limit for pagination
-    const page = query.page || 1; // Default page for pagination
-    const skip = (page - 1) * limit; // Calculate skip for pagination
+    const limit = parseInt(query.limit, 10) || 10;
+    const page = parseInt(query.page, 10) || 1;
+    const skip = (page - 1) * limit;
 
-    const filter = { owner: userId }; // Filter by the user's ID
+    const filter = { owner: userId };
 
-    // Optional query filters
     if (query.breedName) {
         filter.breedName = query.breedName;
     }
 
-    // Fetch breeds with pagination
     const breeds = await Breed.find(filter, { "__v": false })
+        .sort({ createdAt: -1 }) // ← Always newest first
         .limit(limit)
         .skip(skip);
 
-    const total = await Breed.countDocuments(filter); // Total number of breeds
-    const totalPages = Math.ceil(total / limit); // Calculate total pages
+    const total = await Breed.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
         status: httpstatustext.SUCCESS,
         pagination: {
-            page: page,
-            limit: limit,
-            total: total,
-            totalPages: totalPages,
+            page,
+            limit,
+            total,
+            totalPages,
             hasNextPage: page < totalPages,
             hasPrevPage: page > 1
         },
         data: { breeds }
     });
 });
+
 
 // Get all breeds for a user (without pagination)
 const getAllBreedsWithoutPagination = asyncwrapper(async (req, res) => {

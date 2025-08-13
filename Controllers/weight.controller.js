@@ -26,7 +26,7 @@ const getallweight =asyncwrapper(async(req,res)=>{
         filter.tagId = query.tagId; // e.g., 
     }
 
-    const weight= await Weight.find(filter,{"__v":false}).limit(limit).skip(skip);
+    const weight= await Weight.find(filter,{"__v":false}).sort({ createdAt: -1 }).limit(limit).skip(skip);
     const total = await Weight.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
     res.json({

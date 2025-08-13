@@ -28,6 +28,7 @@ const getallTreatments = asyncwrapper(async (req, res) => {
   }
 
   const treatments = await Treatment.find(filter, { __v: false })
+    .sort({ createdAt: -1 })
     .limit(limit)
     .skip(skip);
   const total = await Treatment.countDocuments(filter);
@@ -261,11 +262,11 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
 
   // Process treatments
   for (const treatmentItem of treatments) {
-    const { 
-      treatmentId, 
-      volumePerAnimal, 
-      numberOfDoses, 
-      doses = [] 
+    const {
+      treatmentId,
+      volumePerAnimal,
+      numberOfDoses,
+      doses = []
     } = treatmentItem;
 
     // Validate treatment fields
@@ -330,23 +331,23 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
     // Process doses - handle both ISO and date-only formats
     const processedDoses = doses.length > 0
       ? doses.map(dose => {
-          const doseDate = dose.date.includes('T') 
-            ? new Date(dose.date) 
-            : new Date(`${dose.date}T00:00:00Z`);
-          
-          if (isNaN(doseDate.getTime())) {
-            throw new Error(`Invalid dose date: ${dose.date}`);
-          }
+        const doseDate = dose.date.includes('T')
+          ? new Date(dose.date)
+          : new Date(`${dose.date}T00:00:00Z`);
 
-          return {
-            date: doseDate,
-            taken: dose.taken === true // Ensure boolean
-          };
-        })
+        if (isNaN(doseDate.getTime())) {
+          throw new Error(`Invalid dose date: ${dose.date}`);
+        }
+
+        return {
+          date: doseDate,
+          taken: dose.taken === true // Ensure boolean
+        };
+      })
       : Array.from({ length: numberOfDoses }, (_, i) => ({
-          date: new Date(treatmentDate.getTime() + (i * 24 * 60 * 60 * 1000)),
-          taken: false
-        }));
+        date: new Date(treatmentDate.getTime() + (i * 24 * 60 * 60 * 1000)),
+        taken: false
+      }));
 
     // Update treatment stock
     treatment.stock.totalVolume -= requiredTotalVolume;
@@ -385,10 +386,10 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
           update: {
             $inc: { treatmentCost: costPerAnimal },
             $set: { date: treatmentDate },
-            $setOnInsert: { 
+            $setOnInsert: {
               animalTagId: animal.tagId,
               feedCost: 0,
-              owner: userId 
+              owner: userId
             }
           },
           upsert: true
@@ -462,11 +463,11 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
   // Process each treatment
   for (const treatmentItem of treatments) {
-    const { 
-      treatmentId, 
-      volumePerAnimal, 
-      numberOfDoses, 
-      doses = [] 
+    const {
+      treatmentId,
+      volumePerAnimal,
+      numberOfDoses,
+      doses = []
     } = treatmentItem;
 
     // Validate treatment fields
@@ -525,19 +526,19 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     // Process doses - handle both ISO and date-only formats
     const processedDoses = doses.length > 0
       ? doses.map(dose => {
-          const doseDate = dose.date.includes('T') 
-            ? new Date(dose.date) 
-            : new Date(`${dose.date}T00:00:00Z`);
-          
-          return {
-            date: doseDate,
-            taken: dose.taken === true // Ensure boolean
-          };
-        })
+        const doseDate = dose.date.includes('T')
+          ? new Date(dose.date)
+          : new Date(`${dose.date}T00:00:00Z`);
+
+        return {
+          date: doseDate,
+          taken: dose.taken === true // Ensure boolean
+        };
+      })
       : Array.from({ length: numberOfDoses }, (_, i) => ({
-          date: new Date(new Date(date).getTime() + (i * 24 * 60 * 60 * 1000)),
-          taken: false
-        }));
+        date: new Date(new Date(date).getTime() + (i * 24 * 60 * 60 * 1000)),
+        taken: false
+      }));
 
     // Update treatment stock
     treatment.stock.totalVolume -= requiredVolume;
@@ -579,10 +580,10 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       {
         $inc: { treatmentCost },
         $set: { date: new Date(date) },
-        $setOnInsert: { 
+        $setOnInsert: {
           animalTagId: animal.tagId,
           feedCost: 0,
-          owner: userId 
+          owner: userId
         }
       },
       { upsert: true, new: true }
@@ -628,9 +629,9 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
     let totalTreatmentCost = 0;
     treatmentEntry.treatments.forEach(treatment => {
       if (treatment.treatmentId && treatment.treatmentId.pricePerMl) {
-        const treatmentCost = treatment.volumePerAnimal * 
-                            treatment.numberOfDoses * 
-                            treatment.treatmentId.pricePerMl;
+        const treatmentCost = treatment.volumePerAnimal *
+          treatment.numberOfDoses *
+          treatment.treatmentId.pricePerMl;
         totalTreatmentCost += treatmentCost;
       }
     });
@@ -743,11 +744,11 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     // Get new treatment data
     const newTreatmentItem = treatments[0];
-    const { 
-      treatmentId: newTreatmentId, 
-      volumePerAnimal: newVolume, 
+    const {
+      treatmentId: newTreatmentId,
+      volumePerAnimal: newVolume,
       numberOfDoses: newDoses,
-      doses: newDosesArray = [] 
+      doses: newDosesArray = []
     } = newTreatmentItem;
 
     // Validate new treatment data
@@ -789,14 +790,14 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       // Different treatments - restore old and deduct new
       oldTreatment.stock.totalVolume += oldTotalVolume;
       oldTreatment.stock.bottles = Math.ceil(oldTreatment.stock.totalVolume / oldTreatment.stock.volumePerBottle);
-      
+
       if (newTreatment.stock.totalVolume < newTotalVolume) {
         throw new AppError(400, `Not enough stock for treatment "${newTreatment.name}". Available: ${newTreatment.stock.totalVolume}, Required: ${newTotalVolume}.`);
       }
-      
+
       newTreatment.stock.totalVolume -= newTotalVolume;
       newTreatment.stock.bottles = Math.ceil(newTreatment.stock.totalVolume / newTreatment.stock.volumePerBottle);
-      
+
       await Promise.all([
         oldTreatment.save({ session }),
         newTreatment.save({ session })
@@ -806,7 +807,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       if (volumeDiff > 0 && newTreatment.stock.totalVolume < volumeDiff) {
         throw new AppError(400, `Not enough stock for treatment "${newTreatment.name}". Available: ${newTreatment.stock.totalVolume}, Required: ${volumeDiff}.`);
       }
-      
+
       newTreatment.stock.totalVolume -= volumeDiff;
       newTreatment.stock.bottles = Math.ceil(newTreatment.stock.totalVolume / newTreatment.stock.volumePerBottle);
       await newTreatment.save({ session });
@@ -822,10 +823,10 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       {
         $inc: { treatmentCost: costDifference },
         $set: { date: new Date(date) },
-        $setOnInsert: { 
+        $setOnInsert: {
           animalTagId: tagId,
           feedCost: 0,
-          owner: userId 
+          owner: userId
         }
       },
       { upsert: true, session }
@@ -834,23 +835,23 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     // Process doses - handle both ISO and date-only formats
     const processedDoses = newDosesArray.length > 0
       ? newDosesArray.map(dose => {
-          const doseDate = dose.date.includes('T') 
-            ? new Date(dose.date) 
-            : new Date(`${dose.date}T00:00:00Z`);
-          
-          if (isNaN(doseDate.getTime())) {
-            throw new AppError(400, `Invalid dose date: ${dose.date}`);
-          }
+        const doseDate = dose.date.includes('T')
+          ? new Date(dose.date)
+          : new Date(`${dose.date}T00:00:00Z`);
 
-          return {
-            date: doseDate,
-            taken: dose.taken === true // Ensure boolean
-          };
-        })
+        if (isNaN(doseDate.getTime())) {
+          throw new AppError(400, `Invalid dose date: ${dose.date}`);
+        }
+
+        return {
+          date: doseDate,
+          taken: dose.taken === true // Ensure boolean
+        };
+      })
       : Array.from({ length: actualNewDoses }, (_, i) => ({
-          date: new Date(new Date(date).getTime() + (i * 24 * 60 * 60 * 1000)),
-          taken: false
-        }));
+        date: new Date(new Date(date).getTime() + (i * 24 * 60 * 60 * 1000)),
+        taken: false
+      }));
 
     // Update the treatment entry
     existingTreatmentEntry.set({
@@ -894,7 +895,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    
+
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({
         status: "FAILURE",
@@ -916,7 +917,7 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   try {
     const userId = req.user.id;
     const { locationShed, tagId, date, limit = 10, page = 1 } = req.query;
-    
+
     // Build filter object
     const filter = { owner: userId };
     if (locationShed) filter.locationShed = locationShed;
@@ -955,8 +956,8 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
     // Format response
     const response = treatments.map(entry => {
       // Fix invalid dates
-      const entryDate = isNaN(new Date(entry.date).getTime()) ? 
-        new Date() : 
+      const entryDate = isNaN(new Date(entry.date).getTime()) ?
+        new Date() :
         new Date(entry.date);
 
       return {
@@ -1068,7 +1069,7 @@ const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
     // Update animal cost
     await AnimalCost.findOneAndUpdate(
       { animalTagId: treatmentEntry.tagId },
-      { 
+      {
         $inc: { treatmentCost: -totalDeductedCost },
         $set: { date: new Date() } // Update the modification date
       },
@@ -1096,7 +1097,7 @@ const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
     // Abort transaction on error
     await session.abortTransaction();
     session.endSession();
-    
+
     console.error("Error deleting treatment entry:", error);
     res.status(500).json({
       status: "ERROR",
@@ -1145,11 +1146,11 @@ const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
     // Safely format treatments
     const formattedTreatments = treatmentEntries.map(entry => {
       // Safely handle locationShed
-      const locationShed = entry.locationShed?._id 
-        ? { 
-            _id: entry.locationShed._id, 
-            name: entry.locationShed.locationShedName 
-          }
+      const locationShed = entry.locationShed?._id
+        ? {
+          _id: entry.locationShed._id,
+          name: entry.locationShed.locationShedName
+        }
         : null;
 
       // Safely format treatments array
@@ -1221,7 +1222,7 @@ const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
       stack: error.stack,
       params: req.params
     });
-    
+
     return res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1232,224 +1233,224 @@ const getTreatmentsForSpecificAnimal = asyncwrapper(async (req, res, next) => {
 });
 
 const importTreatmentsFromExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.user?.id || req.userId;
-    if (!userId) {
-        return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+  const userId = req.user?.id || req.userId;
+  if (!userId) {
+    return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
+  }
+
+  try {
+    if (!req.file || !req.file.buffer) {
+      return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
     }
 
-    try {
-        if (!req.file || !req.file.buffer) {
-            return next(AppError.create(i18n.__('NO_FILE_UPLOADED'), 400, httpstatustext.FAIL));
-        }
+    const data = excelOps.readExcelFile(req.file.buffer);
 
-        const data = excelOps.readExcelFile(req.file.buffer);
+    // Skip header row
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
 
-        // Skip header row
-        for (let i = 1; i < data.length; i++) {
-            const row = data[i];
+      // Skip empty rows
+      if (!row || row.length === 0 || row.every(cell => !cell)) continue;
 
-            // Skip empty rows
-            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+      // Extract and validate data
+      const [
+        tagId,
+        treatmentName,
+        volumeStr,
+        dateStr
+      ] = row.map(cell => cell?.toString().trim());
 
-            // Extract and validate data
-            const [
-                tagId,
-                treatmentName,
-                volumeStr,
-                dateStr
-            ] = row.map(cell => cell?.toString().trim());
+      // Validate required fields
+      if (!tagId || !treatmentName || !volumeStr || !dateStr) {
+        return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+      }
 
-            // Validate required fields
-            if (!tagId || !treatmentName || !volumeStr || !dateStr) {
-                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+      // Parse volume
+      const volume = parseFloat(volumeStr);
+      if (isNaN(volume) || volume <= 0) {
+        return next(AppError.create(i18n.__('INVALID_VOLUME', { row: i + 1 }), 400, httpstatustext.FAIL));
+      }
+
+      // Parse date
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+      }
+
+      // Find animal
+      const animal = await Animal.findOne({ tagId, owner: userId });
+      if (!animal) {
+        return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
+      }
+
+      // Find treatment
+      const treatment = await Treatment.findOne({
+        name: { $regex: new RegExp(`^${treatmentName}$`, 'i') },
+        owner: userId
+      });
+      if (!treatment) {
+        return next(AppError.create(i18n.__('TREATMENT_NOT_FOUND', { name: treatmentName, row: i + 1 }), 404, httpstatustext.FAIL));
+      }
+
+      // Check if treatment is expired
+      if (treatment.expireDate && new Date(treatment.expireDate) < new Date()) {
+        return next(AppError.create(i18n.__('TREATMENT_EXPIRED', {
+          name: treatmentName,
+          date: treatment.expireDate.toISOString().split('T')[0],
+          row: i + 1
+        }), 400, httpstatustext.FAIL));
+      }
+
+      // Check stock
+      if (treatment.volume < volume) {
+        return next(AppError.create(i18n.__('INSUFFICIENT_TREATMENT_VOLUME', {
+          name: treatmentName,
+          available: treatment.volume,
+          requested: volume,
+          row: i + 1
+        }), 400, httpstatustext.FAIL));
+      }
+
+      // Calculate cost
+      const treatmentCost = treatment.pricePerMl * volume;
+
+      // Start transaction
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        // Update treatment stock
+        treatment.volume -= volume;
+        await treatment.save({ session });
+
+        // Create treatment entry using animal's current location
+        const newTreatmentEntry = await TreatmentEntry.create([{
+          treatments: [{
+            treatmentId: treatment._id,
+            volume
+          }],
+          tagId,
+          locationShed: animal.locationShed,
+          date,
+          owner: userId
+        }], { session });
+
+        // Update animal cost
+        await AnimalCost.findOneAndUpdate(
+          { animalTagId: tagId },
+          {
+            $inc: { treatmentCost },
+            $setOnInsert: {
+              feedCost: 0,
+              date,
+              owner: userId
             }
+          },
+          { upsert: true, session }
+        );
 
-            // Parse volume
-            const volume = parseFloat(volumeStr);
-            if (isNaN(volume) || volume <= 0) {
-                return next(AppError.create(i18n.__('INVALID_VOLUME', { row: i + 1 }), 400, httpstatustext.FAIL));
-            }
-
-            // Parse date
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) {
-                return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
-            }
-
-            // Find animal
-            const animal = await Animal.findOne({ tagId, owner: userId });
-            if (!animal) {
-                return next(AppError.create(i18n.__('ANIMAL_NOT_FOUND', { tagId, row: i + 1 }), 404, httpstatustext.FAIL));
-            }
-
-            // Find treatment
-            const treatment = await Treatment.findOne({ 
-                name: { $regex: new RegExp(`^${treatmentName}$`, 'i') },
-                owner: userId 
-            });
-            if (!treatment) {
-                return next(AppError.create(i18n.__('TREATMENT_NOT_FOUND', { name: treatmentName, row: i + 1 }), 404, httpstatustext.FAIL));
-            }
-
-            // Check if treatment is expired
-            if (treatment.expireDate && new Date(treatment.expireDate) < new Date()) {
-                return next(AppError.create(i18n.__('TREATMENT_EXPIRED', { 
-                    name: treatmentName, 
-                    date: treatment.expireDate.toISOString().split('T')[0],
-                    row: i + 1 
-                }), 400, httpstatustext.FAIL));
-            }
-
-            // Check stock
-            if (treatment.volume < volume) {
-                return next(AppError.create(i18n.__('INSUFFICIENT_TREATMENT_VOLUME', { 
-                    name: treatmentName,
-                    available: treatment.volume,
-                    requested: volume,
-                    row: i + 1 
-                }), 400, httpstatustext.FAIL));
-            }
-
-            // Calculate cost
-            const treatmentCost = treatment.pricePerMl * volume;
-
-            // Start transaction
-            const session = await mongoose.startSession();
-            session.startTransaction();
-
-            try {
-                // Update treatment stock
-                treatment.volume -= volume;
-                await treatment.save({ session });
-
-                // Create treatment entry using animal's current location
-                const newTreatmentEntry = await TreatmentEntry.create([{
-                    treatments: [{ 
-                        treatmentId: treatment._id,
-                        volume 
-                    }],
-                    tagId,
-                    locationShed: animal.locationShed,
-                    date,
-                    owner: userId
-                }], { session });
-
-                // Update animal cost
-                await AnimalCost.findOneAndUpdate(
-                    { animalTagId: tagId },
-                    { 
-                        $inc: { treatmentCost },
-                        $setOnInsert: { 
-                            feedCost: 0,
-                            date,
-                            owner: userId
-                        }
-                    },
-                    { upsert: true, session }
-                );
-
-                await session.commitTransaction();
-                session.endSession();
-            } catch (error) {
-                await session.abortTransaction();
-                session.endSession();
-                throw error;
-            }
-        }
-
-        res.json({
-            status: httpstatustext.SUCCESS,
-            message: i18n.__('TREATMENT_ENTRIES_IMPORTED_SUCCESSFULLY')
-        });
-    } catch (error) {
-        console.error('Import error:', error);
-        return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+        await session.commitTransaction();
+        session.endSession();
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+      }
     }
+
+    res.json({
+      status: httpstatustext.SUCCESS,
+      message: i18n.__('TREATMENT_ENTRIES_IMPORTED_SUCCESSFULLY')
+    });
+  } catch (error) {
+    console.error('Import error:', error);
+    return next(AppError.create(i18n.__('IMPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+  }
 });
 
 const exportTreatmentsToExcel = asyncwrapper(async (req, res, next) => {
-    try {
-        const userId = req.user?.id || req.userId;
-        const lang = req.query.lang || 'en';
-        const isArabic = lang === 'ar';
+  try {
+    const userId = req.user?.id || req.userId;
+    const lang = req.query.lang || 'en';
+    const isArabic = lang === 'ar';
 
-        if (!userId) {
-            return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
-        }
-
-        // Build filter
-        const filter = { owner: userId };
-        if (req.query.tagId) filter.tagId = req.query.tagId;
-        
-        // Date range filtering
-        if (req.query.startDate || req.query.endDate) {
-            filter.date = {};
-            if (req.query.startDate) filter.date.$gte = new Date(req.query.startDate);
-            if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
-        }
-
-        const entries = await TreatmentEntry.find(filter)
-            .sort({ date: 1 })
-            .populate('treatments.treatmentId', 'name pricePerMl')
-            .populate('locationShed', 'locationShedName');
-
-        if (entries.length === 0) {
-            return res.status(404).json({
-                status: httpstatustext.FAIL,
-                message: i18n.__('NO_TREATMENT_RECORDS')
-            });
-        }
-
-        const headers = excelOps.headers.treatment[lang].export;
-        const sheetName = excelOps.sheetNames.treatment.export[lang];
-
-        const data = entries.map(entry => [
-            entry.tagId,
-            entry.treatments[0]?.treatmentId?.name || '',
-            entry.treatments[0]?.volume || '',
-            entry.date?.toISOString().split('T')[0] || '',
-            entry.locationShed?.locationShedName || '',
-            (entry.treatments[0]?.volume * (entry.treatments[0]?.treatmentId?.pricePerMl || 0)).toFixed(2),
-            entry.createdAt?.toISOString().split('T')[0] || ''
-        ]);
-
-        const workbook = excelOps.createExcelFile(data, headers, sheetName);
-        const worksheet = workbook.Sheets[sheetName];
-
-        // Set column widths
-        const columnWidths = [15, 25, 15, 12, 20, 12, 12];
-        excelOps.setColumnWidths(worksheet, columnWidths);
-
-        const buffer = excelOps.writeExcelBuffer(workbook);
-        excelOps.setExcelResponseHeaders(res, `treatment_entries_${lang}.xlsx`);
-        res.send(buffer);
-
-    } catch (error) {
-        console.error('Export error:', error);
-        return next(AppError.create(i18n.__('EXPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+    if (!userId) {
+      return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
     }
+
+    // Build filter
+    const filter = { owner: userId };
+    if (req.query.tagId) filter.tagId = req.query.tagId;
+
+    // Date range filtering
+    if (req.query.startDate || req.query.endDate) {
+      filter.date = {};
+      if (req.query.startDate) filter.date.$gte = new Date(req.query.startDate);
+      if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
+    }
+
+    const entries = await TreatmentEntry.find(filter)
+      .sort({ date: 1 })
+      .populate('treatments.treatmentId', 'name pricePerMl')
+      .populate('locationShed', 'locationShedName');
+
+    if (entries.length === 0) {
+      return res.status(404).json({
+        status: httpstatustext.FAIL,
+        message: i18n.__('NO_TREATMENT_RECORDS')
+      });
+    }
+
+    const headers = excelOps.headers.treatment[lang].export;
+    const sheetName = excelOps.sheetNames.treatment.export[lang];
+
+    const data = entries.map(entry => [
+      entry.tagId,
+      entry.treatments[0]?.treatmentId?.name || '',
+      entry.treatments[0]?.volume || '',
+      entry.date?.toISOString().split('T')[0] || '',
+      entry.locationShed?.locationShedName || '',
+      (entry.treatments[0]?.volume * (entry.treatments[0]?.treatmentId?.pricePerMl || 0)).toFixed(2),
+      entry.createdAt?.toISOString().split('T')[0] || ''
+    ]);
+
+    const workbook = excelOps.createExcelFile(data, headers, sheetName);
+    const worksheet = workbook.Sheets[sheetName];
+
+    // Set column widths
+    const columnWidths = [15, 25, 15, 12, 20, 12, 12];
+    excelOps.setColumnWidths(worksheet, columnWidths);
+
+    const buffer = excelOps.writeExcelBuffer(workbook);
+    excelOps.setExcelResponseHeaders(res, `treatment_entries_${lang}.xlsx`);
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('Export error:', error);
+    return next(AppError.create(i18n.__('EXPORT_FAILED') + ': ' + error.message, 500, httpstatustext.ERROR));
+  }
 });
 
 const downloadTreatmentTemplate = asyncwrapper(async (req, res, next) => {
-    try {
-        const lang = req.query.lang || 'en';
+  try {
+    const lang = req.query.lang || 'en';
 
-        const headers = excelOps.headers.treatment[lang].template;
-        const exampleRow = excelOps.templateExamples.treatment[lang];
-        const sheetName = excelOps.sheetNames.treatment.template[lang];
+    const headers = excelOps.headers.treatment[lang].template;
+    const exampleRow = excelOps.templateExamples.treatment[lang];
+    const sheetName = excelOps.sheetNames.treatment.template[lang];
 
-        const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
-        const worksheet = workbook.Sheets[sheetName];
-        excelOps.setColumnWidths(worksheet, headers.map(() => 20));
+    const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
+    const worksheet = workbook.Sheets[sheetName];
+    excelOps.setColumnWidths(worksheet, headers.map(() => 20));
 
-        const buffer = excelOps.writeExcelBuffer(workbook);
-        excelOps.setExcelResponseHeaders(res, `treatment_template_${lang}.xlsx`);
-        res.send(buffer);
+    const buffer = excelOps.writeExcelBuffer(workbook);
+    excelOps.setExcelResponseHeaders(res, `treatment_template_${lang}.xlsx`);
+    res.send(buffer);
 
-    } catch (error) {
-        console.error('Template Download Error:', error);
-        next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
-    }
+  } catch (error) {
+    console.error('Template Download Error:', error);
+    next(AppError.create(i18n.__('TEMPLATE_GENERATION_FAILED'), 500, httpstatustext.ERROR));
+  }
 });
 
 module.exports = {

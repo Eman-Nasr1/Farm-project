@@ -9,52 +9,60 @@ const multer = require('multer');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 
-const getallexcluded =asyncwrapper(async(req,res)=>{
-
+const getallexcluded = asyncwrapper(async (req, res) => {
     const userId = req.user.id;
-    const query=req.query;
-    const limit=query.limit||10;
-    const page=query.page||1;
-    const skip=(page-1)*limit;
+    const query = req.query;
+    const limit = parseInt(query.limit, 10) || 10;
+    const page = parseInt(query.page, 10) || 1;
+    const skip = (page - 1) * limit;
 
     const filter = { owner: userId };
 
     if (query.tagId) {
-        filter.tagId = query.tagId; // e.g., 
+        filter.tagId = query.tagId;
     }
     
     if (query.excludedType) {
-        filter.excludedType = query.excludedType; // e.g., 
+        filter.excludedType = query.excludedType;
     }
 
-
     const excluded = await Excluded.find(filter, { "__v": false })  
-    .populate({  
-        path: 'animalId', // This is the field in the Mating schema that references Animal  
-        select: 'animalType' // Select only the animalType field from the Animal model  
-    })  
-    .limit(limit)  
-    .skip(skip);  
+        .populate({  
+            path: 'animalId',  
+            select: 'animalType'  
+        })  
+        .sort({ createdAt: -1 }) // ✅ Always newest first
+        .limit(limit)  
+        .skip(skip);  
+
     const total = await Excluded.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
-// If animalType is provided in the query, filter the results  
-if (query.animalType) {  
-    const filteredexcludedData = excluded.filter(excluded => excluded.animalId && excluded.animalId.animalType === query.animalType);  
-    return res.json({ status: httpstatustext.SUCCESS, data: { excluded: filteredexcludedData } });  
-}  
+
+    // Filter by animalType if requested
+    if (query.animalType) {  
+        const filteredexcludedData = excluded.filter(
+            e => e.animalId && e.animalId.animalType === query.animalType
+        );  
+        return res.json({
+            status: httpstatustext.SUCCESS,
+            data: { excluded: filteredexcludedData }
+        });  
+    }  
 
     res.json({
-        status:httpstatustext.SUCCESS,
+        status: httpstatustext.SUCCESS,
         pagination: {
-            page:page,
-            limit: limit,
-            total: total,
-            totalPages:totalPages,
+            page,
+            limit,
+            total,
+            totalPages,
             hasNextPage: page < totalPages,
             hasPrevPage: page > 1
-            },
-        data:{excluded}});
-})
+        },
+        data: { excluded }
+    });
+});
+
 
 const getSingleExcluded = asyncwrapper(async (req, res, next) => {
     const excludedId = req.params.excludedId;

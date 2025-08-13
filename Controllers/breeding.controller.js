@@ -14,8 +14,8 @@ const i18n = require('../i18n');
 const getAllBreeding = asyncwrapper(async (req, res) => {
     const userId = req.user.id;
     const query = req.query;
-    const limit = parseInt(query.limit) || 10;
-    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit, 10) || 10;
+    const page = parseInt(query.page, 10) || 1;
     const skip = (page - 1) * limit;
 
     const filter = { owner: userId };
@@ -28,49 +28,50 @@ const getAllBreeding = asyncwrapper(async (req, res) => {
         filter.deliveryDate = query.deliveryDate;
     }
 
-    // Get the total count of documents that match the filter
     const totalCount = await Breeding.countDocuments(filter);
 
-    // Find the paginated results
     const breeding = await Breeding.find(filter, { "__v": false })
         .populate({
-            path: 'animalId', // This is the field in the Mating schema that references Animal  
-            select: 'animalType' // Select only the animalType field from the Animal model  
+            path: 'animalId',
+            select: 'animalType'
         })
+        .sort({ createdAt: -1 }) // ✅ Always newest first
         .limit(limit)
         .skip(skip);
 
-    // Filter by animalType if the query parameter is provided
+    // Optional: filter by animalType after fetching
     if (query.animalType) {
-        const filteredBreedingData = breeding.filter(breeding => breeding.animalId && breeding.animalId.animalType === query.animalType);
+        const filteredBreedingData = breeding.filter(
+            b => b.animalId && b.animalId.animalType === query.animalType
+        );
         return res.json({
             status: httpstatustext.SUCCESS,
             data: {
                 breeding: filteredBreedingData,
                 pagination: {
                     total: filteredBreedingData.length,
-                    page: page,
-                    limit: limit,
+                    page,
+                    limit,
                     totalPages: Math.ceil(filteredBreedingData.length / limit)
                 }
             }
         });
     }
 
-    // Return the paginated results along with pagination metadata
     res.json({
         status: httpstatustext.SUCCESS,
         data: {
             breeding,
             pagination: {
                 total: totalCount,
-                page: page,
-                limit: limit,
+                page,
+                limit,
                 totalPages: Math.ceil(totalCount / limit)
             }
         }
     });
 });
+
 
 const downloadBreedingTemplate = asyncwrapper(async (req, res, next) => {
     try {

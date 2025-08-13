@@ -474,6 +474,7 @@ const getAllFeedsByShed = asyncwrapper(async (req, res) => {
       path: "locationShed",
       select: "locationShedName", // Populate locationShedName
     })
+    .sort({ createdAt: -1 })
     .limit(limit)
     .skip(skip);
 
@@ -651,7 +652,7 @@ const getAllFodders = asyncwrapper(async (req, res) => {
   if (query.name) {
     filter.name = query.name;
   }
-  const fodders = await Fodder.find(filter, { __v: false }).limit(limit).skip(skip);
+  const fodders = await Fodder.find(filter, { __v: false }) .sort({ createdAt: -1 }).limit(limit).skip(skip);
   const total = await Fodder.countDocuments(filter);
    const totalPages = Math.ceil(total / limit);
 

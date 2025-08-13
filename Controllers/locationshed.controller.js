@@ -20,6 +20,7 @@ const getAllLocationSheds = asyncwrapper(async (req, res) => {
 
     // Fetch location sheds with pagination
     const locationSheds = await LocationShed.find(filter, { "__v": false })
+        .sort({ createdAt: -1 })
         .limit(limit)
         .skip(skip);
 

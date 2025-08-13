@@ -322,58 +322,35 @@ const getallanimals = asyncwrapper(async (req, res, next) => {
 
     const userId = req.user.id;
     const query = req.query;
-    const limit = query.limit || 10;
-    const page = query.page || 1;
+    const limit = parseInt(query.limit, 10) || 10;
+    const page = parseInt(query.page, 10) || 1;
     const skip = (page - 1) * limit;
 
-    // Create filter object
     const filter = { owner: userId };
 
-    // Add filters based on query parameters
-    if (query.animalType) {
-        filter.animalType = query.animalType; // e.g., "goat" or "sheep"
-    }
+    if (query.animalType) filter.animalType = query.animalType;
+    if (query.gender) filter.gender = query.gender;
+    if (query.locationShed) filter.locationShed = query.locationShed;
+    if (query.breed) filter.breed = query.breed;
+    if (query.tagId) filter.tagId = query.tagId;
 
-    if (query.gender) {
-        filter.gender = query.gender; // e.g., "male" or "female"
-    }
-
-    if (query.locationShed) {
-        filter.locationShed = query.locationShed; // e.g., "Shed A"
-    }
-
-    if (query.breed) {
-        filter.breed = query.breed; // e.g., "balady"
-    }
-
-    if (query.tagId) {
-        filter.tagId = query.tagId; // e.g., 
-    }
-
-    // Find animals with applied filters and populate locationShed
     const animals = await Animal.find(filter, { "__v": false })
-        .populate({
-            path: 'locationShed',
-            select: 'locationShedName' // Only include the locationShedName field
-        })
-         .populate({
-            path: 'breed',
-            select: 'breedName' // Only include the breedName field
-        })
-        .limit(limit)
-        .skip(skip);
+        .populate({ path: 'locationShed', select: 'locationShedName' })
+        .populate({ path: 'breed', select: 'breedName' })
+        .sort({ createdAt: -1 }) // ← always newest first
+        .skip(skip)
+        .limit(limit);
 
     const total = await Animal.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
-    // Return response
     res.json({
         status: i18n.__('SUCCESS'),
         pagination: {
-            page: page,
-            limit: limit,
-            total: total,
-            totalPages: totalPages,
+            page,
+            limit,
+            total,
+            totalPages,
             hasNextPage: page < totalPages,
             hasPrevPage: page > 1
         },
