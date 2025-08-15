@@ -6,6 +6,7 @@ const User=require('../Models/user.model');
 const LocationShed=require('../Models/locationsed.model');
 const Breed=require('../Models/breed.model');
 const AnimalCost=require('../Models/animalCost.model');
+const Excluded=require('../Models/excluded.model');
 const mongoose = require('mongoose');
 const i18n = require('../i18n');
 const excelOps = require('../utilits/excelOperations');
@@ -15,51 +16,45 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
         // First ensure we have a valid userId from the request
         const userId = req.userId || req.user?.id;
         if (!userId) {
-           // console.error('User ID is missing in request');
             return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
         }
 
-       // console.log(`[DEBUG] Processing statistics for user ${userId}`);
+        // Get all excluded animal IDs for this user
+        const excludedAnimals = await Excluded.find({ owner: userId }).select('animalId');
+        const excludedAnimalIds = excludedAnimals.map(ex => ex.animalId);
 
-        // Get total count of animals for the user
-        const totalAnimals = await Animal.countDocuments({ owner: userId });
-       // console.log(`[DEBUG] Total animals: ${totalAnimals}`);
+        // Get total count of animals for the user excluding the excluded ones
+        const totalAnimals = await Animal.countDocuments({
+            owner: userId,
+            _id: { $nin: excludedAnimalIds }
+        });
 
-        // Get counts by animal type (sheep/goat)
+        // Get counts by animal type (sheep/goat) excluding excluded animals
         const animalsByType = await Animal.aggregate([
             { 
                 $match: { 
-                    owner: new mongoose.Types.ObjectId(userId) // Fixed ObjectId construction
-                }
+                    owner: new mongoose.Types.ObjectId(userId),
+                    _id: { $nin: excludedAnimalIds }
+                } 
             },
             { 
                 $group: { 
                     _id: "$animalType", 
-                    count: { $sum: 1 },
-                    males: { 
-                        $sum: { 
-                            $cond: [{ $eq: ["$gender", "male"] }, 1, 0] 
-                        } 
-                    },
-                    females: { 
-                        $sum: { 
-                            $cond: [{ $eq: ["$gender", "female"] }, 1, 0] 
-                        } 
-                    }
-                }
+                    count: { $sum: 1 }, 
+                    males: { $sum: { $cond: [{ $eq: ["$gender", "male"] }, 1, 0] } }, 
+                    females: { $sum: { $cond: [{ $eq: ["$gender", "female"] }, 1, 0] } } 
+                } 
             },
             { 
-                $project: {
-                    animalType: "$_id",
-                    count: 1,
-                    males: 1,
-                    females: 1,
-                    _id: 0
-                }
+                $project: { 
+                    animalType: "$_id", 
+                    count: 1, 
+                    males: 1, 
+                    females: 1, 
+                    _id: 0 
+                } 
             }
         ]);
-
-      //  console.log('[DEBUG] Animals by type:', animalsByType);
 
         // Initialize with all possible types
         const typeStats = {
@@ -78,35 +73,31 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
             }
         });
 
-        // Get counts by gender
+        // Get counts by gender excluding excluded animals
         const animalsByGender = await Animal.aggregate([
             { 
                 $match: { 
-                    owner: new mongoose.Types.ObjectId(userId) 
-                }
+                    owner: new mongoose.Types.ObjectId(userId),
+                    _id: { $nin: excludedAnimalIds }
+                } 
             },
             { 
                 $group: { 
                     _id: "$gender", 
-                    count: { $sum: 1 }
-                }
+                    count: { $sum: 1 } 
+                } 
             },
             { 
-                $project: {
-                    gender: "$_id",
-                    count: 1,
-                    _id: 0
-                }
+                $project: { 
+                    gender: "$_id", 
+                    count: 1, 
+                    _id: 0 
+                } 
             }
         ]);
 
-       // console.log('[DEBUG] Animals by gender:', animalsByGender);
-
         // Initialize gender stats
-        const genderStats = {
-            male: 0,
-            female: 0
-        };
+        const genderStats = { male: 0, female: 0 };
 
         // Update with actual data
         animalsByGender.forEach(stat => {
@@ -124,7 +115,6 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
                 byGender: genderStats
             }
         });
-
     } catch (error) {
         console.error('[ERROR] in getAnimalStatistics:', error);
         return next(AppError.create(i18n.__('STATISTICS_ERROR'), 500, httpstatustext.ERROR));

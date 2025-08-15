@@ -39,4 +39,4 @@ const Excludedschema=new mongoose.Schema(
     }
 )
 
-module.exports= mongoose.model('Excloded',Excludedschema)
+module.exports= mongoose.model('Excluded',Excludedschema)
