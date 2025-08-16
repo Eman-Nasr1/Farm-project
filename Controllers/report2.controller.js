@@ -4,7 +4,6 @@ const path = require('path');
 const fs = require('fs');
 const puppeteer = require('puppeteer');
 
-
 const Animal = require('../Models/animal.model');
 const Excluded = require('../Models/excluded.model');
 const Mating = require('../Models/mating.model');
@@ -20,45 +19,41 @@ const User = require('../Models/user.model');
 
 const asyncwrapper = require('../middleware/asyncwrapper');
 
-/* ===== Charts (offline) ===== */
+/* =========================
+ * Charts (offline renderer)
+ * ========================= */
 const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
 const { Chart, registerables } = require('chart.js');
 Chart.register(...registerables);
-// ===== THEME & COLORS =====
+
+// ---- Theme & palette ----
 const brand = {
-    base:  '#14532d',              // أخضر داكن
-    accent:'#46AE65',              // أخضر فاتح
-    text:  '#1f2937',              // رمادي غامق للنصوص
-    grid:  'rgba(107,114,128,0.20)'// لون خطوط الشبكة
-  };
-  
-  const categorical10 = [
-    '#14532d','#0ea5e9','#f59e0b','#ef4444','#8b5cf6',
-    '#10b981','#f97316','#22c55e','#14b8a6','#a855f7'
-  ];
-  
-  const genderColors = {
-    male:   'rgba(14,165,233,0.85)',   // أزرق
-    female: 'rgba(244,114,182,0.85)'   // وردي
-  };
-  
-  // Helper: Hex -> rgba
-  function hexToRgba(hex, alpha = 1) {
-    const h = hex.replace('#','');
-    const bigint = parseInt(h.length === 3 ? h.split('').map(x=>x+x).join('') : h, 16);
-    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
-    return `rgba(${r},${g},${b},${alpha})`;
-  }
-  
-  // (اختياري) طبّق لون نص عام على الرسوم
-  Chart.defaults.color = brand.text;
-  
+  base:  '#14532d',
+  accent:'#46AE65',
+  text:  '#1f2937',
+  grid:  'rgba(107,114,128,0.20)'
+};
+const categorical10 = [
+  '#14532d','#0ea5e9','#f59e0b','#ef4444','#8b5cf6',
+  '#10b981','#f97316','#22c55e','#14b8a6','#a855f7'
+];
+const genderColors = {
+  male:   'rgba(14,165,233,0.85)',
+  female: 'rgba(244,114,182,0.85)'
+};
+function hexToRgba(hex, alpha = 1) {
+  const h = hex.replace('#','');
+  const bigint = parseInt(h.length === 3 ? h.split('').map(x=>x+x).join('') : h, 16);
+  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+Chart.defaults.color = brand.text;
+
 const chartRenderer = new ChartJSNodeCanvas({
-  width: 900,            // مناسب لـ A4
+  width: 900,         // مناسب لطباعة A4
   height: 450,
   backgroundColour: 'white'
 });
-
 async function chartToBase64(config) {
   const buf = await chartRenderer.renderToBuffer(config);
   return buf.toString('base64');
@@ -67,17 +62,66 @@ async function chartToBase64(config) {
 const typeLabel = (key, isArabic) => {
   const map = {
     death: isArabic ? 'نفوق' : 'Death',
-    sweep: isArabic ? 'زبح' : 'Sweep',
+    sweep: isArabic ? 'ذبح'  : 'Sweep',
     sale:  isArabic ? 'بيع'  : 'Sale'
   };
   return map[key] || key;
 };
-/* =========================== */
 
+/* =========================
+ * Font embedding (optional)
+ * ========================= */
+function readFontBase64(fontPath) {
+  try {
+    const file = fs.readFileSync(fontPath);
+    return file.toString('base64');
+  } catch {
+    return null;
+  }
+}
+function buildFontCSS(isArabic) {
+  // ضيفي ملفات الخطوط هنا لو عايزة ثبات شكل الخط على السيرفر
+  // مثال: ضيفي Cairo-Regular.ttf داخل assets/fonts
+  const fontDir = path.join(__dirname, '..', 'assets', 'fonts');
+  const cairo = readFontBase64(path.join(fontDir, 'Cairo-Regular.ttf'));
+  const inter = readFontBase64(path.join(fontDir, 'Inter-Regular.ttf')); // للـ LTR اختياري
+
+  let css = '';
+  if (cairo) {
+    css += `
+      @font-face {
+        font-family: 'CairoEmbed';
+        src: url(data:font/ttf;base64,${cairo}) format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+    `;
+  }
+  if (inter) {
+    css += `
+      @font-face {
+        font-family: 'InterEmbed';
+        src: url(data:font/ttf;base64,${inter}) format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+    `;
+  }
+  // استخدم CairoEmbed للعربي إذا موجود
+  const stack = isArabic
+    ? (cairo ? `'CairoEmbed', Arial, sans-serif` : `Arial, sans-serif`)
+    : (inter ? `'InterEmbed', Arial, sans-serif` : `Arial, sans-serif`);
+
+  return { css, family: stack };
+}
+
+/* =========================
+ * Helpers
+ * ========================= */
 const safeNum = v => (typeof v === 'number' && !Number.isNaN(v)) ? v : 0;
 const daysBetween = (fromDate, toDate) => Math.max(1, Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)));
-
-// اعرض التاريخ بالمنطقة المحلية (YYYY-MM-DD)
 const fmtDate = (d) => {
   const dt = new Date(d);
   const y = dt.getFullYear();
@@ -87,21 +131,17 @@ const fmtDate = (d) => {
 };
 function parseYMDLocal(s) {
   const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, (m - 1), d); // تاريخ محلي
+  return new Date(y, (m - 1), d);
 }
 
-/** ---------------------------
- *  SHARED REPORT DATA BUILDER
- *  ---------------------------
- *  Returns { data, meta }
- */
+/* =========================
+ * Data Builder
+ * ========================= */
 async function buildCombinedReportData({ userId, animalType, fromDate, toDate, lang = 'en' }) {
   const isArabic = (lang === 'ar');
   const user = await User.findById(userId).select('registerationType country');
   if (!user) throw new Error('USER_NOT_FOUND');
 
-  // ===== Helpers =====
-  // صافـي المخزون كعدّاد حتى تاريخ معيّن (مع استبعاد البيع/النفوق/السويب حتى asOfDate)
   const inventoryCountAsOf = (asOfDate) => Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: asOfDate } } },
     {
@@ -128,7 +168,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $count: 'n' }
   ]);
 
-  // ===== Aggregations (بدون اتجاه أسبوعي) =====
+  // Aggregations
   const feedConsumptionAgg = ShedEntry.aggregate([
     { $match: { owner: userId, date: { $gte: fromDate, $lte: toDate } } },
     { $unwind: '$feeds' },
@@ -196,7 +236,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $project: { _id: 1, vaccineName: 1, stock: 1, pricing: 1 } }
   ]);
 
-  // === مخزون حالي بحسب الجنس حتى toDate (مع الاستبعاد) ===
   const animalReportAgg = Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: toDate } } },
     {
@@ -233,7 +272,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $project: { _id: 0, excludedType: '$_id.excludedType', animalType: '$_id.animalType', gender: '$_id.gender', count: 1, value: 1 } }
   ]);
 
-  // === الولادات/السونار/التلقيحات ===
   const breedingBlocks = user.registerationType === 'breeding' ? [
     Mating.aggregate([
       {
@@ -293,11 +331,10 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: { shed: '$animal.locationShed', excludedType: '$excludedType' }, count: { $sum: 1 } } },
     { $lookup: { from: 'locationsheds', localField: '_id.shed', foreignField: '_id', as: 'shed' } },
     { $unwind: { path: '$shed', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, shedId: '$_id.shed', shedName: '$shed.locationShedName', excludedType: '$_id.excludedType', count: 1 } },
+    { $project: { _id: 0, shedId: '_id.shed', shedName: '$shed.locationShedName', excludedType: '$_id.excludedType', count: 1 } },
     { $sort: { shedName: 1 } }
   ]);
 
-  // === مخزون حالي حسب السلالة حتى toDate (مع الاستبعاد) ===
   const animalsByBreedAgg = Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: toDate } } },
     {
@@ -362,7 +399,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: '$animal.breed', avgADG: { $avg: '$adg' }, totalGain: { $sum: '$gain' }, animals: { $sum: 1 } } },
     { $lookup: { from: 'breeds', localField: '_id', foreignField: '_id', as: 'breedObj' } },
     { $unwind: { path: '$breedObj', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, breedId: '$_id', breedName: '$breedObj.breedName', avgADG: 1, totalGain: 1, animals: 1 } },
+    { $project: { _id: 0, breedId: '$animal.breed', breedName: '$breedObj.breedName', avgADG: 1, totalGain: 1, animals: 1 } },
     { $sort: { avgADG: -1 } }
   ]);
 
@@ -372,7 +409,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: null, totalPurchaseOrMarket: { $sum: '$effectiveCost' } } }
   ]);
 
-  // صافـي المخزون في البداية/النهاية
+  // scalar metrics
   const animalsAtEndCount = inventoryCountAsOf(toDate);
   const animalsAtStartCount = inventoryCountAsOf(fromDate);
 
@@ -384,7 +421,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   const eligibleAnimalsCount = Animal.countDocuments({ owner: userId, animalType });
 
   const deathsCountAgg = Excluded.countDocuments({ owner: userId, excludedType: 'death', Date: { $gte: fromDate, $lte: toDate } });
-
   const treatmentIncidentsAgg = TreatmentEntry.countDocuments({ owner: userId, date: { $gte: fromDate, $lte: toDate } });
 
   const salesRevenueAgg = Excluded.aggregate([
@@ -392,7 +428,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: null, revenue: { $sum: { $ifNull: ['$price', 0] } } } }
   ]);
 
-  // === Execute ===
   const [
     feedConsumption, remainingFeedStock, treatmentConsumption, remainingTreatmentStock,
     vaccineConsumption, remainingVaccineStock, animalReport, excludedReport,
@@ -413,7 +448,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     deathsCountAgg, treatmentIncidentsAgg, salesRevenueAgg
   ]);
 
-  // === KPIs ===
+  // KPIs
   const totalAnimalsPeriod = safeNum((animalReport || []).reduce((s, a) => s + safeNum(a.count), 0));
   const totalFeedCost = safeNum(feedConsumption.reduce((s, f) => s + safeNum(f.totalCost), 0));
   const totalTreatmentCost = safeNum(treatmentConsumption.reduce((s, t) => s + safeNum(t.totalCost), 0));
@@ -444,7 +479,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   const totalFeedConsumed = safeNum(feedConsumption.reduce((s, f) => s + safeNum(f.totalConsumed), 0));
   const fcrOverall = totalWeightGain > 0 ? (totalFeedConsumed / totalWeightGain) : null;
 
-  // Days of Inventory
+  // Coverage days
   const nDays = daysBetween(fromDate, toDate);
   const feedDailyUse = totalFeedConsumed / nDays;
   const treatmentDailyUse = (treatmentConsumption.reduce((s, t) => s + safeNum(t.totalConsumed), 0)) / nDays;
@@ -454,19 +489,16 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     const daysCover = feedDailyUse > 0 ? (safeNum(s.quantity) / feedDailyUse) : null;
     return { feedName: s.name, quantity: s.quantity, dailyUse: feedDailyUse, daysCover, warn: daysCover !== null && daysCover < 10 };
   });
-
   const treatmentCoverage = (remainingTreatmentStock || []).map(s => {
     const daysCover = treatmentDailyUse > 0 ? (safeNum(s.volume) / treatmentDailyUse) : null;
     return { treatmentName: s.name, quantity: s.volume, dailyUse: treatmentDailyUse, daysCover, warn: daysCover !== null && daysCover < 10 };
   });
-
   const vaccineCoverage = (remainingVaccineStock || []).map(s => {
     const totalDoses = safeNum(s?.stock?.totalDoses);
     const daysCover = vaccineDailyUse > 0 ? (totalDoses / vaccineDailyUse) : null;
     return { vaccineName: s.vaccineName, totalDoses, dailyUse: vaccineDailyUse, daysCover, warn: daysCover !== null && daysCover < 10 };
   });
 
-  // Breeding summaries
   const birthEntriesData = user.registerationType === 'breeding'
     ? (birthEntriesReport[0] || { totalBirthEntries: 0, totalMales: 0, totalFemales: 0 })
     : { totalBirthEntries: 0, totalMales: 0, totalFemales: 0 };
@@ -474,12 +506,10 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   const pregnantSonar = user.registerationType === 'breeding'
     ? safeNum(positiveSonarCountArr[0]?.positiveSonarCount)
     : 0;
-
   const totalMatings = user.registerationType === 'breeding'
     ? safeNum(totalMatingsArr[0]?.totalMatings)
     : 0;
 
-  // Fertility vs Conception
   const femaleCountPeriod = safeNum((animalReport || []).find(r => r.gender === 'female')?.count);
   const fertilityRate = totalMatings > 0
     ? (pregnantSonar / totalMatings) * 100
@@ -530,9 +560,9 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   };
 }
 
-/** ---------------------------
- *  JSON ROUTE
- *  --------------------------- */
+/* =========================
+ * JSON Route
+ * ========================= */
 const generateCombinedReport = asyncwrapper(async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
 
@@ -546,7 +576,6 @@ const generateCombinedReport = asyncwrapper(async (req, res) => {
   if (isNaN(fromDate) || isNaN(toDate)) {
     return res.status(400).json({ status: 'error', message: 'Invalid date format' });
   }
-  // لو المستخدم بعتهم بالعكس، نقلبهم بدلاً من رفض الطلب
   if (fromDate > toDate) [fromDate, toDate] = [toDate, fromDate];
 
   fromDate.setHours(0, 0, 0, 0);
@@ -560,9 +589,9 @@ const generateCombinedReport = asyncwrapper(async (req, res) => {
   res.status(200).json({ status: 'success', data, meta });
 });
 
-/** ---------------------------
- *  PDF ROUTE  (بدون قسم الاتجاه الأسبوعي)
- *  --------------------------- */
+/* =========================
+ * PDF Route (Puppeteer)
+ * ========================= */
 const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
 
@@ -590,13 +619,12 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   const t = (en, ar) => (isArabic ? ar : en);
   const num = (v, d = 2) => (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
 
-  // Counts for cards
   const totalAnimalsPdf = data.animalReport?.reduce((sum, r) => sum + (r.count || 0), 0) || 0;
   const maleCount = data.animalReport?.find(r => r.gender === 'male')?.count || 0;
   const femaleCount = data.animalReport?.find(r => r.gender === 'female')?.count || 0;
   const pregnantCount = data.pregnantAnimal || 0;
 
-  // ===== CHARTS: prep & render (Base64) =====
+  // ---- Charts (Base64) ----
   let charts = {};
   try {
     const maleCountChart   = data.animalReport?.find(r => r.gender === 'male')?.count   || 0;
@@ -623,109 +651,114 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
       .sort((a, b) => (b.avgADG || 0) - (a.avgADG || 0))
       .slice(0, 8);
 
-      charts.animalsByGender = await chartToBase64({
-        type: 'doughnut',
-        data: {
-          labels: [t('Males','ذكور'), t('Females','إناث')],
-          datasets: [{
-            data: [maleCountChart, femaleCountChart],
-            backgroundColor: [genderColors.male, genderColors.female],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: false,
-          plugins: {
-            title: { display: true, text: t('Animals by Gender','توزيع الحيوانات حسب الجنس'), color: brand.text },
-            legend: { position: 'bottom', labels: { color: brand.text } }
-          }
+    charts.animalsByGender = await chartToBase64({
+      type: 'doughnut',
+      data: {
+        labels: [t('Males','ذكور'), t('Females','إناث')],
+        datasets: [{
+          data: [maleCountChart, femaleCountChart],
+          backgroundColor: [genderColors.male, genderColors.female],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: false,
+        plugins: {
+          title: { display: true, text: t('Animals by Gender','توزيع الحيوانات حسب الجنس'), color: brand.text },
+          legend: { position: 'bottom', labels: { color: brand.text } }
         }
-      });
-      
-
- charts.feedCostTop = await chartToBase64({
-  type: 'bar',
-  data: {
-    labels: topFeedsByCost.map(f => f.feedName || '—'),
-    datasets: [{
-      label: t('Cost','التكلفة'),
-      data: topFeedsByCost.map(f => f.totalCost || 0),
-      backgroundColor: categorical10.slice(0, topFeedsByCost.length).map(c => hexToRgba(c, 0.85)),
-      borderColor: categorical10.slice(0, topFeedsByCost.length),
-      borderWidth: 1,
-      borderRadius: 6
-    }]
-  },
-  options: {
-    responsive: false,
-    plugins: {
-      title: { display: true, text: t('Top Feeds by Cost','أكثر الأعلاف تكلفة'), color: brand.text },
-      legend: { display: false }
-    },
-    scales: {
-      x: { ticks: { color: brand.text }, grid: { color: brand.grid } },
-      y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
-    }
-  }
-});
-
-
-charts.excludedByTypeStacked = await chartToBase64({
-    type: 'bar',
-    data: {
-      labels: exTypesLabels,
-      datasets: [
-        { label: t('Males','ذكور'),   data: exMale,   stack: 'gender', backgroundColor: genderColors.male,   borderWidth: 0 },
-        { label: t('Females','إناث'), data: exFemale, stack: 'gender', backgroundColor: genderColors.female, borderWidth: 0 }
-      ]
-    },
-    options: {
-      responsive: false,
-      plugins: {
-        title: { display: true, text: t('Excluded by Type (Stacked)','الاستبعاد حسب النوع '), color: brand.text },
-        legend: { labels: { color: brand.text } }
-      },
-      scales: {
-        x: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid } },
-        y: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
       }
-    }
-  });
-  
-  charts.adgByBreed = await chartToBase64({
-    type: 'bar',
-    data: {
-      labels: adgTopBreeds.map(b => b.breedName || '—'),
-      datasets: [{
-        label: t('Avg ADG','متوسط الزيادة اليومية'),
-        data: adgTopBreeds.map(b => b.avgADG || 0),
-        backgroundColor: hexToRgba(brand.accent, 0.85),
-        borderColor: brand.accent,
-        borderWidth: 1,
-        borderRadius: 6
-      }]
-    },
-    options: {
-      responsive: false,
-      plugins: {
-        title: { display: true, text: t('Avg ADG by Breed','متوسط الزيادة اليومية حسب السلالة'), color: brand.text },
-        legend: { display: false }
+    });
+
+    charts.feedCostTop = await chartToBase64({
+      type: 'bar',
+      data: {
+        labels: topFeedsByCost.map(f => f.feedName || '—'),
+        datasets: [{
+          label: t('Cost','التكلفة'),
+          data: topFeedsByCost.map(f => f.totalCost || 0),
+          backgroundColor: categorical10.slice(0, topFeedsByCost.length).map(c => hexToRgba(c, 0.85)),
+          borderColor: categorical10.slice(0, topFeedsByCost.length),
+          borderWidth: 1,
+          borderRadius: 6
+        }]
       },
-      scales: {
-        x: { ticks: { color: brand.text }, grid: { color: brand.grid } },
-        y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
+      options: {
+        responsive: false,
+        plugins: {
+          title: { display: true, text: t('Top Feeds by Cost','أكثر الأعلاف تكلفة'), color: brand.text },
+          legend: { display: false }
+        },
+        scales: {
+          x: { ticks: { color: brand.text }, grid: { color: brand.grid } },
+          y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
+        }
       }
-    }
-  });
-  
+    });
+
+    charts.excludedByTypeStacked = await chartToBase64({
+      type: 'bar',
+      data: {
+        labels: exTypesLabels,
+        datasets: [
+          { label: t('Males','ذكور'),   data: exMale,   stack: 'gender', backgroundColor: genderColors.male,   borderWidth: 0 },
+          { label: t('Females','إناث'), data: exFemale, stack: 'gender', backgroundColor: genderColors.female, borderWidth: 0 }
+        ]
+      },
+      options: {
+        responsive: false,
+        plugins: {
+          title: { display: true, text: t('Excluded by Type (Stacked)','الاستبعاد حسب النوع'), color: brand.text },
+          legend: { labels: { color: brand.text } }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid } },
+          y: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
+        }
+      }
+    });
+
+    // ADG horizontal (indexAxis: 'y')
+    charts.adgByBreed = await chartToBase64({
+      type: 'bar',
+      data: {
+        labels: adgTopBreeds.map(b => b.breedName || '—'),
+        datasets: [{
+          label: t('Avg ADG','متوسط الزيادة اليومية'),
+          data: adgTopBreeds.map(b => b.avgADG || 0),
+          backgroundColor: hexToRgba(brand.accent, 0.85),
+          borderColor: brand.accent,
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: false,
+        plugins: {
+          title: { display: true, text: t('Avg ADG by Breed','متوسط الزيادة اليومية حسب السلالة'), color: brand.text },
+          legend: { display: false }
+        },
+        scales: {
+          x: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true },
+          y: { ticks: { color: brand.text }, grid: { color: brand.grid } }
+        }
+      }
+    });
+
   } catch (e) {
     console.error('Chart rendering failed:', e);
     charts = {};
   }
 
+  // ---- Fonts CSS (optional embed) ----
+  const { css: fontFaceCSS, family: fontFamily } = buildFontCSS(isArabic);
+
   const css = `
     <style>
-      body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; color: #333; direction:${isArabic ? 'rtl' : 'ltr'}; text-align:${isArabic ? 'right' : 'left'}; }
+      ${fontFaceCSS}
+      body { font-family: ${fontFamily}; margin: 20px; font-size: 14px; color: #333;
+             direction:${isArabic ? 'rtl' : 'ltr'}; text-align:${isArabic ? 'right' : 'left'}; }
       .report-title{ text-align:center; font-size:24px; margin-bottom:20px; font-weight:bold; color:#2c3e50; padding:10px; border-bottom:2px solid #46AE65; }
       .report-subtitle{ text-align:center; font-size:16px; color:#7f8c8d; margin-bottom:30px; }
       .section{ margin-bottom:30px; background:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
@@ -741,16 +774,8 @@ charts.excludedByTypeStacked = await chartToBase64({
       .stat-label{ color:#666; font-size:13px; }
       .footer{ text-align:center; margin-top:30px; padding-top:20px; border-top:1px solid #eee; color:#7f8c8d; font-size:12px; }
 
-      /* Charts grid */
-      .charts-grid{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:16px;
-      }
-      .chart-card{
-        background:#fff; border:1px solid #eee; border-radius:5px; padding:10px;
-        display:flex; align-items:center; justify-content:center;
-      }
+      .charts-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+      .chart-card{ background:#fff; border:1px solid #eee; border-radius:5px; padding:10px; display:flex; align-items:center; justify-content:center; }
       .chart-card img{ width:100%; height:auto; }
       @media print { .charts-grid{ grid-template-columns:1fr 1fr; } }
     </style>
@@ -808,7 +833,6 @@ charts.excludedByTypeStacked = await chartToBase64({
         </div>
       </div>
 
-      <!-- Charts -->
       <div class="section">
         <h2 class="section-title">${t('Charts','رسوم بيانية')}</h2>
         <div class="charts-grid">
@@ -818,8 +842,6 @@ charts.excludedByTypeStacked = await chartToBase64({
           ${charts.adgByBreed ? `<div class="chart-card"><img src="data:image/png;base64,${charts.adgByBreed}" alt="adg by breed"/></div>` : ''}
         </div>
       </div>
-
-      <!-- (تم حذف قسم الاتجاه الأسبوعي بالكامل) -->
 
       <div class="section">
         <h2 class="section-title">${t('Per Shed', 'حسب الحظيرة')}</h2>
@@ -927,33 +949,45 @@ charts.excludedByTypeStacked = await chartToBase64({
   </html>`;
 
   const filePath = path.join(__dirname, `combined_report_${lang}.pdf`);
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox','--disable-setuid-sandbox'] // مهم على استضافات لينكس
-  });
-  const page = await browser.newPage();
-  
-  // مهم: نفس css اللي فيه @font-face Base64
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-  await page.emulateMediaType('screen');
-  
-  await page.pdf({
-    path: filePath,
-    format: 'A4',
-    printBackground: true, // ضروري للألوان والخلفيات
-    margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
-  });
-  
-  await browser.close();
-  
-  // نفس منطق الـdownload ثم unlink
-  res.download(filePath, `farm_report_${lang}.pdf`, (e) => {
-    if (e) console.error('Download error:', e);
-    fs.unlink(filePath, () => {});
-  });
-  
+
+  let browser;
+  try {
+    // استخدم Chrome اللي نزّله Puppeteer (يدعم Render/Heroku)
+    const executablePath = await puppeteer.executablePath();
+    browser = await puppeteer.launch({
+      headless: 'new',
+      executablePath,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.emulateMediaType('screen');
+
+    await page.pdf({
+      path: filePath,
+      format: 'A4',
+      printBackground: true,           // مهم للألوان والخلفيات
+      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
+    });
+
+    // Send & cleanup
+    res.download(filePath, `farm_report_${lang}.pdf`, (e) => {
+      if (e) console.error('Download error:', e);
+      fs.unlink(filePath, () => {});
+    });
+  } catch (err) {
+    console.error('PDF generation error:', err);
+    res.status(500).json({ status: 'error', message: 'Failed to generate PDF', data: null });
+    if (fs.existsSync(filePath)) fs.unlink(filePath, () => {});
+  } finally {
+    if (browser) await browser.close();
+  }
 });
 
+/* =========================
+ * Exports
+ * ========================= */
 module.exports = {
   generateCombinedReport,
   generateCombinedPDFReport
