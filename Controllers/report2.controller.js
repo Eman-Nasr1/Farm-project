@@ -61,49 +61,44 @@ async function chartToBase64(config) {
 const typeLabel = (key, isArabic) => {
   const map = {
     death: isArabic ? 'نفوق' : 'Death',
-    sweep: isArabic ? 'ذبح' : 'Sweep',
+    sweep: isArabic ? 'ذبح'  : 'Sweep',
     sale:  isArabic ? 'بيع'  : 'Sale'
   };
   return map[key] || key;
 };
 
-/* ====== Font embedding (VERY IMPORTANT) ====== */
+/* ====== Font embedding (Regular & Bold as two families) ====== */
 const FONTS_DIR = path.join(process.cwd(), 'assets', 'fonts');
 const FONT_REGULAR = path.join(FONTS_DIR, 'NotoNaskhArabic-Regular.ttf');
 const FONT_BOLD    = path.join(FONTS_DIR, 'NotoNaskhArabic-Bold.ttf');
 
 function fontToBase64Safe(p) {
-  try {
-    if (fs.existsSync(p)) return fs.readFileSync(p).toString('base64');
-  } catch (_) {}
+  try { if (fs.existsSync(p)) return fs.readFileSync(p).toString('base64'); }
+  catch (_) {}
   return null;
 }
 
-/** CSS snippets to embed NotoNaskhArabic if available */
+/** CSS to embed Noto Naskh */
 function notoCss() {
   const reg = fontToBase64Safe(FONT_REGULAR);
   const bold = fontToBase64Safe(FONT_BOLD);
 
   if (!reg || !bold) {
-    // fallback without crashing
-    return `
-      /* Fallback fonts (Noto not found) */
-      html, body { font-family: Tahoma, Arial, sans-serif; }
-    `;
+    return `html,body{font-family: Tahoma, Arial, sans-serif;}`;
   }
-
+  // مهم: نفصل العيلتين لتجنّب الـ synthetic bold في PhantomJS
   return `
-    @font-face {
-      font-family: 'NotoNaskhArabic';
-      src: url(data:font/truetype;base64,${reg}) format('truetype');
-      font-weight: 400; font-style: normal;
+    @font-face{
+      font-family:'NotoNaskhAR';
+      src:url(data:font/truetype;base64,${reg}) format('truetype');
+      font-weight:normal;font-style:normal;
     }
-    @font-face {
-      font-family: 'NotoNaskhArabic';
-      src: url(data:font/truetype;base64,${bold}) format('truetype');
-      font-weight: 700; font-style: normal;
+    @font-face{
+      font-family:'NotoNaskhAB';
+      src:url(data:font/truetype;base64,${bold}) format('truetype');
+      font-weight:normal;font-style:normal;
     }
-    html, body { font-family: 'NotoNaskhArabic', Tahoma, Arial, sans-serif; }
+    html,body{font-family:'NotoNaskhAR',Tahoma,Arial,sans-serif;}
   `;
 }
 
@@ -124,6 +119,13 @@ function parseYMDLocal(s) {
   return new Date(y, (m - 1), d);
 }
 
+/** isolate Latin text inside RTL to keep order */
+function wrapDir(str, isArabic) {
+  if (!str) return '—';
+  const hasLatin = /[A-Za-z]/.test(str);
+  return (isArabic && hasLatin) ? `<bdi dir="ltr">${str}</bdi>` : `${str}`;
+}
+
 /** ---------------------------
  *  SHARED REPORT DATA BUILDER
  *  --------------------------- */
@@ -132,7 +134,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   const user = await User.findById(userId).select('registerationType country');
   if (!user) throw new Error('USER_NOT_FOUND');
 
-  // ===== Helpers =====
+  // ----- inventory count up to a date (excluding removed) -----
   const inventoryCountAsOf = (asOfDate) => Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: asOfDate } } },
     {
@@ -140,17 +142,11 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
         from: 'excludeds',
         let: { aId: '$_id' },
         pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$animalId', '$$aId'] },
-                  { $in: ['$excludedType', ['death', 'sweep', 'sale']] },
-                  { $lte: ['$Date', asOfDate] }
-                ]
-              }
-            }
-          }
+          { $match: { $expr: { $and: [
+            { $eq: ['$animalId', '$$aId'] },
+            { $in: ['$excludedType', ['death','sweep','sale']] },
+            { $lte: ['$Date', asOfDate] }
+          ]}}}
         ],
         as: 'removed'
       }
@@ -195,14 +191,8 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $unwind: '$vaccineDetails' },
     { $lookup: { from: 'vaccinetypes', localField: 'vaccineDetails.vaccineType', foreignField: '_id', as: 'vType' } },
     { $unwind: { path: '$vType', preserveNullAndEmptyArrays: true } },
-    {
-      $addFields: {
-        vaccineName: {
-          $ifNull: [
-            '$vaccineDetails.otherVaccineName',
-            { $ifNull: [isArabic ? '$vType.arabicName' : '$vType.englishName', '—'] }
-          ]
-        },
+    { $addFields: {
+        vaccineName: { $ifNull: ['$vaccineDetails.otherVaccineName', { $ifNull: ['$vType.arabicName', { $ifNull: ['$vType.englishName', '—'] }] }] },
         dosePrice: { $ifNull: ['$vaccineDetails.pricing.dosePrice', 0] }
       }
     },
@@ -214,14 +204,8 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $match: { owner: userId } },
     { $lookup: { from: 'vaccinetypes', localField: 'vaccineType', foreignField: '_id', as: 'vType' } },
     { $unwind: { path: '$vType', preserveNullAndEmptyArrays: true } },
-    {
-      $addFields: {
-        vaccineName: {
-          $ifNull: [
-            '$otherVaccineName',
-            { $ifNull: [isArabic ? '$vType.arabicName' : '$vType.englishName', '—'] }
-          ]
-        }
+    { $addFields: {
+        vaccineName: { $ifNull: ['$otherVaccineName', { $ifNull: ['$vType.arabicName', { $ifNull: ['$vType.englishName', '—'] }] }] }
       }
     },
     { $project: { _id: 1, vaccineName: 1, stock: 1, pricing: 1 } }
@@ -234,17 +218,11 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
         from: 'excludeds',
         let: { aId: '$_id' },
         pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$animalId', '$$aId'] },
-                  { $in: ['$excludedType', ['death', 'sweep', 'sale']] },
-                  { $lte: ['$Date', toDate] }
-                ]
-              }
-            }
-          }
+          { $match: { $expr: { $and: [
+            { $eq: ['$animalId', '$$aId'] },
+            { $in: ['$excludedType', ['death','sweep','sale']] },
+            { $lte: ['$Date', toDate] }
+          ]}}}
         ],
         as: 'removed'
       }
@@ -255,54 +233,13 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   ]);
 
   const excludedReportAgg = Excluded.aggregate([
-    { $match: { owner: userId, excludedType: { $in: ['death', 'sweep', 'sale'] }, Date: { $gte: fromDate, $lte: toDate } } },
+    { $match: { owner: userId, excludedType: { $in: ['death','sweep','sale'] }, Date: { $gte: fromDate, $lte: toDate } } },
     { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
     { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
     { $match: { 'animal.animalType': animalType } },
     { $group: { _id: { excludedType: '$excludedType', animalType: '$animal.animalType', gender: '$animal.gender' }, count: { $sum: 1 }, value: { $sum: { $ifNull: ['$price', 0] } } } },
     { $project: { _id: 0, excludedType: '$_id.excludedType', animalType: '$_id.animalType', gender: '$_id.gender', count: 1, value: 1 } }
   ]);
-
-  // === الولادات/السونار/التلقيحات (لو نوع التسجيل تربية)
-  const breedingBlocks = user.registerationType === 'breeding' ? [
-    Mating.aggregate([
-      {
-        $match: {
-          owner: userId,
-          sonarRsult: 'positive',
-          matingDate: { $gte: fromDate, $lte: toDate },
-          expectedDeliveryDate: { $gt: new Date() }
-        }
-      },
-      { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
-      { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
-      { $match: { 'animal.animalType': animalType } },
-      { $count: 'positiveSonarCount' }
-    ]),
-    Mating.aggregate([
-      { $match: { owner: userId, matingDate: { $gte: fromDate, $lte: toDate } } },
-      { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
-      { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
-      { $match: { 'animal.animalType': animalType } },
-      { $count: 'totalMatings' }
-    ]),
-    Breeding.aggregate([
-      { $match: { owner: userId, createdAt: { $gte: fromDate, $lte: toDate } } },
-      { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
-      { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
-      { $match: { 'animal.animalType': animalType } },
-      { $unwind: '$birthEntries' },
-      { $match: { 'birthEntries.createdAt': { $gte: fromDate, $lte: toDate } } },
-      {
-        $group: {
-          _id: null,
-          totalBirthEntries: { $sum: 1 },
-          totalMales: { $sum: { $cond: [{ $regexMatch: { input: '$birthEntries.gender', regex: /^male$/i } }, 1, 0] } },
-          totalFemales: { $sum: { $cond: [{ $regexMatch: { input: '$birthEntries.gender', regex: /^female$/i } }, 1, 0] } }
-        }
-      }
-    ])
-  ] : [Promise.resolve([]), Promise.resolve([]), Promise.resolve([])];
 
   const feedByShedAgg = ShedEntry.aggregate([
     { $match: { owner: userId, date: { $gte: fromDate, $lte: toDate } } },
@@ -317,7 +254,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   ]);
 
   const excludedByShedAgg = Excluded.aggregate([
-    { $match: { owner: userId, Date: { $gte: fromDate, $lte: toDate }, excludedType: { $in: ['death', 'sweep', 'sale'] } } },
+    { $match: { owner: userId, Date: { $gte: fromDate, $lte: toDate }, excludedType: { $in: ['death','sweep','sale'] } } },
     { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
     { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
     { $group: { _id: { shed: '$animal.locationShed', excludedType: '$excludedType' }, count: { $sum: 1 } } },
@@ -327,6 +264,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $sort: { shedName: 1 } }
   ]);
 
+  // NOTE: نطلع الاسمين (عربي/إنجليزي) ونختار في الـ HTML حسب اللغة
   const animalsByBreedAgg = Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: toDate } } },
     {
@@ -334,17 +272,11 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
         from: 'excludeds',
         let: { aId: '$_id' },
         pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$animalId', '$$aId'] },
-                  { $in: ['$excludedType', ['death', 'sweep', 'sale']] },
-                  { $lte: ['$Date', toDate] }
-                ]
-              }
-            }
-          }
+          { $match: { $expr: { $and: [
+            { $eq: ['$animalId', '$$aId'] },
+            { $in: ['$excludedType', ['death','sweep','sale']] },
+            { $lte: ['$Date', toDate] }
+          ]}}}
         ],
         as: 'removed'
       }
@@ -353,33 +285,32 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: '$breed', count: { $sum: 1 } } },
     { $lookup: { from: 'breeds', localField: '_id', foreignField: '_id', as: 'breedObj' } },
     { $unwind: { path: '$breedObj', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, breedId: '$_id', breedName: '$breedObj.breedName', count: 1 } },
+    { $project: { _id: 0, breedId: '$_id', breedName: '$breedObj.breedName', breedNameAr: '$breedObj.breedNameAr', count: 1 } },
     { $sort: { count: -1 } }
   ]);
 
   const excludedByBreedAgg = Excluded.aggregate([
-    { $match: { owner: userId, Date: { $gte: fromDate, $lte: toDate }, excludedType: { $in: ['death', 'sweep', 'sale'] } } },
+    { $match: { owner: userId, Date: { $gte: fromDate, $lte: toDate }, excludedType: { $in: ['death','sweep','sale'] } } },
     { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
     { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
     { $match: { 'animal.animalType': animalType } },
     { $group: { _id: { breed: '$animal.breed', excludedType: '$excludedType' }, count: { $sum: 1 } } },
     { $lookup: { from: 'breeds', localField: '_id.breed', foreignField: '_id', as: 'breedObj' } },
     { $unwind: { path: '$breedObj', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, breedId: '$_id.breed', breedName: '$breedObj.breedName', excludedType: '$_id.excludedType', count: 1 } }
+    { $project: { _id: 0, breedId: '$_id.breed', breedName: '$breedObj.breedName', breedNameAr: '$breedObj.breedNameAr', excludedType: '$_id.excludedType', count: 1 } }
   ]);
 
   const adgByBreedAgg = Weight.aggregate([
     { $match: { owner: userId, Date: { $gte: fromDate, $lte: toDate } } },
     { $sort: { animalId: 1, Date: 1 } },
     { $group: { _id: '$animalId', firstDate: { $first: '$Date' }, firstWeight: { $first: '$weight' }, lastDate: { $last: '$Date' }, lastWeight: { $last: '$weight' } } },
-    {
-      $addFields: {
-        days: { $max: [1, { $ceil: { $divide: [{ $subtract: ['$lastDate', '$firstDate'] }, 1000 * 60 * 60 * 24] } }] },
+    { $addFields: {
+        days: { $max: [1, { $ceil: { $divide: [{ $subtract: ['$lastDate', '$firstDate'] }, 1000*60*60*24] } }] },
         gain: { $subtract: ['$lastWeight', '$firstWeight'] },
         adg: {
           $cond: [
             { $gt: [{ $subtract: ['$lastWeight', '$firstWeight'] }, 0] },
-            { $divide: [{ $subtract: ['$lastWeight', '$firstWeight'] }, { $max: [1, { $ceil: { $divide: [{ $subtract: ['$lastDate', '$firstDate'] }, 1000 * 60 * 60 * 24] } }] }] },
+            { $divide: [{ $subtract: ['$lastWeight', '$firstWeight'] }, { $max: [1, { $ceil: { $divide: [{ $subtract: ['$lastDate', '$firstDate'] }, 1000*60*60*24] } }] }] },
             0
           ]
         }
@@ -391,7 +322,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: '$animal.breed', avgADG: { $avg: '$adg' }, totalGain: { $sum: '$gain' }, animals: { $sum: 1 } } },
     { $lookup: { from: 'breeds', localField: '_id', foreignField: '_id', as: 'breedObj' } },
     { $unwind: { path: '$breedObj', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, breedId: '$_id', breedName: '$breedObj.breedName', avgADG: 1, totalGain: 1, animals: 1 } },
+    { $project: { _id: 0, breedId: '$_id', breedName: '$breedObj.breedName', breedNameAr: '$breedObj.breedNameAr', avgADG: 1, totalGain: 1, animals: 1 } },
     { $sort: { avgADG: -1 } }
   ]);
 
@@ -432,7 +363,32 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   ] = await Promise.all([
     feedConsumptionAgg, remainingFeedStockAgg, treatmentConsumptionAgg, remainingTreatmentStockAgg,
     vaccineConsumptionAgg, remainingVaccineStockAgg, animalReportAgg, excludedReportAgg,
-    ...breedingBlocks,
+    ...(user.registerationType === 'breeding' ? [] : []),
+    Mating.aggregate([
+      { $match: { owner: userId, sonarRsult: 'positive', matingDate: { $gte: fromDate, $lte: toDate }, expectedDeliveryDate: { $gt: new Date() } } },
+      { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
+      { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
+      { $match: { 'animal.animalType': animalType } },
+      { $count: 'positiveSonarCount' }
+    ]),
+    Mating.aggregate([
+      { $match: { owner: userId, matingDate: { $gte: fromDate, $lte: toDate } } },
+      { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
+      { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
+      { $match: { 'animal.animalType': animalType } },
+      { $count: 'totalMatings' }
+    ]),
+    Breeding.aggregate([
+      { $match: { owner: userId, createdAt: { $gte: fromDate, $lte: toDate } } },
+      { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
+      { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
+      { $match: { 'animal.animalType': animalType } },
+      { $unwind: '$birthEntries' },
+      { $match: { 'birthEntries.createdAt': { $gte: fromDate, $lte: toDate } } },
+      { $group: { _id: null, totalBirthEntries: { $sum: 1 },
+        totalMales: { $sum: { $cond: [{ $regexMatch: { input: '$birthEntries.gender', regex: /^male$/i } }, 1, 0] } },
+        totalFemales: { $sum: { $cond: [{ $regexMatch: { input: '$birthEntries.gender', regex: /^female$/i } }, 1, 0] } } } }
+    ]),
     feedByShedAgg, excludedByShedAgg,
     animalsByBreedAgg, excludedByBreedAgg, adgByBreedAgg,
     purchaseOrMarketCostAgg, animalsAtEndCount, animalsAtStartCount,
@@ -471,7 +427,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
   const totalFeedConsumed = safeNum(feedConsumption.reduce((s, f) => s + safeNum(f.totalConsumed), 0));
   const fcrOverall = totalWeightGain > 0 ? (totalFeedConsumed / totalWeightGain) : null;
 
-  // Days of Inventory
   const nDays = daysBetween(fromDate, toDate);
   const feedDailyUse = totalFeedConsumed / nDays;
   const treatmentDailyUse = (treatmentConsumption.reduce((s, t) => s + safeNum(t.totalConsumed), 0)) / nDays;
@@ -585,7 +540,7 @@ const generateCombinedReport = asyncwrapper(async (req, res) => {
 });
 
 /** ---------------------------
- *  PDF ROUTE (with embedded font)
+ *  PDF ROUTE (with embedded fonts & RTL fixes)
  *  --------------------------- */
 const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -619,10 +574,11 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   const femaleCount = data.animalReport?.find(r => r.gender === 'female')?.count || 0;
   const pregnantCount = data.pregnantAnimal || 0;
 
+  // ===== CHARTS =====
   let charts = {};
   try {
-    const maleCountChart   = data.animalReport?.find(r => r.gender === 'male')?.count   || 0;
-    const femaleCountChart = data.animalReport?.find(r => r.gender === 'female')?.count || 0;
+    const maleCountChart   = maleCount;
+    const femaleCountChart = femaleCount;
 
     const topFeedsByCost = [...(data.feedConsumption || [])]
       .sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
@@ -658,13 +614,9 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
       type: 'bar',
       data: {
         labels: topFeedsByCost.map(f => f.feedName || '—'),
-        datasets: [{
-          label: t('Cost','التكلفة'),
-          data: topFeedsByCost.map(f => f.totalCost || 0),
+        datasets: [{ label: t('Cost','التكلفة'), data: topFeedsByCost.map(f => f.totalCost || 0),
           backgroundColor: categorical10.slice(0, topFeedsByCost.length).map(c => hexToRgba(c, 0.85)),
-          borderColor: categorical10.slice(0, topFeedsByCost.length),
-          borderWidth: 1, borderRadius: 6
-        }]
+          borderColor: categorical10.slice(0, topFeedsByCost.length), borderWidth: 1, borderRadius: 6 }]
       },
       options: {
         responsive: false,
@@ -675,8 +627,7 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
 
     charts.excludedByTypeStacked = await chartToBase64({
       type: 'bar',
-      data: {
-        labels: exTypesLabels,
+      data: { labels: exTypesLabels,
         datasets: [
           { label: t('Males','ذكور'),   data: exMale,   stack: 'gender', backgroundColor: genderColors.male,   borderWidth: 0 },
           { label: t('Females','إناث'), data: exFemale, stack: 'gender', backgroundColor: genderColors.female, borderWidth: 0 }
@@ -693,8 +644,10 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
     charts.adgByBreed = await chartToBase64({
       type: 'bar',
       data: {
-        labels: (data.perBreed?.adg || []).slice(0,8).map(b => b.breedName || '—'),
-        datasets: [{ label: t('Avg ADG','متوسط الزيادة اليومية'), data: (data.perBreed?.adg || []).slice(0,8).map(b => b.avgADG || 0), backgroundColor: hexToRgba(brand.accent, 0.85), borderColor: brand.accent, borderWidth: 1, borderRadius: 6 }]
+        labels: adgTopBreeds.map(b => (isArabic ? (b.breedNameAr || b.breedName) : b.breedName) || '—'),
+        datasets: [{ label: t('Avg ADG','متوسط الزيادة اليومية'),
+          data: adgTopBreeds.map(b => b.avgADG || 0),
+          backgroundColor: hexToRgba(brand.accent, 0.85), borderColor: brand.accent, borderWidth: 1, borderRadius: 6 }]
       },
       options: {
         responsive: false,
@@ -711,24 +664,70 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   const css = `
     <style>
       ${notoCss()}
-      body { margin: 20px; font-size: 14px; color: #333; direction:${isArabic ? 'rtl' : 'ltr'}; text-align:${isArabic ? 'right' : 'left'}; }
-      .report-title{ text-align:center; font-size:24px; margin-bottom:20px; font-weight:bold; color:#2c3e50; padding:10px; border-bottom:2px solid #46AE65; }
+      html, body {
+        margin: 20px; font-size: 14px; color: #333;
+        direction:${isArabic ? 'rtl' : 'ltr'}; text-align:${isArabic ? 'right' : 'left'};
+        -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+      }
+
+      .report-title{
+        text-align:center;font-size:24px;margin-bottom:20px;
+        color:#2c3e50;padding:10px;border-bottom:2px solid #46AE65;
+        font-family:'NotoNaskhAB','NotoNaskhAR',Tahoma,Arial,sans-serif; font-weight:normal;
+      }
       .report-subtitle{ text-align:center; font-size:16px; color:#7f8c8d; margin-bottom:30px; }
-      .section{ margin-bottom:30px; background:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
-      .section-title{ color:#2c3e50; font-size:18px; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #eee; }
-      .table{ width:100%; border-collapse:collapse; margin-bottom:20px; table-layout:fixed; }
-      .table th, .table td{ padding:12px; border:1px solid #ddd; vertical-align:middle; white-space:nowrap; word-wrap:break-word; }
-      .table thead th{ background:#14532d; color:#fff; font-weight:bold; font-size:15px; }
+
+      .section{ margin-bottom:30px;background:#fff;padding:20px;border-radius:5px;
+        box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+
+      .section-title{
+        color:#2c3e50;font-size:18px;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid #eee;
+        font-family:'NotoNaskhAB','NotoNaskhAR',Tahoma,Arial,sans-serif; font-weight:normal;
+      }
+
+      /* ====== TABLES (Fix header overlap) ====== */
+      .table{
+        width:100%;
+        border-collapse:separate;  /* مهم */
+        border-spacing:0;
+        table-layout:fixed;        /* ثبات الأعمدة */
+        margin-bottom:20px;
+      }
+      .table th, .table td{
+        border:1px solid #ddd;
+        padding:10px 12px;
+        vertical-align:middle;
+        white-space:normal;        /* بدلاً من nowrap */
+        line-height:1.7;           /* الأهم لمنع التداخل */
+        letter-spacing:0;
+        word-wrap:break-word;
+        overflow-wrap:anywhere;
+        text-align:center;
+      }
+      .table thead th{
+        background:#14532d;color:#fff;font-size:15px;
+        font-family:'NotoNaskhAB','NotoNaskhAR',Tahoma,Arial,sans-serif; /* bold family */
+        font-weight:normal; /* لا تستخدم bold الصناعي */
+      }
+      .table tbody td{ font-family:'NotoNaskhAR',Tahoma,Arial,sans-serif; }
+
       .rtl .table th, .rtl .table td { text-align:center; }
-      .num { direction:ltr; text-align:center; }
+
+      /* أرقام */
+      .num{ direction:ltr; text-align:center; unicode-bidi:plaintext; white-space:nowrap; }
+      bdi{ unicode-bidi:isolate; }
+
       .stats-container{ display:flex; flex-wrap:wrap; gap:12px; }
       .stat-box{ background:#f8f9fa; padding:15px; border-radius:5px; text-align:center; flex:1; min-width:180px; border:1px solid #dee2e6; }
-      .stat-number{ font-size:22px; font-weight:bold; color:#21763e; margin:6px 0; }
+      .stat-number{ font-size:22px; margin:6px 0; color:#21763e; font-family:'NotoNaskhAB','NotoNaskhAR',Tahoma,Arial,sans-serif; }
       .stat-label{ color:#666; font-size:13px; }
-      .footer{ text-align:center; margin-top:30px; padding-top:20px; border-top:1px solid #eee; color:#7f8c8d; font-size:12px; }
+
       .charts-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
       .chart-card{ background:#fff; border:1px solid #eee; border-radius:5px; padding:10px; display:flex; align-items:center; justify-content:center; }
       .chart-card img{ width:100%; height:auto; }
+
+      .footer{ text-align:center; margin-top:30px; padding-top:20px; border-top:1px solid #eee; color:#7f8c8d; font-size:12px; }
+
       @page { size: A4; margin: 20mm; }
     </style>
   `;
@@ -790,13 +789,26 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
         <table class="table">
           <colgroup><col style="width:45%"><col style="width:27.5%"><col style="width:27.5%"></colgroup>
           <thead><tr><th>${t('Shed', 'الحظيرة')}</th><th>${t('Consumed', 'الاستهلاك')}</th><th>${t('Cost', 'التكلفة')}</th></tr></thead>
-          <tbody>${(data.perShed?.feed || []).map(s => `<tr><td>${s.shedName || '—'}</td><td class="num">${num(s.totalConsumed, 2)}</td><td class="num">${num(s.totalCost, 2)}</td></tr>`).join('')}</tbody>
+          <tbody>${(data.perShed?.feed || []).map(s => `
+            <tr>
+              <td>${wrapDir(s.shedName || '—', isArabic)}</td>
+              <td class="num">${num(s.totalConsumed, 2)}</td>
+              <td class="num">${num(s.totalCost, 2)}</td>
+            </tr>`).join('')}
+          </tbody>
         </table>
+
         <h3>${t('Mortality/Excluded', 'النفوق/الاستبعاد')}</h3>
         <table class="table">
           <colgroup><col style="width:45%"><col style="width:27.5%"><col style="width:27.5%"></colgroup>
           <thead><tr><th>${t('Shed', 'الحظيرة')}</th><th>${t('Reason', 'السبب')}</th><th>${t('Count', 'العدد')}</th></tr></thead>
-          <tbody>${(data.perShed?.excluded || []).map(s => `<tr><td>${s.shedName || '—'}</td><td>${s.excludedType}</td><td class="num">${s.count}</td></tr>`).join('')}</tbody>
+          <tbody>${(data.perShed?.excluded || []).map(s => `
+            <tr>
+              <td>${wrapDir(s.shedName || '—', isArabic)}</td>
+              <td>${typeLabel(s.excludedType, isArabic)}</td>
+              <td class="num">${s.count}</td>
+            </tr>`).join('')}
+          </tbody>
         </table>
       </div>
 
@@ -806,19 +818,30 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
         <table class="table">
           <colgroup><col style="width:60%"><col style="width:40%"></colgroup>
           <thead><tr><th>${t('Breed', 'السلالة')}</th><th>${t('Count', 'العدد')}</th></tr></thead>
-          <tbody>${(data.perBreed?.animals || []).map(b => `<tr><td>${b.breedName || '—'}</td><td class="num">${b.count || 0}</td></tr>`).join('')}</tbody>
+          <tbody>${(data.perBreed?.animals || []).map(b => {
+            const name = isArabic ? (b.breedNameAr || b.breedName) : b.breedName;
+            return `<tr><td>${wrapDir(name || '—', isArabic)}</td><td class="num">${b.count || 0}</td></tr>`;
+          }).join('')}</tbody>
         </table>
+
         <h3>${t('Excluded', 'الاستبعاد')}</h3>
         <table class="table">
           <colgroup><col style="width:40%"><col style="width:40%"><col style="width:20%"></colgroup>
           <thead><tr><th>${t('Breed', 'السلالة')}</th><th>${t('Reason', 'السبب')}</th><th>${t('Count', 'العدد')}</th></tr></thead>
-          <tbody>${(data.perBreed?.excluded || []).map(b => `<tr><td>${b.breedName || '—'}</td><td>${b.excludedType}</td><td class="num">${b.count}</td></tr>`).join('')}</tbody>
+          <tbody>${(data.perBreed?.excluded || []).map(b => {
+            const name = isArabic ? (b.breedNameAr || b.breedName) : b.breedName;
+            return `<tr><td>${wrapDir(name || '—', isArabic)}</td><td>${typeLabel(b.excludedType, isArabic)}</td><td class="num">${b.count}</td></tr>`;
+          }).join('')}</tbody>
         </table>
-        <h3>ADG</h3>
+
+        <h3>${t('ADG','الزيادة اليومية')}</h3>
         <table class="table">
           <colgroup><col style="width:40%"><col style="width:20%"><col style="width:20%"><col style="width:20%"></colgroup>
           <thead><tr><th>${t('Breed', 'السلالة')}</th><th>${t('Avg ADG', 'متوسط الزيادة اليومية')}</th><th>${t('Total Gain', 'إجمالي الزيادة')}</th><th>${t('Animals', 'عدد الحيوانات')}</th></tr></thead>
-          <tbody>${(data.perBreed?.adg || []).map(b => `<tr><td>${b.breedName || '—'}</td><td class="num">${num(b.avgADG, 2)}</td><td class="num">${num(b.totalGain, 2)}</td><td class="num">${b.animals || 0}</td></tr>`).join('')}</tbody>
+          <tbody>${(data.perBreed?.adg || []).map(b => {
+            const name = isArabic ? (b.breedNameAr || b.breedName) : b.breedName;
+            return `<tr><td>${wrapDir(name || '—', isArabic)}</td><td class="num">${num(b.avgADG, 2)}</td><td class="num">${num(b.totalGain, 2)}</td><td class="num">${b.animals || 0}</td></tr>`;
+          }).join('')}</tbody>
         </table>
       </div>
 
@@ -831,7 +854,7 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
           <tbody>
             ${(data.coverageDays?.feed || []).map(r => `
               <tr>
-                <td>${r.feedName ?? '—'}</td>
+                <td>${wrapDir(r.feedName ?? '—', isArabic)}</td>
                 <td class="num">${r.quantity != null ? Number(r.quantity).toFixed(2) : '—'}</td>
                 <td class="num">${r.dailyUse != null ? Number(r.dailyUse).toFixed(2) : '—'}</td>
                 <td class="num">${r.daysCover != null ? Number(r.daysCover).toFixed(1) : '—'}</td>
@@ -848,7 +871,7 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
           <tbody>
             ${(data.coverageDays?.treatment || []).map(r => `
               <tr>
-                <td>${r.treatmentName ?? '—'}</td>
+                <td>${wrapDir(r.treatmentName ?? '—', isArabic)}</td>
                 <td class="num">${r.quantity != null ? Number(r.quantity).toFixed(2) : '—'}</td>
                 <td class="num">${r.dailyUse != null ? Number(r.dailyUse).toFixed(2) : '—'}</td>
                 <td class="num">${r.daysCover != null ? Number(r.daysCover).toFixed(1) : '—'}</td>
@@ -865,7 +888,7 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
           <tbody>
             ${(data.coverageDays?.vaccine || []).map(r => `
               <tr>
-                <td>${r.vaccineName ?? '—'}</td>
+                <td>${wrapDir(r.vaccineName ?? '—', isArabic)}</td>
                 <td class="num">${r.totalDoses != null ? Number(r.totalDoses).toFixed(0) : '—'}</td>
                 <td class="num">${r.dailyUse != null ? Number(r.dailyUse).toFixed(2) : '—'}</td>
                 <td class="num">${r.daysCover != null ? Number(r.daysCover).toFixed(1) : '—'}</td>
@@ -883,7 +906,6 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
     </body>
   </html>`;
 
-  // html-pdf options tuned for PhantomJS
   const options = {
     format: 'A4',
     orientation: 'portrait',
