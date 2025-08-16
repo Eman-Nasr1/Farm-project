@@ -15,7 +15,7 @@ const mongoose = require('mongoose');
 const PDFDocument = require('pdfkit');  
 const fs = require('fs');  
 const path = require('path');  
-const pdf = require('html-pdf');
+const puppeteer = require('puppeteer');
 
 
 const generatePDF = (data) => {

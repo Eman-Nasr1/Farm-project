@@ -2,7 +2,8 @@
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
-const pdf = require('html-pdf');
+const puppeteer = require('puppeteer');
+
 
 const Animal = require('../Models/animal.model');
 const Excluded = require('../Models/excluded.model');
@@ -926,15 +927,31 @@ charts.excludedByTypeStacked = await chartToBase64({
   </html>`;
 
   const filePath = path.join(__dirname, `combined_report_${lang}.pdf`);
-  const options = { format: 'A4', orientation: 'portrait', border: { top: '20px', right: '20px', bottom: '20px', left: '20px' } };
-
-  pdf.create(html, options).toFile(filePath, (err) => {
-    if (err) return res.status(500).json({ status: 'error', message: 'Failed to generate PDF' });
-    res.download(filePath, `farm_report_${lang}.pdf`, (e) => {
-      if (e) console.error('Download error:', e);
-      fs.unlink(filePath, () => { });
-    });
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox','--disable-setuid-sandbox'] // مهم على استضافات لينكس
   });
+  const page = await browser.newPage();
+  
+  // مهم: نفس css اللي فيه @font-face Base64
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  await page.emulateMediaType('screen');
+  
+  await page.pdf({
+    path: filePath,
+    format: 'A4',
+    printBackground: true, // ضروري للألوان والخلفيات
+    margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
+  });
+  
+  await browser.close();
+  
+  // نفس منطق الـdownload ثم unlink
+  res.download(filePath, `farm_report_${lang}.pdf`, (e) => {
+    if (e) console.error('Download error:', e);
+    fs.unlink(filePath, () => {});
+  });
+  
 });
 
 module.exports = {
