@@ -777,7 +777,12 @@ charts.excludedByTypeStacked = await chartToBase64({
           <div class="stat-box"><div class="stat-number"><span class="num">${num(data.extraKpis?.revenue)}</span></div><div class="stat-label">${t('Sales Revenue', 'إيراد المبيعات')}</div></div>
           <div class="stat-box"><div class="stat-number"><span class="num">${num(data.extraKpis?.profit)}</span></div><div class="stat-label">${t('Net Profit', 'صافي الربح')}</div></div>
           <div class="stat-box"><div class="stat-number"><span class="num">${num(data.extraKpis?.profitPerAnimal)}</span></div><div class="stat-label">${t('Profit / Animal', 'الربح/حيوان')}</div></div>
-          <div class="stat-box"><div class="stat-number"><span class="num">${num(data.extraKpis?.fertilityRate, 2)}%</span></div><div class="stat-label">${t('Fertility Rate', 'معدل الخصوبة')}</div></div>
+          ${meta.registrationType === 'breeding' ? `
+            <div class="stat-box">
+              <div class="stat-number"><span class="num">${num(data.extraKpis?.fertilityRate, 2)}%</span></div>
+              <div class="stat-label">${t('Fertility Rate', 'معدل الخصوبة')}</div>
+            </div>
+          ` : '' }
         </div>
       </div>
 
