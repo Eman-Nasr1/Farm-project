@@ -23,37 +23,32 @@ const asyncwrapper = require('../middleware/asyncwrapper');
 const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
 const { Chart, registerables } = require('chart.js');
 Chart.register(...registerables);
+
 // ===== THEME & COLORS =====
 const brand = {
-    base:  '#14532d',              // أخضر داكن
-    accent:'#46AE65',              // أخضر فاتح
-    text:  '#1f2937',              // رمادي غامق للنصوص
-    grid:  'rgba(107,114,128,0.20)'// لون خطوط الشبكة
-  };
-  
-  const categorical10 = [
-    '#14532d','#0ea5e9','#f59e0b','#ef4444','#8b5cf6',
-    '#10b981','#f97316','#22c55e','#14b8a6','#a855f7'
-  ];
-  
-  const genderColors = {
-    male:   'rgba(14,165,233,0.85)',   // أزرق
-    female: 'rgba(244,114,182,0.85)'   // وردي
-  };
-  
-  // Helper: Hex -> rgba
-  function hexToRgba(hex, alpha = 1) {
-    const h = hex.replace('#','');
-    const bigint = parseInt(h.length === 3 ? h.split('').map(x=>x+x).join('') : h, 16);
-    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
-    return `rgba(${r},${g},${b},${alpha})`;
-  }
-  
-  // (اختياري) طبّق لون نص عام على الرسوم
-  Chart.defaults.color = brand.text;
-  
+  base:  '#14532d',
+  accent:'#46AE65',
+  text:  '#1f2937',
+  grid:  'rgba(107,114,128,0.20)'
+};
+const categorical10 = [
+  '#14532d','#0ea5e9','#f59e0b','#ef4444','#8b5cf6',
+  '#10b981','#f97316','#22c55e','#14b8a6','#a855f7'
+];
+const genderColors = {
+  male:   'rgba(14,165,233,0.85)',
+  female: 'rgba(244,114,182,0.85)'
+};
+function hexToRgba(hex, alpha = 1) {
+  const h = hex.replace('#','');
+  const bigint = parseInt(h.length === 3 ? h.split('').map(x=>x+x).join('') : h, 16);
+  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+Chart.defaults.color = brand.text;
+
 const chartRenderer = new ChartJSNodeCanvas({
-  width: 900,            // مناسب لـ A4
+  width: 900,
   height: 450,
   backgroundColour: 'white'
 });
@@ -66,17 +61,57 @@ async function chartToBase64(config) {
 const typeLabel = (key, isArabic) => {
   const map = {
     death: isArabic ? 'نفوق' : 'Death',
-    sweep: isArabic ? 'زبح' : 'Sweep',
+    sweep: isArabic ? 'ذبح' : 'Sweep',
     sale:  isArabic ? 'بيع'  : 'Sale'
   };
   return map[key] || key;
 };
+
+/* ====== Font embedding (VERY IMPORTANT) ====== */
+const FONTS_DIR = path.join(process.cwd(), 'assets', 'fonts');
+const FONT_REGULAR = path.join(FONTS_DIR, 'NotoNaskhArabic-Regular.ttf');
+const FONT_BOLD    = path.join(FONTS_DIR, 'NotoNaskhArabic-Bold.ttf');
+
+function fontToBase64Safe(p) {
+  try {
+    if (fs.existsSync(p)) return fs.readFileSync(p).toString('base64');
+  } catch (_) {}
+  return null;
+}
+
+/** CSS snippets to embed NotoNaskhArabic if available */
+function notoCss() {
+  const reg = fontToBase64Safe(FONT_REGULAR);
+  const bold = fontToBase64Safe(FONT_BOLD);
+
+  if (!reg || !bold) {
+    // fallback without crashing
+    return `
+      /* Fallback fonts (Noto not found) */
+      html, body { font-family: Tahoma, Arial, sans-serif; }
+    `;
+  }
+
+  return `
+    @font-face {
+      font-family: 'NotoNaskhArabic';
+      src: url(data:font/truetype;base64,${reg}) format('truetype');
+      font-weight: 400; font-style: normal;
+    }
+    @font-face {
+      font-family: 'NotoNaskhArabic';
+      src: url(data:font/truetype;base64,${bold}) format('truetype');
+      font-weight: 700; font-style: normal;
+    }
+    html, body { font-family: 'NotoNaskhArabic', Tahoma, Arial, sans-serif; }
+  `;
+}
+
 /* =========================== */
 
 const safeNum = v => (typeof v === 'number' && !Number.isNaN(v)) ? v : 0;
 const daysBetween = (fromDate, toDate) => Math.max(1, Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)));
 
-// اعرض التاريخ بالمنطقة المحلية (YYYY-MM-DD)
 const fmtDate = (d) => {
   const dt = new Date(d);
   const y = dt.getFullYear();
@@ -86,21 +121,18 @@ const fmtDate = (d) => {
 };
 function parseYMDLocal(s) {
   const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, (m - 1), d); // تاريخ محلي
+  return new Date(y, (m - 1), d);
 }
 
 /** ---------------------------
  *  SHARED REPORT DATA BUILDER
- *  ---------------------------
- *  Returns { data, meta }
- */
+ *  --------------------------- */
 async function buildCombinedReportData({ userId, animalType, fromDate, toDate, lang = 'en' }) {
   const isArabic = (lang === 'ar');
   const user = await User.findById(userId).select('registerationType country');
   if (!user) throw new Error('USER_NOT_FOUND');
 
   // ===== Helpers =====
-  // صافـي المخزون كعدّاد حتى تاريخ معيّن (مع استبعاد البيع/النفوق/السويب حتى asOfDate)
   const inventoryCountAsOf = (asOfDate) => Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: asOfDate } } },
     {
@@ -127,7 +159,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $count: 'n' }
   ]);
 
-  // ===== Aggregations (بدون اتجاه أسبوعي) =====
+  // ===== Aggregations =====
   const feedConsumptionAgg = ShedEntry.aggregate([
     { $match: { owner: userId, date: { $gte: fromDate, $lte: toDate } } },
     { $unwind: '$feeds' },
@@ -195,7 +227,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $project: { _id: 1, vaccineName: 1, stock: 1, pricing: 1 } }
   ]);
 
-  // === مخزون حالي بحسب الجنس حتى toDate (مع الاستبعاد) ===
   const animalReportAgg = Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: toDate } } },
     {
@@ -232,7 +263,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $project: { _id: 0, excludedType: '$_id.excludedType', animalType: '$_id.animalType', gender: '$_id.gender', count: 1, value: 1 } }
   ]);
 
-  // === الولادات/السونار/التلقيحات ===
+  // === الولادات/السونار/التلقيحات (لو نوع التسجيل تربية)
   const breedingBlocks = user.registerationType === 'breeding' ? [
     Mating.aggregate([
       {
@@ -296,7 +327,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $sort: { shedName: 1 } }
   ]);
 
-  // === مخزون حالي حسب السلالة حتى toDate (مع الاستبعاد) ===
   const animalsByBreedAgg = Animal.aggregate([
     { $match: { owner: userId, animalType, createdAt: { $lte: toDate } } },
     {
@@ -371,7 +401,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: null, totalPurchaseOrMarket: { $sum: '$effectiveCost' } } }
   ]);
 
-  // صافـي المخزون في البداية/النهاية
   const animalsAtEndCount = inventoryCountAsOf(toDate);
   const animalsAtStartCount = inventoryCountAsOf(fromDate);
 
@@ -391,7 +420,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     { $group: { _id: null, revenue: { $sum: { $ifNull: ['$price', 0] } } } }
   ]);
 
-  // === Execute ===
   const [
     feedConsumption, remainingFeedStock, treatmentConsumption, remainingTreatmentStock,
     vaccineConsumption, remainingVaccineStock, animalReport, excludedReport,
@@ -465,7 +493,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     return { vaccineName: s.vaccineName, totalDoses, dailyUse: vaccineDailyUse, daysCover, warn: daysCover !== null && daysCover < 10 };
   });
 
-  // Breeding summaries
   const birthEntriesData = user.registerationType === 'breeding'
     ? (birthEntriesReport[0] || { totalBirthEntries: 0, totalMales: 0, totalFemales: 0 })
     : { totalBirthEntries: 0, totalMales: 0, totalFemales: 0 };
@@ -478,7 +505,6 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     ? safeNum(totalMatingsArr[0]?.totalMatings)
     : 0;
 
-  // Fertility vs Conception
   const femaleCountPeriod = safeNum((animalReport || []).find(r => r.gender === 'female')?.count);
   const fertilityRate = totalMatings > 0
     ? (pregnantSonar / totalMatings) * 100
@@ -545,7 +571,6 @@ const generateCombinedReport = asyncwrapper(async (req, res) => {
   if (isNaN(fromDate) || isNaN(toDate)) {
     return res.status(400).json({ status: 'error', message: 'Invalid date format' });
   }
-  // لو المستخدم بعتهم بالعكس، نقلبهم بدلاً من رفض الطلب
   if (fromDate > toDate) [fromDate, toDate] = [toDate, fromDate];
 
   fromDate.setHours(0, 0, 0, 0);
@@ -560,7 +585,7 @@ const generateCombinedReport = asyncwrapper(async (req, res) => {
 });
 
 /** ---------------------------
- *  PDF ROUTE  (بدون قسم الاتجاه الأسبوعي)
+ *  PDF ROUTE (with embedded font)
  *  --------------------------- */
 const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -589,13 +614,11 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   const t = (en, ar) => (isArabic ? ar : en);
   const num = (v, d = 2) => (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
 
-  // Counts for cards
   const totalAnimalsPdf = data.animalReport?.reduce((sum, r) => sum + (r.count || 0), 0) || 0;
   const maleCount = data.animalReport?.find(r => r.gender === 'male')?.count || 0;
   const femaleCount = data.animalReport?.find(r => r.gender === 'female')?.count || 0;
   const pregnantCount = data.pregnantAnimal || 0;
 
-  // ===== CHARTS: prep & render (Base64) =====
   let charts = {};
   try {
     const maleCountChart   = data.animalReport?.find(r => r.gender === 'male')?.count   || 0;
@@ -622,101 +645,64 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
       .sort((a, b) => (b.avgADG || 0) - (a.avgADG || 0))
       .slice(0, 8);
 
-      charts.animalsByGender = await chartToBase64({
-        type: 'doughnut',
-        data: {
-          labels: [t('Males','ذكور'), t('Females','إناث')],
-          datasets: [{
-            data: [maleCountChart, femaleCountChart],
-            backgroundColor: [genderColors.male, genderColors.female],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: false,
-          plugins: {
-            title: { display: true, text: t('Animals by Gender','توزيع الحيوانات حسب الجنس'), color: brand.text },
-            legend: { position: 'bottom', labels: { color: brand.text } }
-          }
-        }
-      });
-      
-
- charts.feedCostTop = await chartToBase64({
-  type: 'bar',
-  data: {
-    labels: topFeedsByCost.map(f => f.feedName || '—'),
-    datasets: [{
-      label: t('Cost','التكلفة'),
-      data: topFeedsByCost.map(f => f.totalCost || 0),
-      backgroundColor: categorical10.slice(0, topFeedsByCost.length).map(c => hexToRgba(c, 0.85)),
-      borderColor: categorical10.slice(0, topFeedsByCost.length),
-      borderWidth: 1,
-      borderRadius: 6
-    }]
-  },
-  options: {
-    responsive: false,
-    plugins: {
-      title: { display: true, text: t('Top Feeds by Cost','أكثر الأعلاف تكلفة'), color: brand.text },
-      legend: { display: false }
-    },
-    scales: {
-      x: { ticks: { color: brand.text }, grid: { color: brand.grid } },
-      y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
-    }
-  }
-});
-
-
-charts.excludedByTypeStacked = await chartToBase64({
-    type: 'bar',
-    data: {
-      labels: exTypesLabels,
-      datasets: [
-        { label: t('Males','ذكور'),   data: exMale,   stack: 'gender', backgroundColor: genderColors.male,   borderWidth: 0 },
-        { label: t('Females','إناث'), data: exFemale, stack: 'gender', backgroundColor: genderColors.female, borderWidth: 0 }
-      ]
-    },
-    options: {
-      responsive: false,
-      plugins: {
-        title: { display: true, text: t('Excluded by Type (Stacked)','الاستبعاد حسب النوع '), color: brand.text },
-        legend: { labels: { color: brand.text } }
+    charts.animalsByGender = await chartToBase64({
+      type: 'doughnut',
+      data: {
+        labels: [t('Males','ذكور'), t('Females','إناث')],
+        datasets: [{ data: [maleCountChart, femaleCountChart], backgroundColor: [genderColors.male, genderColors.female], borderWidth: 0 }]
       },
-      scales: {
-        x: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid } },
-        y: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
-      }
-    }
-  });
-  
-  charts.adgByBreed = await chartToBase64({
-    type: 'bar',
-    data: {
-      labels: adgTopBreeds.map(b => b.breedName || '—'),
-      datasets: [{
-        label: t('Avg ADG','متوسط الزيادة اليومية'),
-        data: adgTopBreeds.map(b => b.avgADG || 0),
-        backgroundColor: hexToRgba(brand.accent, 0.85),
-        borderColor: brand.accent,
-        borderWidth: 1,
-        borderRadius: 6
-      }]
-    },
-    options: {
-      responsive: false,
-      plugins: {
-        title: { display: true, text: t('Avg ADG by Breed','متوسط الزيادة اليومية حسب السلالة'), color: brand.text },
-        legend: { display: false }
+      options: { responsive: false, plugins: { title: { display: true, text: t('Animals by Gender','توزيع الحيوانات حسب الجنس'), color: brand.text }, legend: { position: 'bottom', labels: { color: brand.text } } } }
+    });
+
+    charts.feedCostTop = await chartToBase64({
+      type: 'bar',
+      data: {
+        labels: topFeedsByCost.map(f => f.feedName || '—'),
+        datasets: [{
+          label: t('Cost','التكلفة'),
+          data: topFeedsByCost.map(f => f.totalCost || 0),
+          backgroundColor: categorical10.slice(0, topFeedsByCost.length).map(c => hexToRgba(c, 0.85)),
+          borderColor: categorical10.slice(0, topFeedsByCost.length),
+          borderWidth: 1, borderRadius: 6
+        }]
       },
-      scales: {
-        x: { ticks: { color: brand.text }, grid: { color: brand.grid } },
-        y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true }
+      options: {
+        responsive: false,
+        plugins: { title: { display: true, text: t('Top Feeds by Cost','أكثر الأعلاف تكلفة'), color: brand.text }, legend: { display: false } },
+        scales: { x: { ticks: { color: brand.text }, grid: { color: brand.grid } }, y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true } }
       }
-    }
-  });
-  
+    });
+
+    charts.excludedByTypeStacked = await chartToBase64({
+      type: 'bar',
+      data: {
+        labels: exTypesLabels,
+        datasets: [
+          { label: t('Males','ذكور'),   data: exMale,   stack: 'gender', backgroundColor: genderColors.male,   borderWidth: 0 },
+          { label: t('Females','إناث'), data: exFemale, stack: 'gender', backgroundColor: genderColors.female, borderWidth: 0 }
+        ]
+      },
+      options: {
+        responsive: false,
+        plugins: { title: { display: true, text: t('Excluded by Type (Stacked)','الاستبعاد حسب النوع'), color: brand.text }, legend: { labels: { color: brand.text } } },
+        scales: { x: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid } },
+                  y: { stacked: true, ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true } }
+      }
+    });
+
+    charts.adgByBreed = await chartToBase64({
+      type: 'bar',
+      data: {
+        labels: (data.perBreed?.adg || []).slice(0,8).map(b => b.breedName || '—'),
+        datasets: [{ label: t('Avg ADG','متوسط الزيادة اليومية'), data: (data.perBreed?.adg || []).slice(0,8).map(b => b.avgADG || 0), backgroundColor: hexToRgba(brand.accent, 0.85), borderColor: brand.accent, borderWidth: 1, borderRadius: 6 }]
+      },
+      options: {
+        responsive: false,
+        plugins: { title: { display: true, text: t('Avg ADG by Breed','متوسط الزيادة اليومية حسب السلالة'), color: brand.text }, legend: { display: false } },
+        scales: { x: { ticks: { color: brand.text }, grid: { color: brand.grid } }, y: { ticks: { color: brand.text }, grid: { color: brand.grid }, beginAtZero: true } }
+      }
+    });
+
   } catch (e) {
     console.error('Chart rendering failed:', e);
     charts = {};
@@ -724,7 +710,8 @@ charts.excludedByTypeStacked = await chartToBase64({
 
   const css = `
     <style>
-      body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; color: #333; direction:${isArabic ? 'rtl' : 'ltr'}; text-align:${isArabic ? 'right' : 'left'}; }
+      ${notoCss()}
+      body { margin: 20px; font-size: 14px; color: #333; direction:${isArabic ? 'rtl' : 'ltr'}; text-align:${isArabic ? 'right' : 'left'}; }
       .report-title{ text-align:center; font-size:24px; margin-bottom:20px; font-weight:bold; color:#2c3e50; padding:10px; border-bottom:2px solid #46AE65; }
       .report-subtitle{ text-align:center; font-size:16px; color:#7f8c8d; margin-bottom:30px; }
       .section{ margin-bottom:30px; background:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
@@ -739,19 +726,10 @@ charts.excludedByTypeStacked = await chartToBase64({
       .stat-number{ font-size:22px; font-weight:bold; color:#21763e; margin:6px 0; }
       .stat-label{ color:#666; font-size:13px; }
       .footer{ text-align:center; margin-top:30px; padding-top:20px; border-top:1px solid #eee; color:#7f8c8d; font-size:12px; }
-
-      /* Charts grid */
-      .charts-grid{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:16px;
-      }
-      .chart-card{
-        background:#fff; border:1px solid #eee; border-radius:5px; padding:10px;
-        display:flex; align-items:center; justify-content:center;
-      }
+      .charts-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+      .chart-card{ background:#fff; border:1px solid #eee; border-radius:5px; padding:10px; display:flex; align-items:center; justify-content:center; }
       .chart-card img{ width:100%; height:auto; }
-      @media print { .charts-grid{ grid-template-columns:1fr 1fr; } }
+      @page { size: A4; margin: 20mm; }
     </style>
   `;
 
@@ -789,25 +767,13 @@ charts.excludedByTypeStacked = await chartToBase64({
       <div class="section">
         <h2 class="section-title">${t('Animal Counts', 'أعداد الحيوانات')}</h2>
         <div class="stats-container">
-          <div class="stat-box">
-            <div class="stat-number"><span class="num">${num(totalAnimalsPdf, 0)}</span></div>
-            <div class="stat-label">${t('Total Animals', 'إجمالي الحيوانات')}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-number"><span class="num">${num(maleCount, 0)}</span></div>
-            <div class="stat-label">${t('Males', 'ذكور')}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-number"><span class="num">${num(femaleCount, 0)}</span></div>
-            <div class="stat-label">${t('Females', 'إناث')}</div>
-          </div>
-          ${ (pregnantCount > 0)
-              ? `<div class="stat-box"><div class="stat-number"><span class="num">${num(pregnantCount, 0)}</span></div><div class="stat-label">${t('Pregnant', 'حوامل')}</div></div>`
-              : '' }
+          <div class="stat-box"><div class="stat-number"><span class="num">${num(totalAnimalsPdf, 0)}</span></div><div class="stat-label">${t('Total Animals', 'إجمالي الحيوانات')}</div></div>
+          <div class="stat-box"><div class="stat-number"><span class="num">${num(maleCount, 0)}</span></div><div class="stat-label">${t('Males', 'ذكور')}</div></div>
+          <div class="stat-box"><div class="stat-number"><span class="num">${num(femaleCount, 0)}</span></div><div class="stat-label">${t('Females', 'إناث')}</div></div>
+          ${ (pregnantCount > 0) ? `<div class="stat-box"><div class="stat-number"><span class="num">${num(pregnantCount, 0)}</span></div><div class="stat-label">${t('Pregnant', 'حوامل')}</div></div>` : '' }
         </div>
       </div>
 
-      <!-- Charts -->
       <div class="section">
         <h2 class="section-title">${t('Charts','رسوم بيانية')}</h2>
         <div class="charts-grid">
@@ -817,8 +783,6 @@ charts.excludedByTypeStacked = await chartToBase64({
           ${charts.adgByBreed ? `<div class="chart-card"><img src="data:image/png;base64,${charts.adgByBreed}" alt="adg by breed"/></div>` : ''}
         </div>
       </div>
-
-      <!-- (تم حذف قسم الاتجاه الأسبوعي بالكامل) -->
 
       <div class="section">
         <h2 class="section-title">${t('Per Shed', 'حسب الحظيرة')}</h2>
@@ -862,9 +826,7 @@ charts.excludedByTypeStacked = await chartToBase64({
         <h2 class="section-title">${t('Days of Inventory', 'تغطية المخزون (أيام)')}</h2>
         <h3>${t('Feed', 'العلف')}</h3>
         <table class="table" dir="${isArabic ? 'rtl' : 'ltr'}">
-          <colgroup>
-            <col style="width:26%"><col style="width:18%"><col style="width:20%"><col style="width:20%"><col style="width:16%">
-          </colgroup>
+          <colgroup><col style="width:26%"><col style="width:18%"><col style="width:20%"><col style="width:20%"><col style="width:16%"></colgroup>
           <thead><tr><th>${t('Feed', 'العلف')}</th><th>${t('Stock', 'المخزون')}</th><th>${t('Daily Use', 'الاستهلاك اليومي')}</th><th>${t('Days Cover', 'أيام التغطية')}</th><th>${t('Warn', 'تحذير')}</th></tr></thead>
           <tbody>
             ${(data.coverageDays?.feed || []).map(r => `
@@ -881,9 +843,7 @@ charts.excludedByTypeStacked = await chartToBase64({
 
         <h3>${t('Treatment', 'العلاج')}</h3>
         <table class="table" dir="${isArabic ? 'rtl' : 'ltr'}">
-          <colgroup>
-            <col style="width:26%"><col style="width:18%"><col style="width:20%"><col style="width:20%"><col style="width:16%">
-          </colgroup>
+          <colgroup><col style="width:26%"><col style="width:18%"><col style="width:20%"><col style="width:20%"><col style="width:16%"></colgroup>
           <thead><tr><th>${t('Treatment', 'العلاج')}</th><th>${t('Stock', 'المخزون')}</th><th>${t('Daily Use', 'الاستهلاك اليومي')}</th><th>${t('Days Cover', 'أيام التغطية')}</th><th>${t('Warn', 'تحذير')}</th></tr></thead>
           <tbody>
             ${(data.coverageDays?.treatment || []).map(r => `
@@ -900,9 +860,7 @@ charts.excludedByTypeStacked = await chartToBase64({
 
         <h3>${t('Vaccine', 'اللقاح')}</h3>
         <table class="table" dir="${isArabic ? 'rtl' : 'ltr'}">
-          <colgroup>
-            <col style="width:32%"><col style="width:20%"><col style="width:20%"><col style="width:16%"><col style="width:12%">
-          </colgroup>
+          <colgroup><col style="width:32%"><col style="width:20%"><col style="width:20%"><col style="width:16%"><col style="width:12%"></colgroup>
           <thead><tr><th>${t('Vaccine', 'اللقاح')}</th><th>${t('Remaining Doses', 'الجرعات المتبقية')}</th><th>${t('Daily Use', 'الاستهلاك اليومي')}</th><th>${t('Days Cover', 'أيام التغطية')}</th><th>${t('Warn', 'تحذير')}</th></tr></thead>
           <tbody>
             ${(data.coverageDays?.vaccine || []).map(r => `
@@ -925,14 +883,22 @@ charts.excludedByTypeStacked = await chartToBase64({
     </body>
   </html>`;
 
-  const filePath = path.join(__dirname, `combined_report_${lang}.pdf`);
-  const options = { format: 'A4', orientation: 'portrait', border: { top: '20px', right: '20px', bottom: '20px', left: '20px' } };
+  // html-pdf options tuned for PhantomJS
+  const options = {
+    format: 'A4',
+    orientation: 'portrait',
+    border: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+    timeout: 60000,
+    base: 'file://' + path.resolve(process.cwd()) + '/',
+    phantomArgs: ['--ssl-protocol=any', '--ignore-ssl-errors=true', '--web-security=false']
+  };
 
+  const filePath = path.join(__dirname, `combined_report_${lang}.pdf`);
   pdf.create(html, options).toFile(filePath, (err) => {
-    if (err) return res.status(500).json({ status: 'error', message: 'Failed to generate PDF' });
+    if (err) return res.status(500).json({ status: 'error', message: 'Failed to generate PDF', details: err.message });
     res.download(filePath, `farm_report_${lang}.pdf`, (e) => {
       if (e) console.error('Download error:', e);
-      fs.unlink(filePath, () => { });
+      fs.unlink(filePath, () => {});
     });
   });
 });
