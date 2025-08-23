@@ -7,6 +7,7 @@ const User = require("../Models/user.model");
 const LocationShed = require('../Models/locationsed.model');
 const ShedEntry = require("../Models/shedFeed.model");
 const AnimalCost = require("../Models/animalCost.model");
+const Supplier = require('../Models/supplier.model');
 const Animal = require("../Models/animal.model");
 const mongoose = require("mongoose");
 const { ConsoleMessage } = require("puppeteer");
@@ -66,10 +67,58 @@ const getsniglefeed = asyncwrapper(async (req, res, next) => {
 
 const addfeed = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
+  const { supplierId, ...payload } = req.body;
 
-  const newfeed = new Feed({ ...req.body, owner: userId });
-  await newfeed.save();
-  res.json({ status: httpstatustext.SUCCESS, data: { feed: newfeed } });
+  // التحقق من supplierId (إلزامي) + المالك
+  if (!supplierId || !mongoose.Types.ObjectId.isValid(supplierId)) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: 'Valid supplierId is required.'
+    });
+  }
+
+  const supplier = await Supplier.findOne({ _id: supplierId, owner: userId });
+  if (!supplier) {
+    return res.status(404).json({
+      status: httpstatustext.FAIL,
+      message: 'Supplier not found or unauthorized.'
+    });
+  }
+
+  // ترانزاكشن لضمان الذرّية
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // منع حقول حسّاسة من الـpayload (لو حد حاول يمرر owner/supplier)
+    delete payload.owner;
+    delete payload.supplier;
+
+    const [newfeed] = await Feed.create([{
+      ...payload,
+      supplier: supplier._id,   // الربط بالمورد
+      owner: userId
+    }], { session });
+
+    // تحديث المورد لمرجع عكسي (لو عندك مصفوفة feeds في سكيمة المورد)
+    await Supplier.updateOne(
+      { _id: supplier._id },
+      { $addToSet: { feeds: newfeed._id } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(201).json({
+      status: httpstatustext.SUCCESS,
+      data: { feed: newfeed }
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    return next(new AppError(err.message, 500));
+  }
 });
 
 const updatefeed = asyncwrapper(async (req, res, next) => {

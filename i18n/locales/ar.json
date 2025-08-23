@@ -17,5 +17,6 @@
     "IMAGE_UPLOAD_FAILED": "فشل في رفع الصورة",
     "INVALID_IMAGE_FORMAT": "صيغة الصورة غير صالحة. الصيغ المسموح بها: jpg, jpeg, png, gif",
     "NOTIFICATION_MARKED_READ": "تم وضع علامة مقروء على الإشعار",
-    "FAILED_TO_CHECK_NOTIFICATIONS": "فشل التحقق من الإشعارات"
+    "FAILED_TO_CHECK_NOTIFICATIONS": "فشل التحقق من الإشعارات",
+    "UNKNOWN_VACCINE": "لقاح غير معروف"
 } 

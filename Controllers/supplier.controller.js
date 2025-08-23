@@ -4,7 +4,7 @@ const httpstatustext = require('../utilits/httpstatustext');
 const Supplier = require('../Models/supplier.model');
 const Treatment = require('../Models/treatment.model');
 const Feed = require('../Models/feed.model');
-
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Get all suppliers with populated treatments and feeds
 const getSuppliers = asyncwrapper(async (req, res) => {
   const userId = req.user.id;
@@ -28,7 +28,10 @@ const getSuppliers = asyncwrapper(async (req, res) => {
   if (query.email) {
     filter.email = { $regex: query.email, $options: 'i' };
   }
-
+  // ✅ فلترة بالموبايل (contains + case-insensitive)
+  if (query.phone) {
+    filter.phone = { $regex: escapeRegex(query.phone), $options: 'i' };
+  }
 
   if (query.createdAtTo) {
     filter.createdAt = { 
@@ -82,9 +85,9 @@ const getSingleSupplier = asyncwrapper(async (req, res, next) => {
 
 // Add new supplier with optional treatment and feed associations
 const addSupplier = asyncwrapper(async (req, res, next) => {
-  const { name, email, phone, company, notes, treatmentIds, feedIds } = req.body;
+  // بنفصل ونطنّش أي treatmentIds / feedIds لو جُم في البودي
+  const { name, email, phone, company, notes, supplyType } = req.body;
 
-  // Validate required fields
   if (!name || !email || !phone || !company) {
     return next(AppError.create(
       "Name, email, phone, and company are required.",
@@ -93,66 +96,21 @@ const addSupplier = asyncwrapper(async (req, res, next) => {
     ));
   }
 
-  // Create new supplier
+  // إنشـاء المورد بدون أي علاقات
   const newSupplier = new Supplier({
     name,
     email,
     phone,
     company,
     notes,
-    owner: req.user.id
+    owner: req.user.id,
+    // تأكيد إنهم فاضيين عند الإنشاء
+    treatments: [],
+    feeds: [],
+    supplyType
   });
 
-  // Process treatment associations if provided
-  if (treatmentIds?.length > 0) {
-    const treatments = await Treatment.find({
-      _id: { $in: treatmentIds },
-      owner: req.user.id
-    });
-
-    if (treatments.length !== treatmentIds.length) {
-      return next(AppError.create(
-        "One or more treatments not found or not authorized.",
-        400,
-        httpstatustext.FAIL
-      ));
-    }
-
-    newSupplier.treatments = treatmentIds;
-    await Treatment.updateMany(
-      { _id: { $in: treatmentIds } },
-      { $set: { supplier: newSupplier._id } }
-    );
-  }
-
-  // Process feed associations if provided
-  if (feedIds?.length > 0) {
-    const feeds = await Feed.find({
-      _id: { $in: feedIds },
-      owner: req.user.id
-    });
-
-    if (feeds.length !== feedIds.length) {
-      return next(AppError.create(
-        "One or more feeds not found or not authorized.",
-        400,
-        httpstatustext.FAIL
-      ));
-    }
-
-    newSupplier.feeds = feedIds;
-    await Feed.updateMany(
-      { _id: { $in: feedIds } },
-      { $set: { supplier: newSupplier._id } }
-    );
-  }
-
   await newSupplier.save();
-
-  // Populate associations if they exist
-  if (newSupplier.treatments.length > 0 || newSupplier.feeds.length > 0) {
-    await newSupplier.populate('treatments feeds');
-  }
 
   res.status(201).json({
     status: httpstatustext.SUCCESS,
@@ -160,65 +118,66 @@ const addSupplier = asyncwrapper(async (req, res, next) => {
   });
 });
 
+
 // Add treatment to existing supplier
-const addTreatmentToSupplier = asyncwrapper(async (req, res, next) => {
-  const { supplierId, treatmentId } = req.params;
+// const addTreatmentToSupplier = asyncwrapper(async (req, res, next) => {
+//   const { supplierId, treatmentId } = req.params;
 
-  const [supplier, treatment] = await Promise.all([
-    Supplier.findOne({ _id: supplierId, owner: req.user.id }),
-    Treatment.findOne({ _id: treatmentId, owner: req.user.id })
-  ]);
+//   const [supplier, treatment] = await Promise.all([
+//     Supplier.findOne({ _id: supplierId, owner: req.user.id }),
+//     Treatment.findOne({ _id: treatmentId, owner: req.user.id })
+//   ]);
 
-  if (!supplier || !treatment) {
-    return next(AppError.create(
-      'Supplier or treatment not found',
-      404,
-      httpstatustext.FAIL
-    ));
-  }
+//   if (!supplier || !treatment) {
+//     return next(AppError.create(
+//       'Supplier or treatment not found',
+//       404,
+//       httpstatustext.FAIL
+//     ));
+//   }
 
-  // Add to both sides of the relationship
-  supplier.treatments.addToSet(treatmentId);
-  treatment.supplier = supplierId;
+//   // Add to both sides of the relationship
+//   supplier.treatments.addToSet(treatmentId);
+//   treatment.supplier = supplierId;
 
-  await Promise.all([supplier.save(), treatment.save()]);
-  await supplier.populate('treatments');
+//   await Promise.all([supplier.save(), treatment.save()]);
+//   await supplier.populate('treatments');
 
-  res.json({
-    status: httpstatustext.SUCCESS,
-    data: { supplier }
-  });
-});
+//   res.json({
+//     status: httpstatustext.SUCCESS,
+//     data: { supplier }
+//   });
+// });
 
 // Add feed to existing supplier
-const addFeedToSupplier = asyncwrapper(async (req, res, next) => {
-  const { supplierId, feedId } = req.params;
+// const addFeedToSupplier = asyncwrapper(async (req, res, next) => {
+//   const { supplierId, feedId } = req.params;
 
-  const [supplier, feed] = await Promise.all([
-    Supplier.findOne({ _id: supplierId, owner: req.user.id }),
-    Feed.findOne({ _id: feedId, owner: req.user.id })
-  ]);
+//   const [supplier, feed] = await Promise.all([
+//     Supplier.findOne({ _id: supplierId, owner: req.user.id }),
+//     Feed.findOne({ _id: feedId, owner: req.user.id })
+//   ]);
 
-  if (!supplier || !feed) {
-    return next(AppError.create(
-      'Supplier or feed not found',
-      404,
-      httpstatustext.FAIL
-    ));
-  }
+//   if (!supplier || !feed) {
+//     return next(AppError.create(
+//       'Supplier or feed not found',
+//       404,
+//       httpstatustext.FAIL
+//     ));
+//   }
 
-  // Add to both sides of the relationship
-  supplier.feeds.addToSet(feedId);
-  feed.supplier = supplierId;
+//   // Add to both sides of the relationship
+//   supplier.feeds.addToSet(feedId);
+//   feed.supplier = supplierId;
 
-  await Promise.all([supplier.save(), feed.save()]);
-  await supplier.populate('feeds');
+//   await Promise.all([supplier.save(), feed.save()]);
+//   await supplier.populate('feeds');
 
-  res.json({
-    status: httpstatustext.SUCCESS,
-    data: { supplier }
-  });
-});
+//   res.json({
+//     status: httpstatustext.SUCCESS,
+//     data: { supplier }
+//   });
+// });
 
 // Update supplier basic info
 const updateSupplier = asyncwrapper(async (req, res, next) => {
@@ -284,6 +243,5 @@ module.exports = {
   addSupplier,
   updateSupplier,
   deleteSupplier,
-  addTreatmentToSupplier,
-  addFeedToSupplier
+
 };

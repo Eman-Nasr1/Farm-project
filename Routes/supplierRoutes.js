@@ -10,10 +10,7 @@ router.post('/api/supplier/addsupplier', verifytoken, supplierController.addSupp
 router.patch('/api/supplier/updatesupplier/:supplierId', verifytoken, supplierController.updateSupplier);
 router.delete('/api/supplier/deletesupplier/:supplierId', verifytoken, supplierController.deleteSupplier);
 
-// Excel operations 
-// Relationship management routes
-router.put('/api/supplier/:supplierId/treatments/:treatmentId', verifytoken, supplierController.addTreatmentToSupplier);
-router.put('/api/supplier/:supplierId/feeds/:feedId', verifytoken, supplierController.addFeedToSupplier);
+
 
 
 

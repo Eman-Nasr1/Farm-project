@@ -23,6 +23,9 @@ const SupplierSchema = new mongoose.Schema({
     required: [true, 'Company name is required'],
     trim: true
   },
+  supplyType: {
+    type: String
+  },
   treatments: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Treatment'

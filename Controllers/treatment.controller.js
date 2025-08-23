@@ -7,6 +7,7 @@ const LocationShed = require('../Models/locationsed.model');
 const Animal = require("../Models/animal.model");
 const TreatmentEntry = require("../Models/treatmentEntry.model");
 const AnimalCost = require("../Models/animalCost.model");
+const Supplier = require('../Models/supplier.model');
 const mongoose = require("mongoose");
 const excelOps = require('../utilits/excelOperations');
 const i18n = require('../i18n');
@@ -81,10 +82,11 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
     volumePerBottle,
     unitOfMeasure,
     bottlePrice,
-    expireDate
+    expireDate,
+    supplierId // <-- الجديد
   } = req.body;
 
-  // Validate inputs
+  // Validate inputs (نفس فحوصاتك الأصلية)
   if (
     !name ||
     !type ||
@@ -97,6 +99,21 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
     return res.status(400).json({
       status: httpstatustext.FAIL,
       message: "Valid name, type, bottles, volume per bottle, unit, bottle price, and expiry date are required.",
+    });
+  }
+
+  // التحقق من الـ supplier (خليه إجباريًا؛ لو عايزاه اختياري شيل الشرطين دول)
+  if (!supplierId || !mongoose.Types.ObjectId.isValid(supplierId)) {
+    return res.status(400).json({
+      status: httpstatustext.FAIL,
+      message: "Valid supplierId is required."
+    });
+  }
+  const supplier = await Supplier.findOne({ _id: supplierId, owner: userId });
+  if (!supplier) {
+    return res.status(404).json({
+      status: httpstatustext.FAIL,
+      message: "Supplier not found or unauthorized."
     });
   }
 
@@ -116,29 +133,45 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
     pricePerMl = bottlePrice / volumePerBottle;
   }
 
-  const newTreatment = new Treatment({
-    name,
-    type,
-    stock: {
-      bottles,
-      volumePerBottle,
-      unitOfMeasure,
-      totalVolume
-    },
-    pricing: {
-      bottlePrice
-    },
-    pricePerMl,
-    expireDate: expiry,
-    owner: userId
-  });
+  // استخدم ترانزاكشن عشان نضيف التريتمنت ونحدّث المورد مع بعض
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const [newTreatment] = await Treatment.create([{
+      name,
+      type,
+      stock: {
+        bottles,
+        volumePerBottle,
+        unitOfMeasure,
+        totalVolume
+      },
+      pricing: { bottlePrice },
+      pricePerMl,
+      expireDate: expiry,
+      supplier: supplier._id,  // <-- ربط المورد هنا
+      owner: userId
+    }], { session });
 
-  await newTreatment.save();
+    // لو عندك في Supplier مصفوفة treatments فحدّثها
+    await Supplier.updateOne(
+      { _id: supplier._id },
+      { $addToSet: { treatments: newTreatment._id } },
+      { session }
+    );
 
-  res.json({
-    status: httpstatustext.SUCCESS,
-    data: { treatment: newTreatment }
-  });
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(201).json({
+      status: httpstatustext.SUCCESS,
+      data: { treatment: newTreatment }
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    return next(new AppError(err.message, 500));
+  }
 });
 
 const updateTreatment = asyncwrapper(async (req, res, next) => {

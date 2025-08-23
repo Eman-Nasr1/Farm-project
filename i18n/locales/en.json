@@ -17,5 +17,6 @@
     "IMAGE_UPLOAD_FAILED": "Failed to upload image",
     "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif",
     "NOTIFICATION_MARKED_READ": "Notification marked as read",
-    "FAILED_TO_CHECK_NOTIFICATIONS": "Failed to check for notifications"
+    "FAILED_TO_CHECK_NOTIFICATIONS": "Failed to check for notifications",
+    "UNKNOWN_VACCINE": "Unknown vaccine"
 } 
