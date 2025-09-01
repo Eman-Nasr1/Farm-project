@@ -80,15 +80,47 @@ const checkNotifications = asyncwrapper(async (req, res) => {
     const userNotifications = notifications.filter(n => n.owner.toString() === userId);
 
     // (Optional) prevent duplicates by upserting on (type,itemId,expiryDate)
+    // (Optional) prevent duplicates & control unread based on stage changes
     await Promise.all(
-      userNotifications.map(n =>
-        Notification.updateOne(
-          { owner: userId, type: n.type, itemId: n.itemId, expiryDate: n.expiryDate },
-          { $setOnInsert: n },
-          { upsert: true }
-        )
-      )
+      userNotifications.map(async (n) => {
+        // دوري على إشعار قديم لنفس (owner, type, itemId)
+        const existing = await Notification.findOne({
+          owner: userId,
+          type: n.type,
+          itemId: n.itemId
+        });
+
+        if (!existing) {
+          // أول مرة: أنشئيه Unread
+          await Notification.create({
+            owner: userId,
+            type: n.type,
+            itemId: n.itemId,
+            message: n.message,
+            severity: n.severity,
+            stage: n.stage,   // ← المرحلة
+            isRead: false
+          });
+          return;
+        }
+
+        // لو المرحلة اتغيّرت (month→week أو week→expired)
+        const stageChanged = existing.stage !== n.stage;
+
+        await Notification.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              message: n.message,
+              severity: n.severity,
+              stage: n.stage,
+              ...(stageChanged ? { isRead: false } : {}) // رجّعه Unread بس لو المرحلة اتغيّرت
+            }
+          }
+        );
+      })
     );
+
 
     res.json({
       status: httpstatustext.SUCCESS,

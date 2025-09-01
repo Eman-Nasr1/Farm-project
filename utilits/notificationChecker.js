@@ -12,6 +12,12 @@ const getVaccineDisplayName = (vaccineDoc, lang = 'en') => {
     }
     return vaccineDoc.vaccineType?.englishName || i18n.__('UNKNOWN_VACCINE');
 };
+
+function getStage(daysUntilExpiry) {
+    if (daysUntilExpiry <= 0) return 'expired';
+    if (daysUntilExpiry <= 7) return 'week';
+    return 'month';
+}
 // Main function to check for expiring items
 const checkExpiringItems = async (lang = 'en') => {
     // Set the language
@@ -64,14 +70,17 @@ const checkExpiringItems = async (lang = 'en') => {
                         severity = 'medium';
                     }
 
+                    // مثال داخل لوب الـ treatments (بعد ما تحسبي daysUntilExpiry و message و severity)
                     notifications.push({
                         type: 'Treatment',
                         itemId: treatment._id,
                         message,
-                        expiryDate: treatment.expireDate,
+                        expiryDate: treatment.expireDate,   // اختياري لو عايزاه
                         owner: treatment.owner,
-                        severity
+                        severity,
+                        stage: getStage(daysUntilExpiry)     // ← أضفنا المرحلة
                     });
+
                 }
             }
         }
@@ -103,15 +112,16 @@ const checkExpiringItems = async (lang = 'en') => {
                     message = i18n.__('VACCINE_EXPIRE_WARNING', { name: displayName, days: daysUntilExpiry, date: expireDateFormatted });
                     severity = 'medium';
                 }
-
                 notifications.push({
                     type: 'Vaccine',
                     itemId: vaccine._id,
                     message,
-                    expiryDate: vaccine.expiryDate,
+                    expiryDate: vaccine.expiryDate,      // اختياري
                     owner: vaccine.owner,
-                    severity
-                });
+                    severity,
+                    stage: getStage(daysUntilExpiry)
+                  });
+                  
             }
         }
 

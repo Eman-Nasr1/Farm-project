@@ -1,36 +1,49 @@
+// Models/notification.model.js
 const mongoose = require('mongoose');
 
 const NotificationSchema = new mongoose.Schema({
-    type: {
-        type: String,
-        enum: ['Treatment', 'Vaccine'],
-        required: true
-    },
-    message: {
-        type: String,
-        required: true
-    },
-    severity: {
-        type: String,
-        enum: ['medium', 'high'],
-        default: 'medium'
-    },
-    isRead: {
-        type: Boolean,
-        default: false
-    },
-    owner: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
-});
+  type: {
+    type: String,
+    enum: ['Treatment', 'Vaccine'],
+    required: true
+  },
+  // هيمسك الـ _id بتاع العنصر (علاج/لقاح) عشان نمنع التكرار
+  itemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    index: true
+  },
+  message: {
+    type: String,
+    required: true
+  },
+  severity: {
+    type: String,
+    enum: ['medium', 'high'], // لو عايزة تضيفي 'low' مافيش مانع
+    default: 'medium'
+  },
+  // المرحلة حسب المدة المتبقية: month/week/expired
+  stage: {
+    type: String,
+    enum: ['month', 'week', 'expired'],
+    default: 'month'
+  },
+  isRead: {
+    type: Boolean,
+    default: false
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  }
+}, { timestamps: true });
 
-// Index to improve query performance
-NotificationSchema.index({ owner: 1, isRead: 1, createdAt: -1 });
+// اندكس لمنع التكرار لنفس (المالك/النوع/العنصر)
+NotificationSchema.index(
+  { owner: 1, type: 1, itemId: 1 },
+  { unique: true, partialFilterExpression: { itemId: { $exists: true } } }
+);
 
-module.exports = mongoose.model('Notification', NotificationSchema); 
+module.exports = mongoose.model('Notification', NotificationSchema);
