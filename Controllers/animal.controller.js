@@ -433,80 +433,94 @@ const addanimal = asyncwrapper(async (req, res, next) => {
 });
 
 const updateanimal = asyncwrapper(async (req, res, next) => {
-    const animalId = req.params.tagId;
-    //const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
+    const animalId = req.params.tagId; // تأكد إن ده هو الـ _id فعلاً وليس tagId
     const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
-
-
-    // Handle location shed update if name is provided
+  
+    // تحديث المكان لو الاسم موجود
     if (locationShedName) {
-        const locationShed = await LocationShed.findOne({ locationShedName, owner: req.user.id });
-        if (!locationShed) {
-            return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
-        }
-        updateData.locationShed = locationShed._id;
+      const locationShed = await LocationShed.findOne({ locationShedName, owner: req.user.id });
+      if (!locationShed) {
+        return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
+      }
+      updateData.locationShed = locationShed._id;
     }
-
-    // Handle breed update if name is provided
+  
+    // تحديث السلالة لو الاسم موجود
     if (breedName) {
-        const breed = await Breed.findOne({ breedName, owner: req.user.id });
-        if (!breed) {
-            return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
-        }
-        updateData.breed = breed._id;
+      const breed = await Breed.findOne({ breedName, owner: req.user.id });
+      if (!breed) {
+        return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
+      }
+      updateData.breed = breed._id;
     }
-
-    // Handle birthDate or age
+  
+    // تاريخ الميلاد أو السن
     if (birthDate) {
-        updateData.birthDate = new Date(birthDate);
+      updateData.birthDate = new Date(birthDate);
     } else if (age && (age.years || age.months || age.days)) {
-        const now = new Date();
-        const calculatedDate = new Date(
-            now.getFullYear() - (age.years || 0),
-            now.getMonth() - (age.months || 0),
-            now.getDate() - (age.days || 0)
-        );
-        updateData.birthDate = calculatedDate;
+      const now = new Date();
+      const calculatedDate = new Date(
+        now.getFullYear() - (age.years || 0),
+        now.getMonth() - (age.months || 0),
+        now.getDate() - (age.days || 0)
+      );
+      updateData.birthDate = calculatedDate;
     }
-
-    // Perform the update
+  
+    // تنفيذ التحديث
     const updatedanimal = await Animal.findOneAndUpdate(
-        { _id: animalId, owner: req.user.id },
-        { $set: updateData },
-        { new: true, runValidators: true }
+      { _id: animalId, owner: req.user.id },
+      { $set: updateData },
+      { new: true, runValidators: true }
     );
-
+  
     if (!updatedanimal) {
-        return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
+      return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
     }
-    // Update corresponding AnimalCost record if marketValue or purchasePrice changed
-    if (marketValue !== undefined || purchasePrice !== undefined) {
-        const updateCostData = {};
-        if (marketValue !== undefined) updateCostData.marketValue = marketValue;
-        if (purchasePrice !== undefined) updateCostData.purchasePrice = purchasePrice;
-
-        // Recalculate totalCost if needed
-        if (purchasePrice !== undefined) {
-            const existingCost = await AnimalCost.findOne({ animalTagId: updatedanimal.tagId });
-            if (existingCost) {
-                updateCostData.totalCost = purchasePrice + existingCost.feedCost + 
-                                          existingCost.treatmentCost + existingCost.vaccineCost;
-            }
-        }
-
-        await AnimalCost.findOneAndUpdate(
-            { animalTagId: updatedanimal.tagId, owner: req.user.id },
-            { $set: updateCostData },
-            { new: true, runValidators: true }
-        );
+  
+    // === تحديث AnimalCost لو اتغير marketValue أو purchasePrice ===
+    const hasMarketValue = Object.prototype.hasOwnProperty.call(updateData, 'marketValue');
+    const hasPurchasePrice = Object.prototype.hasOwnProperty.call(updateData, 'purchasePrice');
+  
+    if (hasMarketValue || hasPurchasePrice) {
+      const incomingMarketValue = updateData.marketValue;      // ممكن تكون 0 — مسموح
+      const incomingPurchasePrice = updateData.purchasePrice;  // ممكن تكون 0 — مسموح
+  
+      const existingCost = await AnimalCost.findOne({
+        animalTagId: updatedanimal.tagId,
+        owner: req.user.id
+      });
+  
+      const updateCostData = {};
+      if (hasMarketValue) updateCostData.marketValue = incomingMarketValue;
+      if (hasPurchasePrice) updateCostData.purchasePrice = incomingPurchasePrice;
+  
+      if (hasPurchasePrice) {
+        const feedCost = existingCost?.feedCost ?? 0;
+        const treatmentCost = existingCost?.treatmentCost ?? 0;
+        const vaccineCost = existingCost?.vaccineCost ?? 0;
+        const otherCost = existingCost?.otherCost ?? 0;
+        updateCostData.totalCost = Number(incomingPurchasePrice) + feedCost + treatmentCost + vaccineCost + otherCost;
+      }
+  
+      await AnimalCost.findOneAndUpdate(
+        { animalTagId: updatedanimal.tagId, owner: req.user.id },
+        { $set: updateCostData },
+        { new: true, runValidators: true, upsert: true } // upsert لو مفيش سجل قبل كده
+      );
     }
-    // Populate fields for response
+  
+    // إرجاع الحيوان بعد الـ populate
     const populatedAnimal = await Animal.findById(updatedanimal._id)
-        .populate('locationShed', 'locationShedName')
-        .populate('breed', 'breedName');
-
-    return res.status(200).json({ status: httpstatustext.SUCCESS, data: { animal: populatedAnimal } });
-});
+      .populate('locationShed', 'locationShedName')
+      .populate('breed', 'breedName');
+  
+    return res.status(200).json({
+      status: httpstatustext.SUCCESS,
+      data: { animal: populatedAnimal }
+    });
+  });
+  
 
 const deleteanimal = asyncwrapper(async (req, res, next) => {
     const animalId =req.params.tagId; // Use consistent parameter name
