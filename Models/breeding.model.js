@@ -7,15 +7,19 @@ const birthEntrySchema = new mongoose.Schema({
     },
     gender: {
         type: String,
-        enum: ['male', 'female','ذكر','أنثى'],
+        enum: ['male', 'female'],
         required: true
     },
     birthweight: {
         type: Number
     },
-    expectedWeaningDate: {
-        type: Date
-    },
+    ageAtWeaningDays: { type: Number, min: 1, max: 90 },
+
+    // جديد: كل كام يوم هيوزن لحد الفطام
+    weightIntervalDays: { type: Number, min: 1 },
+  
+    // جديد: هنخزن فيه جدول الأوزان الدورية
+    plannedWeights: [{ type: Date }],
     isEmailSent: { type: Boolean, default: false },
 
     createdAt: {  
@@ -69,44 +73,5 @@ const breedingSchema = new mongoose.Schema({
     }
 });
 
-breedingSchema.pre('save', function(next) {  
-    // Check if deliveryDate is set  
-    if (this.deliveryDate && this.birthEntries.length > 0) {  
-        // Calculate expectedWeaningDate for each birth entry  
-        this.birthEntries.forEach(entry => {  
-            // Set expectedWeaningDate to 2 months after deliveryDate  
-            const weaningDate = new Date(this.deliveryDate);  
-            weaningDate.setMonth(weaningDate.getMonth() + 2);  
-            entry.expectedWeaningDate = weaningDate;
-            // Ensure the owner field is set for each birth entry
-            entry.owner = this.owner;
-        });  
-    }  
-    next();  
-});
-
-// Pre-update middleware to handle updates to deliveryDate
-breedingSchema.pre('findOneAndUpdate', async function(next) {
-    const update = this.getUpdate();
-    
-    if (update.deliveryDate) {
-        // Fetch the current document being updated
-        const docToUpdate = await this.model.findOne(this.getQuery());
-
-        if (docToUpdate && docToUpdate.birthEntries.length > 0) {
-            // Calculate new weaning dates if deliveryDate is being updated
-            const updatedWeaningDate = new Date(update.deliveryDate);
-            updatedWeaningDate.setMonth(updatedWeaningDate.getMonth() + 2);
-            
-            // Update each birthEntry's expectedWeaningDate
-            update.birthEntries = docToUpdate.birthEntries.map(entry => {
-                entry.expectedWeaningDate = updatedWeaningDate;
-                return entry;
-            });
-        }
-    }
-    
-    next();
-});
 
 module.exports = mongoose.model('Breeding', breedingSchema);
