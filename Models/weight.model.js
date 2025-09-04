@@ -1,46 +1,46 @@
 const mongoose = require('mongoose');
-const Weightschema=new mongoose.Schema(
+const Weightschema = new mongoose.Schema(
     {
-        tagId:{
+        tagId: {
             type: String,
             required: true
         },
-       
-        Date:{
+
+        Date: {
             type: Date,
             required: true
-            
+
         },
-       
-        weight:{
+
+        weight: {
             type: Number,
             required: true
         },
-        height:{
+        height: {
             type: Number
         },
-        weightType:{
+        weightType: {
             type: String,
-            enum:["birth","Weaning","regular"],
+            enum: ["birth", "Weaning", "regular"],
             required: true
         },
         ADG: { type: Number },
         conversionEfficiency: { type: Number },
         owner: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-         },
-         animalId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        animalId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Animal'
-             },
-             createdAt: {  
-                type: Date,  
-                default: Date.now  // Automatically set to the current date/time when created  
-            } 
-       
-  
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now  // Automatically set to the current date/time when created  
+        }
+
+
     }
 )
 
-module.exports= mongoose.model('Weight',Weightschema)
+module.exports = mongoose.model('Weight', Weightschema)
