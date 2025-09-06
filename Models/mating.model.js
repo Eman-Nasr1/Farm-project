@@ -33,7 +33,7 @@ const MatingSchema = new mongoose.Schema(
         sonarDate: {
             type: Date
         },
-        sonarRsult: {
+        sonarResult: {
             type: String,
             enum: ["positive", "negative"],
         },
