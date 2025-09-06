@@ -1,6 +1,10 @@
 const Treatment = require('../Models/treatment.model');
 const Vaccine = require('../Models/vaccine.model');
 const i18n = require('../i18n');
+const { daysUntil, getStage, fmt ,addDays,addMonths} = require('../helpers/dateHelpers'); 
+const Animal = require("../Models/animal.model");
+const Breeding = require('../Models/breeding.model');
+const VaccineEntry = require('../Models/vaccineEntry.model');
 
 const getVaccineDisplayName = (vaccineDoc, lang = 'en') => {
     const other = (vaccineDoc.otherVaccineName || '').trim();
@@ -13,7 +17,7 @@ const getVaccineDisplayName = (vaccineDoc, lang = 'en') => {
     return vaccineDoc.vaccineType?.englishName || i18n.__('UNKNOWN_VACCINE');
 };
 
-function getStage(daysUntilExpiry) {
+function getStageExpiry(daysUntilExpiry) {
     if (daysUntilExpiry <= 0) return 'expired';
     if (daysUntilExpiry <= 7) return 'week';
     return 'month';
@@ -78,7 +82,7 @@ const checkExpiringItems = async (lang = 'en') => {
                         expiryDate: treatment.expireDate,   // اختياري لو عايزاه
                         owner: treatment.owner,
                         severity,
-                        stage: getStage(daysUntilExpiry)     // ← أضفنا المرحلة
+                        stage: getStageExpiry(daysUntilExpiry)     // ← أضفنا المرحلة
                     });
 
                 }
@@ -119,9 +123,9 @@ const checkExpiringItems = async (lang = 'en') => {
                     expiryDate: vaccine.expiryDate,      // اختياري
                     owner: vaccine.owner,
                     severity,
-                    stage: getStage(daysUntilExpiry)
-                  });
-                  
+                    stage: getStageExpiry(daysUntilExpiry)
+                });
+
             }
         }
 
@@ -132,6 +136,195 @@ const checkExpiringItems = async (lang = 'en') => {
     }
 };
 
+async function collectWeightNotifications(lang = 'en') {
+    i18n.setLocale(lang);
+
+    const PRE_REMINDER_DAYS = 7;   // ← قبل الموعد بـ 7 أيام
+    const today = new Date();
+    const results = [];
+
+    // هات السجلات اللي فيها plannedWeights
+    const breedings = await Breeding.find(
+        { 'birthEntries.plannedWeights.0': { $exists: true } },
+        { birthEntries: 1, owner: 1 }
+    ).lean();
+
+    // كاش للحيوانات
+    const animalCache = new Map();
+    const getAnimalId = async (ownerId, tagId) => {
+        const key = `${ownerId}:${tagId}`;
+        if (animalCache.has(key)) return animalCache.get(key);
+        const doc = await Animal.findOne({ owner: ownerId, tagId }, { _id: 1 }).lean();
+        const val = doc ? doc._id : null;
+        animalCache.set(key, val);
+        return val;
+    };
+
+    for (const b of breedings) {
+        const ownerId = String(b.owner);
+
+        for (const entry of b.birthEntries || []) {
+            if (!entry?.plannedWeights || !entry.tagId) continue;
+
+            for (const due of entry.plannedWeights) {
+                const d = new Date(due);
+                if (Number.isNaN(d.getTime())) continue;
+
+                const delta = daysUntil(today, d);
+                const animalId = await getAnimalId(ownerId, entry.tagId);
+                if (!animalId) continue;
+
+                // 1) تَنبيه قبل 7 أيام بالظبط
+                if (delta === PRE_REMINDER_DAYS) {
+                    const message = i18n.__('WEIGHT_REMINDER_7_DAYS', {
+                        tagId: entry.tagId,
+                        date: fmt(d)       // تاريخ الوزن نفسه
+                    });
+                    results.push({
+                        type: 'Weight',
+                        itemId: animalId,  // Animal._id
+                        message,
+                        dueDate: d,        // تاريخ الوزن (مش تاريخ التذكير)
+                        owner: ownerId,
+                        severity: 'high',
+                        stage: 'week'      // لأنه داخل أسبوع
+                    });
+                    continue; // نكمل للموعد التالي
+                }
+
+                // 2) (اختياري) إشعار يوم الموعد/بعده
+                if (delta <= 0) {
+                    const message = i18n.__('WEIGHT_DUE_TODAY_OR_OVERDUE', {
+                        tagId: entry.tagId,
+                        date: fmt(d)
+                    });
+                    results.push({
+                        type: 'Weight',
+                        itemId: animalId,
+                        message,
+                        dueDate: d,
+                        owner: ownerId,
+                        severity: 'high',
+                        stage: 'expired'
+                    });
+                    // مافيهوش continue عشان خلاص هنروح للوزن اللي بعده تلقائي
+                }
+            }
+        }
+    }
+
+    return results;
+}
+
+const collectVaccineDoseNotifications = async (lang = 'en') => { 
+    i18n.setLocale(lang);
+    const out = [];
+    const REMINDER_DAYS = 7;
+  
+    const entries = await VaccineEntry.find({})
+      .populate({
+        path: 'Vaccine',
+        select: 'BoosterDose AnnualDose owner otherVaccineName vaccineType',
+        populate: { path: 'vaccineType', select: 'arabicName englishName' }
+      })
+      .lean();
+  
+    const today = new Date();
+  
+    for (const e of entries) {
+      const v = e.Vaccine;
+      if (!v) continue;
+  
+      const name = getVaccineDisplayName(v, lang);
+ 
+      // ---------- Booster (بالأيام) ----------
+      if (typeof v.BoosterDose === 'number' && v.BoosterDose > 0) {
+        const due = addDays(new Date(e.date), v.BoosterDose); // تاريخ الجرعة
+        const delta = daysUntil(today, due);
+        const dateStr = fmt(due);
+  
+        // 1) قبل 7 أيام (مرّة واحدة)
+        if (delta === REMINDER_DAYS) {
+          const reminderDate = addDays(due, -REMINDER_DAYS); // نخزّن dueDate مختلف علشان يبقى إشعار مستقل
+          out.push({
+            type: 'VaccineDose',
+            itemId: e._id,
+            subtype: 'booster',
+            dueDate: reminderDate,
+            message: i18n.__('VACCINE_BOOSTER_DUE_IN_DAYS', { tagId: e.tagId, name, days: REMINDER_DAYS, date: dateStr }),
+            owner: v.owner,
+            severity: 'high',
+            stage: 'week'
+          });
+        }
+  
+        // 2) يوم الموعد نفسه
+        if (delta === 0) {
+          out.push({
+            type: 'VaccineDose',
+            itemId: e._id,
+            subtype: 'booster',
+            dueDate: due, // تاريخ الجرعة نفسه
+            message: i18n.__('VACCINE_BOOSTER_DUE_TODAY', { tagId: e.tagId, name, date: dateStr }),
+            owner: v.owner,
+            severity: 'high',
+            stage: 'expired' // خليه زي ما هو بما إن map بتاعتك week/expired
+          });
+        }
+      }
+  
+      // ---------- Annual (بالشهور) ----------
+      if (typeof v.AnnualDose === 'number' && v.AnnualDose > 0) {
+        const due = addMonths(new Date(e.date), v.AnnualDose);
+        const delta = daysUntil(today, due);
+        const dateStr = fmt(due);
+  
+        // 1) قبل 7 أيام
+        if (delta === REMINDER_DAYS) {
+          const reminderDate = addDays(due, -REMINDER_DAYS);
+          out.push({
+            type: 'VaccineDose',
+            itemId: e._id,
+            subtype: 'annual',
+            dueDate: reminderDate,
+            message: i18n.__('VACCINE_ANNUAL_DUE_IN_DAYS', { tagId: e.tagId, name, days: REMINDER_DAYS, date: dateStr }),
+            owner: v.owner,
+            severity: 'high',
+            stage: 'week'
+          });
+        }
+  
+        // 2) يوم الموعد
+        if (delta === 0) {
+          out.push({
+            type: 'VaccineDose',
+            itemId: e._id,
+            subtype: 'annual',
+            dueDate: due,
+            message: i18n.__('VACCINE_ANNUAL_DUE_TODAY', { tagId: e.tagId, name, date: dateStr }),
+            owner: v.owner,
+            severity: 'high',
+            stage: 'expired'
+          });
+        }
+      }
+    }
+   
+    return out;
+  };
+  
+  
+  
+  /** دالة جامعة لو تحبي تستخدمى واحدة ترجع الكل: */
+  const collectAllNotifications = async (lang = 'en') => {
+    const a = await checkExpiringItems(lang);
+    const b = await collectWeightNotifications(lang);
+    const c = await collectVaccineDoseNotifications(lang); // اختياري: سيبيها لو عايزة rely على الإنشاء وقت التسجيل فقط
+    return [...a, ...b, ...c];
+  };
 module.exports = {
-    checkExpiringItems
+    checkExpiringItems,
+    collectWeightNotifications,
+    collectVaccineDoseNotifications,
+    collectAllNotifications 
 }; 

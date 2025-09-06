@@ -78,5 +78,10 @@
     "NO_IMAGE_TO_DELETE": "No image found to delete",
     "IMAGE_DELETED_SUCCESSFULLY": "Animal image deleted successfully",
     "IMAGE_UPLOAD_FAILED": "Failed to upload image",
-    "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif"
+    "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif",
+    "WEIGHT_DUE_TODAY_OR_OVERDUE": "Scheduled weight for animal {{tagId}} is due on {{date}}.",
+    "VACCINE_BOOSTER_DUE_TODAY": "Booster dose of {{name}} for animal {{tagId}} is due today ({{date}}).",
+    "VACCINE_BOOSTER_DUE_IN_DAYS": "Booster dose of {{name}} for animal {{tagId}} is due in {days} day(s) ({{date}}).",
+    "VACCINE_ANNUAL_DUE_TODAY": "Annual dose of {{name}} for animal {{tagId}} is due today ({{date}}).",
+    "VACCINE_ANNUAL_DUE_IN_DAYS": "Annual dose of {{name}} for animal {{tagId}} is due in {days} day(s) ({{date}})."
 }

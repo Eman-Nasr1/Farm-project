@@ -78,5 +78,12 @@
     "NO_IMAGE_TO_DELETE": "لا توجد صورة للحذف",
     "IMAGE_DELETED_SUCCESSFULLY": "تم حذف صورة الحيوان بنجاح",
     "IMAGE_UPLOAD_FAILED": "فشل في رفع الصورة",
-    "INVALID_IMAGE_FORMAT": "صيغة الصورة غير صالحة. الصيغ المسموح بها: jpg, jpeg, png, gif"
+    "INVALID_IMAGE_FORMAT": "صيغة الصورة غير صالحة. الصيغ المسموح بها: jpg, jpeg, png, gif",
+    "WEIGHT_REMINDER_7_DAYS": "تذكير: وزن الحيوان {{tagId}} بعد 7 أيام بتاريخ {{date}}.",
+    "WEIGHT_DUE_TODAY_OR_OVERDUE": "موعد وزن الحيوان {{tagId}} مستحق بتاريخ {{date}}.",
+    "VACCINE_BOOSTER_DUE_TODAY": "جرعة البوستر للقاح {{name}} للحيوان {{tagId}} مستحقة اليوم ({{date}}).",
+    "VACCINE_BOOSTER_DUE_IN_DAYS": "جرعة البوستر للقاح {{name}} للحيوان {{tagId}} بعد {{days}}يوم ({{date}}).",
+    "VACCINE_ANNUAL_DUE_TODAY": "الجرعة السنوية للقاح {{name}} للحيوان {{tagId}} مستحقة اليوم ({{date}}).",
+    "VACCINE_ANNUAL_DUE_IN_DAYS": "الجرعة السنوية للقاح {{name}} للحيوان {{tagId}} بعد {{days} }يوم ({{date}})."
+
 }

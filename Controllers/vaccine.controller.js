@@ -14,6 +14,9 @@ const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 const excelOps = require('../utilits/excelOperations');
+const { filterNonExcludedAnimals, assertAnimalNotExcluded } = require('../helpers/excluded');   
+const { upsertVaccineDoseNotification } = require('../helpers/notifyVaccineDose');      
+const { addDays, addMonths } = require('../helpers/dateHelpers');
 
 const addVaccine = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
@@ -301,14 +304,14 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
 
   // Location shed filtering
   if (locationShed) {
-    const shed = await LocationShed.findOne({ 
+    const shed = await LocationShed.findOne({
       $or: [
         { locationShedName: locationShed },
         { _id: mongoose.Types.ObjectId.isValid(locationShed) ? locationShed : null }
       ],
       owner: userId
     });
-    
+
     if (!shed) {
       return res.status(404).json({
         status: "FAIL",
@@ -345,15 +348,15 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
     entryType: entry.entryType,
     vaccine: entry.Vaccine ? {
       _id: entry.Vaccine._id,
-      name: entry.Vaccine.otherVaccineName || 
-           (lang === 'ar' 
-             ? entry.Vaccine.vaccineType?.arabicName 
-             : entry.Vaccine.vaccineType?.englishName) || 
-           (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
-      diseaseType: lang === 'ar' 
-        ? entry.Vaccine.vaccineType?.arabicDiseaseType 
-        : entry.Vaccine.vaccineType?.englishDiseaseType || 
-          (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
+      name: entry.Vaccine.otherVaccineName ||
+        (lang === 'ar'
+          ? entry.Vaccine.vaccineType?.arabicName
+          : entry.Vaccine.vaccineType?.englishName) ||
+        (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
+      diseaseType: lang === 'ar'
+        ? entry.Vaccine.vaccineType?.arabicDiseaseType
+        : entry.Vaccine.vaccineType?.englishDiseaseType ||
+        (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
       dosePrice: entry.Vaccine.pricing?.dosePrice,
       expiryDate: entry.Vaccine.expiryDate,
       isExpired: entry.Vaccine.expiryDate < new Date()
@@ -392,8 +395,8 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   if (!animal) {
     return res.status(404).json({
       status: "FAILURE",
-      message: lang === 'ar' 
-        ? "لم يتم العثور على الحيوان أو غير مصرح به" 
+      message: lang === 'ar'
+        ? "لم يتم العثور على الحيوان أو غير مصرح به"
         : "Animal not found or unauthorized"
     });
   }
@@ -414,8 +417,8 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   if (vaccineEntries.length === 0) {
     return res.status(404).json({
       status: "FAILURE",
-      message: lang === 'ar' 
-        ? "لا توجد سجلات تطعيم لهذا الحيوان" 
+      message: lang === 'ar'
+        ? "لا توجد سجلات تطعيم لهذا الحيوان"
         : "No vaccine records found for this animal"
     });
   }
@@ -434,15 +437,15 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
       entryType: entry.entryType,
       vaccine: entry.Vaccine ? {
         _id: entry.Vaccine._id,
-        name: entry.Vaccine.otherVaccineName || 
-             (lang === 'ar' 
-               ? entry.Vaccine.vaccineType?.arabicName 
-               : entry.Vaccine.vaccineType?.englishName) || 
-             (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
-        diseaseType: lang === 'ar' 
-          ? entry.Vaccine.vaccineType?.arabicDiseaseType 
-          : entry.Vaccine.vaccineType?.englishDiseaseType || 
-            (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
+        name: entry.Vaccine.otherVaccineName ||
+          (lang === 'ar'
+            ? entry.Vaccine.vaccineType?.arabicName
+            : entry.Vaccine.vaccineType?.englishName) ||
+          (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
+        diseaseType: lang === 'ar'
+          ? entry.Vaccine.vaccineType?.arabicDiseaseType
+          : entry.Vaccine.vaccineType?.englishDiseaseType ||
+          (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
         dosePrice: entry.Vaccine.pricing?.dosePrice,
         isExpired: entry.Vaccine.expiryDate < new Date(),
         boosterDose: entry.Vaccine.BoosterDose,
@@ -473,27 +476,27 @@ const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
       _id: vaccineEntryId,
       owner: userId
     })
-    .populate({
-      path: 'Vaccine',
-      select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
-      populate: {
-        path: 'vaccineType',
-        select: 'englishName arabicName englishDiseaseType arabicDiseaseType'
-      }
-    })
-    .populate('locationShed', 'locationShedName');
+      .populate({
+        path: 'Vaccine',
+        select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
+        populate: {
+          path: 'vaccineType',
+          select: 'englishName arabicName englishDiseaseType arabicDiseaseType'
+        }
+      })
+      .populate('locationShed', 'locationShedName');
 
     if (!vaccineEntry) {
       return res.status(404).json({
         status: "FAILURE",
-        message: lang === 'ar' 
-          ? "لم يتم العثور على سجل التطعيم أو غير مصرح به" 
+        message: lang === 'ar'
+          ? "لم يتم العثور على سجل التطعيم أو غير مصرح به"
           : "Vaccine entry not found or unauthorized"
       });
     }
 
     // Find associated animal
-    const animal = await Animal.findOne({ 
+    const animal = await Animal.findOne({
       tagId: vaccineEntry.tagId,
       owner: userId
     }).select('animalType gender');
@@ -514,15 +517,15 @@ const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
       entryType: vaccineEntry.entryType,
       vaccine: vaccineEntry.Vaccine ? {
         _id: vaccineEntry.Vaccine._id,
-        name: vaccineEntry.Vaccine.otherVaccineName || 
-             (lang === 'ar' 
-               ? vaccineEntry.Vaccine.vaccineType?.arabicName 
-               : vaccineEntry.Vaccine.vaccineType?.englishName) || 
-             (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
-        diseaseType: lang === 'ar' 
-          ? vaccineEntry.Vaccine.vaccineType?.arabicDiseaseType 
-          : vaccineEntry.Vaccine.vaccineType?.englishDiseaseType || 
-            (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
+        name: vaccineEntry.Vaccine.otherVaccineName ||
+          (lang === 'ar'
+            ? vaccineEntry.Vaccine.vaccineType?.arabicName
+            : vaccineEntry.Vaccine.vaccineType?.englishName) ||
+          (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
+        diseaseType: lang === 'ar'
+          ? vaccineEntry.Vaccine.vaccineType?.arabicDiseaseType
+          : vaccineEntry.Vaccine.vaccineType?.englishDiseaseType ||
+          (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
         dosePrice: vaccineEntry.Vaccine.pricing?.dosePrice,
         isExpired: vaccineEntry.Vaccine.expiryDate < new Date(),
         boosterDose: vaccineEntry.Vaccine.BoosterDose,
@@ -556,93 +559,70 @@ const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
     });
   }
 
-  // Start a Mongoose session for transactions
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // Find the locationShed document by its ID
     const shed = await LocationShed.findById(locationShed).session(session);
     if (!shed) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({
-        status: "FAILURE",
-        message: `Location shed with ID "${locationShed}" not found.`,
-      });
+      await session.abortTransaction(); session.endSession();
+      return res.status(404).json({ status: "FAILURE", message: `Location shed with ID "${locationShed}" not found.` });
     }
 
-    // Find animals in the specified locationShed
-    const animals = await Animal.find({ locationShed }).session(session);
-    if (animals.length === 0) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({
-        status: "FAILURE",
-        message: `No animals found in shed "${shed.locationShedName}".`,
-      });
+    const animalsRaw = await Animal.find({ locationShed }).session(session);
+    const { eligible: animals } = await filterNonExcludedAnimals({ userId, animals: animalsRaw });
+    if (animalsRaw.length === 0) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(404).json({ status: "FAILURE", message: `No animals found in shed "${shed.locationShedName}".` });
     }
 
-    // Find the vaccine
     const vaccine = await Vaccine.findById(vaccineId).session(session);
     if (!vaccine) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({
-        status: "FAILURE",
-        message: `Vaccine with ID "${vaccineId}" not found.`,
-      });
+      await session.abortTransaction(); session.endSession();
+      return res.status(404).json({ status: "FAILURE", message: `Vaccine with ID "${vaccineId}" not found.` });
     }
-
-    // Check authorization
     if (vaccine.owner.toString() !== userId.toString()) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(403).json({
+      await session.abortTransaction(); session.endSession();
+      return res.status(403).json({ status: "FAILURE", message: "You are not authorized to use this vaccine." });
+    }
+
+    // ✅ تحقق إن فيه BoosterDose (أيام) و AnnualDose (شهور)
+    if (typeof vaccine.BoosterDose !== 'number' || vaccine.BoosterDose < 1) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({ status: "FAILURE", message: "This vaccine must have a valid BoosterDose (in days)." });
+    }
+    if (typeof vaccine.AnnualDose !== 'number' || vaccine.AnnualDose < 1) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({ status: "FAILURE", message: "This vaccine must have a valid AnnualDose (in months)." });
+    }
+
+    const vaccineName = vaccine.otherVaccineName || (vaccine.vaccineType?.englishName || "Unnamed Vaccine");
+    if (vaccine.isExpired()) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({
         status: "FAILURE",
-        message: "You are not authorized to use this vaccine.",
+        message: `Vaccine "${vaccineName}" is expired (Expired on ${vaccine.expiryDate.toISOString().split('T')[0]}).`
       });
     }
 
-    // Check stock availability (1 dose per animal)
     if (vaccine.stock.totalDoses < animals.length) {
-      await session.abortTransaction();
-      session.endSession();
+      await session.abortTransaction(); session.endSession();
       return res.status(400).json({
         status: "FAILURE",
         message: `Not enough vaccine doses available. Required: ${animals.length}, Available: ${vaccine.stock.totalDoses}.`,
       });
     }
-    const vaccineName = vaccine.otherVaccineName || (vaccine.vaccineType?.englishName || "Unnamed Vaccine");
 
-    // Check if vaccine is expired
-    if (vaccine.isExpired()) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Vaccine "${vaccineName}" is expired (Expired on ${vaccine.expiryDate.toISOString().split('T')[0]}).`
-
-      });
-    }
-
-    // Calculate vaccine cost per animal
     const vaccineCostPerAnimal = vaccine.pricing.dosePrice ||
       (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
     const totalVaccineCost = vaccineCostPerAnimal * animals.length;
 
-    // Deduct doses from vaccine stock
     vaccine.stock.totalDoses -= animals.length;
-    if (vaccine.stock.totalDoses % vaccine.stock.dosesPerBottle === 0) {
-      vaccine.stock.bottles = Math.floor(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
-    } else {
-      vaccine.stock.bottles = Math.floor(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle) + 1;
-    }
+    vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
     await vaccine.save({ session });
 
-    const createdVaccineEntries = [];
+    const createdVaccineEntries = []; // نجمع الإدخالات عشان نعمل تنبيهات بعد الـ commit
 
-    // Create vaccine entry for each animal
     for (const animal of animals) {
       const newVaccineEntry = new VaccineEntry({
         Vaccine: vaccine._id,
@@ -654,39 +634,57 @@ const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
       });
 
       await newVaccineEntry.save({ session });
-      createdVaccineEntries.push(newVaccineEntry);
+      createdVaccineEntries.push({ entryId: newVaccineEntry._id, tagId: animal.tagId });
 
-      // Update or create animal cost entry - now using vaccineCost field
-      let animalCostEntry = await AnimalCost.findOne({
-        animalTagId: animal.tagId,
-      }).session(session);
-
+      // تكاليف الحيوان
+      let animalCostEntry = await AnimalCost.findOne({ animalTagId: animal.tagId }).session(session);
       if (animalCostEntry) {
         animalCostEntry.vaccineCost += vaccineCostPerAnimal;
       } else {
         animalCostEntry = new AnimalCost({
           animalTagId: animal.tagId,
           vaccineCost: vaccineCostPerAnimal,
-          treatmentCost: 0,
-          feedCost: 0,
-          purchasePrice:0,
-          marketValue:0,
+          treatmentCost: 0, feedCost: 0, purchasePrice: 0, marketValue: 0,
           date: new Date(date),
           owner: userId,
         });
       }
-
       await animalCostEntry.save({ session });
     }
 
-    // Commit the transaction
     await session.commitTransaction();
     session.endSession();
+
+    // ✅ بعد نجاح العملية: احجز تنبيهات الجرعات (Booster & Annual) لكل إدخال
+    const lang = req.lang || req.user?.language || 'en';
+    const baseDate = new Date(date);
+
+    for (const { entryId, tagId } of createdVaccineEntries) {
+      // Booster بالأيام
+      await upsertVaccineDoseNotification({
+        owner: userId,
+        vaccineEntryId: entryId,
+        subtype: 'booster',
+        dueDate: addDays(baseDate, vaccine.BoosterDose),
+        tagId,
+        lang
+      });
+
+      // Annual بالشهور
+      await upsertVaccineDoseNotification({
+        owner: userId,
+        vaccineEntryId: entryId,
+        subtype: 'annual',
+        dueDate: addMonths(baseDate, vaccine.AnnualDose),
+        tagId,
+        lang
+      });
+    }
 
     res.status(201).json({
       status: "SUCCESS",
       data: {
-        vaccineEntries: createdVaccineEntries,
+        vaccineEntries: createdVaccineEntries.map(e => e.entryId),
         totalVaccineCost,
         dosesUsed: animals.length,
         remainingDoses: vaccine.stock.totalDoses,
@@ -695,7 +693,6 @@ const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
     });
 
   } catch (error) {
-    // If any error occurs, abort the transaction
     await session.abortTransaction();
     session.endSession();
     console.error("Error in addVaccineForAnimals:", error);
@@ -707,7 +704,6 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const { vaccineId, tagId, date, entryType } = req.body;
 
-  // Validate input
   if (!vaccineId || !tagId || !date || !entryType) {
     return res.status(400).json({
       status: "FAILURE",
@@ -719,65 +715,51 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    // Find animal
-    const animal = await Animal.findOne({
-      tagId,
-      owner: userId, // Ensure the animal belongs to the user  
-    }).session(session);
+    const animal = await Animal.findOne({ tagId, owner: userId }).session(session);
     if (!animal) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({
-        status: "FAILURE",
-        message: `Animal with tag ID "${tagId}" not found.`
-      });
+      await session.abortTransaction(); session.endSession();
+      return res.status(404).json({ status: "FAILURE", message: `Animal with tag ID "${tagId}" not found.` });
     }
 
-    // Find vaccine
-    const vaccine = await Vaccine.findOne({
-      _id: vaccineId,
-      owner: userId
-    }).session(session);
+    await assertAnimalNotExcluded({ userId, animalId: animal._id, tagId: animal.tagId, actionName: 'Adding vaccination' });
 
+    const vaccine = await Vaccine.findOne({ _id: vaccineId, owner: userId }).session(session);
     if (!vaccine) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({
-        status: "FAILURE",
-        message: "Vaccine not found or unauthorized."
-      });
+      await session.abortTransaction(); session.endSession();
+      return res.status(404).json({ status: "FAILURE", message: "Vaccine not found or unauthorized." });
     }
+
+    // ✅ تحقق من الجرعتين
+    if (typeof vaccine.BoosterDose !== 'number' || vaccine.BoosterDose < 1) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({ status: "FAILURE", message: "This vaccine must have a valid BoosterDose (in days)." });
+    }
+    if (typeof vaccine.AnnualDose !== 'number' || vaccine.AnnualDose < 1) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({ status: "FAILURE", message: "This vaccine must have a valid AnnualDose (in months)." });
+    }
+
     const vaccineName = vaccine.otherVaccineName || (vaccine.vaccineType?.englishName || "Unnamed Vaccine");
-    // Check if vaccine is expired
     if (vaccine.isExpired()) {
-      await session.abortTransaction();
-      session.endSession();
+      await session.abortTransaction(); session.endSession();
       return res.status(400).json({
         status: "FAILURE",
         message: `Vaccine "${vaccineName}" is expired (Expired on ${vaccine.expiryDate.toISOString().split('T')[0]}).`
       });
     }
 
-    // Check stock
     if (vaccine.stock.totalDoses < 1) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        status: "FAILURE",
-        message: "No vaccine doses available."
-      });
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({ status: "FAILURE", message: "No vaccine doses available." });
     }
 
-    // Calculate cost
     const dosePrice = vaccine.pricing.dosePrice ||
       (vaccine.pricing.bottlePrice / vaccine.stock.dosesPerBottle);
 
-    // Update stock
     vaccine.stock.totalDoses -= 1;
     vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
     await vaccine.save({ session });
 
-    // Create vaccine entry
     const newVaccineEntry = await VaccineEntry.create([{
       Vaccine: vaccine._id,
       tagId: animal.tagId,
@@ -787,19 +769,11 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
       owner: userId
     }], { session });
 
-    // Update animal cost
     await AnimalCost.findOneAndUpdate(
       { animalTagId: tagId },
       {
         $inc: { vaccineCost: dosePrice },
-        $setOnInsert: {
-          feedCost: 0,
-          treatmentCost: 0,
-          purchasePrice:0,
-          marketValue:0,
-          date: new Date(date),
-          owner: userId
-        }
+        $setOnInsert: { feedCost: 0, treatmentCost: 0, purchasePrice: 0, marketValue: 0, date: new Date(date), owner: userId }
       },
       { upsert: true, session }
     );
@@ -807,10 +781,35 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
+    // ✅ بعد النجاح: حجز تنبيهات الجرعات
+    const entryDoc = newVaccineEntry[0];
+    const lang = req.lang || req.user?.language || 'en';
+    const baseDate = new Date(date);
+
+    // Booster
+    await upsertVaccineDoseNotification({
+      owner: userId,
+      vaccineEntryId: entryDoc._id,
+      subtype: 'booster',
+      dueDate: addDays(baseDate, vaccine.BoosterDose),
+      tagId: animal.tagId,
+      lang
+    });
+
+    // Annual
+    await upsertVaccineDoseNotification({
+      owner: userId,
+      vaccineEntryId: entryDoc._id,
+      subtype: 'annual',
+      dueDate: addMonths(baseDate, vaccine.AnnualDose),
+      tagId: animal.tagId,
+      lang
+    });
+
     res.status(201).json({
       status: "SUCCESS",
       data: {
-        vaccineEntry: newVaccineEntry[0],
+        vaccineEntry: entryDoc,
         vaccineCost: dosePrice,
         remainingDoses: vaccine.stock.totalDoses
       }
@@ -823,6 +822,7 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
     next(error);
   }
 });
+
 
 const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();

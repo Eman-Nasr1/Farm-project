@@ -18,5 +18,11 @@
     "INVALID_IMAGE_FORMAT": "Invalid image format. Allowed formats: jpg, jpeg, png, gif",
     "NOTIFICATION_MARKED_READ": "Notification marked as read",
     "FAILED_TO_CHECK_NOTIFICATIONS": "Failed to check for notifications",
-    "UNKNOWN_VACCINE": "Unknown vaccine"
+    "UNKNOWN_VACCINE": "Unknown vaccine",
+   "WEIGHT_REMINDER_7_DAYS": "Reminder: weigh animal %{tagId} in 7 days on %{date}.",
+  "WEIGHT_DUE_TODAY_OR_OVERDUE": "Scheduled weight for animal %{tagId} is due on %{date}.",
+  "VACCINE_BOOSTER_DUE_TODAY": "Booster dose of %{name} for animal %{tagId} is due today (%{date}).",
+  "VACCINE_BOOSTER_DUE_IN_DAYS": "Booster dose of %{name} for animal %{tagId} is due in %{days} day(s) (%{date}).",
+  "VACCINE_ANNUAL_DUE_TODAY": "Annual dose of %{name} for animal %{tagId} is due today (%{date}).",
+  "VACCINE_ANNUAL_DUE_IN_DAYS": "Annual dose of %{name} for animal %{tagId} is due in %{days} day(s) (%{date})."
 } 
