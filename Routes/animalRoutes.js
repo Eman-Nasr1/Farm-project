@@ -18,7 +18,8 @@ router.post('/api/animal/addanimal',verifytoken,animalcontroller.addanimal);
 router.patch('/api/animal/updateanimal/:tagId',verifytoken,animalcontroller.updateanimal);
 router.delete('/api/animal/deleteanimal/:tagId',verifytoken,animalcontroller.deleteanimal);
 router.post('/api/animal/import', verifytoken, excelOps.uploadExcelFile, animalcontroller.importAnimalsFromExcel);
-
+router.post('/api/animal/moveanimals',verifytoken,animalcontroller.moveAnimals);
 router.get('/api/animal/getanimalCost',verifytoken,animalCostController.getallanimalscost);
 router.get('/api/animal/males',verifytoken,animalcontroller.getAllMaleAnimalTagIds);
+
 module.exports=router;

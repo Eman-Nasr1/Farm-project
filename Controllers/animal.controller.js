@@ -1,16 +1,25 @@
-const Animal=require('../Models/animal.model');
-const httpstatustext=require('../utilits/httpstatustext');
-const asyncwrapper=require('../middleware/asyncwrapper');
-const AppError=require('../utilits/AppError');
-const User=require('../Models/user.model');
-const LocationShed=require('../Models/locationsed.model');
-const Breed=require('../Models/breed.model');
-const AnimalCost=require('../Models/animalCost.model');
-const Excluded=require('../Models/excluded.model');
+const Animal = require('../Models/animal.model');
+const httpstatustext = require('../utilits/httpstatustext');
+const asyncwrapper = require('../middleware/asyncwrapper');
+const AppError = require('../utilits/AppError');
+const User = require('../Models/user.model');
+const LocationShed = require('../Models/locationsed.model');
+const Breed = require('../Models/breed.model');
+const AnimalCost = require('../Models/animalCost.model');
+const Excluded = require('../Models/excluded.model');
 const mongoose = require('mongoose');
 const i18n = require('../i18n');
 const excelOps = require('../utilits/excelOperations');
+const MovementLocation = require('../Models/movementLocation.model');
 
+async function findShed({ id, name, owner }) {
+    const q = {};
+    if (id) q._id = id;
+    if (name) q.locationShedName = name;
+    q.owner = owner;
+    const shed = await LocationShed.findOne(q);
+    return shed;
+}
 const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
     try {
         // First ensure we have a valid userId from the request
@@ -31,28 +40,28 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
 
         // Get counts by animal type (sheep/goat) excluding excluded animals
         const animalsByType = await Animal.aggregate([
-            { 
-                $match: { 
+            {
+                $match: {
                     owner: new mongoose.Types.ObjectId(userId),
                     _id: { $nin: excludedAnimalIds }
-                } 
+                }
             },
-            { 
-                $group: { 
-                    _id: "$animalType", 
-                    count: { $sum: 1 }, 
-                    males: { $sum: { $cond: [{ $eq: ["$gender", "male"] }, 1, 0] } }, 
-                    females: { $sum: { $cond: [{ $eq: ["$gender", "female"] }, 1, 0] } } 
-                } 
+            {
+                $group: {
+                    _id: "$animalType",
+                    count: { $sum: 1 },
+                    males: { $sum: { $cond: [{ $eq: ["$gender", "male"] }, 1, 0] } },
+                    females: { $sum: { $cond: [{ $eq: ["$gender", "female"] }, 1, 0] } }
+                }
             },
-            { 
-                $project: { 
-                    animalType: "$_id", 
-                    count: 1, 
-                    males: 1, 
-                    females: 1, 
-                    _id: 0 
-                } 
+            {
+                $project: {
+                    animalType: "$_id",
+                    count: 1,
+                    males: 1,
+                    females: 1,
+                    _id: 0
+                }
             }
         ]);
 
@@ -75,24 +84,24 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
 
         // Get counts by gender excluding excluded animals
         const animalsByGender = await Animal.aggregate([
-            { 
-                $match: { 
+            {
+                $match: {
                     owner: new mongoose.Types.ObjectId(userId),
                     _id: { $nin: excludedAnimalIds }
-                } 
+                }
             },
-            { 
-                $group: { 
-                    _id: "$gender", 
-                    count: { $sum: 1 } 
-                } 
+            {
+                $group: {
+                    _id: "$gender",
+                    count: { $sum: 1 }
+                }
             },
-            { 
-                $project: { 
-                    gender: "$_id", 
-                    count: 1, 
-                    _id: 0 
-                } 
+            {
+                $project: {
+                    gender: "$_id",
+                    count: 1,
+                    _id: 0
+                }
             }
         ]);
 
@@ -180,7 +189,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             const breed = await Breed.findOne({ breedName, owner: userId });
 
             if (!breed) {
-                throw new Error(i18n.__('BREED_NOT_FOUND', { breed: breedName, row: i+1 }));
+                throw new Error(i18n.__('BREED_NOT_FOUND', { breed: breedName, row: i + 1 }));
             }
 
             // Create and save new animal
@@ -241,11 +250,11 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
         const userId = req.user?.id || req.userId;
         const lang = req.query.lang || 'en';
         const isArabic = lang === 'ar';
-        
+
         if (!userId) {
             return next(AppError.create(isArabic ? 'المستخدم غير مصرح' : 'User not authenticated', 401, httpstatustext.FAIL));
         }
-        
+
         // Build filter
         const filter = { owner: userId };
         ['animalType', 'gender', 'locationShed', 'breed', 'tagId'].forEach(field => {
@@ -354,7 +363,7 @@ const getsingleanimal = asyncwrapper(async (req, res, next) => {
         .populate({
             path: 'locationShed',
             select: 'locationShedName' // Only include the locationShedName field
-        }) .populate({
+        }).populate({
             path: 'breed',
             select: 'breedName' // Only include the breedName field
         });
@@ -405,7 +414,7 @@ const addanimal = asyncwrapper(async (req, res, next) => {
     }
 
     // Create the animal
-    
+
     const newanimal = new Animal({
         ...animalData,
         birthDate: finalBirthDate,
@@ -435,106 +444,106 @@ const addanimal = asyncwrapper(async (req, res, next) => {
 const updateanimal = asyncwrapper(async (req, res, next) => {
     const animalId = req.params.tagId; // تأكد إن ده هو الـ _id فعلاً وليس tagId
     const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
-  
+
     // تحديث المكان لو الاسم موجود
     if (locationShedName) {
-      const locationShed = await LocationShed.findOne({ locationShedName, owner: req.user.id });
-      if (!locationShed) {
-        return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
-      }
-      updateData.locationShed = locationShed._id;
+        const locationShed = await LocationShed.findOne({ locationShedName, owner: req.user.id });
+        if (!locationShed) {
+            return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
+        }
+        updateData.locationShed = locationShed._id;
     }
-  
+
     // تحديث السلالة لو الاسم موجود
     if (breedName) {
-      const breed = await Breed.findOne({ breedName, owner: req.user.id });
-      if (!breed) {
-        return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
-      }
-      updateData.breed = breed._id;
+        const breed = await Breed.findOne({ breedName, owner: req.user.id });
+        if (!breed) {
+            return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
+        }
+        updateData.breed = breed._id;
     }
-  
+
     // تاريخ الميلاد أو السن
     if (birthDate) {
-      updateData.birthDate = new Date(birthDate);
+        updateData.birthDate = new Date(birthDate);
     } else if (age && (age.years || age.months || age.days)) {
-      const now = new Date();
-      const calculatedDate = new Date(
-        now.getFullYear() - (age.years || 0),
-        now.getMonth() - (age.months || 0),
-        now.getDate() - (age.days || 0)
-      );
-      updateData.birthDate = calculatedDate;
+        const now = new Date();
+        const calculatedDate = new Date(
+            now.getFullYear() - (age.years || 0),
+            now.getMonth() - (age.months || 0),
+            now.getDate() - (age.days || 0)
+        );
+        updateData.birthDate = calculatedDate;
     }
-  
+
     // تنفيذ التحديث
     const updatedanimal = await Animal.findOneAndUpdate(
-      { _id: animalId, owner: req.user.id },
-      { $set: updateData },
-      { new: true, runValidators: true }
+        { _id: animalId, owner: req.user.id },
+        { $set: updateData },
+        { new: true, runValidators: true }
     );
-  
+
     if (!updatedanimal) {
-      return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
+        return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
     }
-  
+
     // === تحديث AnimalCost لو اتغير marketValue أو purchasePrice ===
     const hasMarketValue = Object.prototype.hasOwnProperty.call(updateData, 'marketValue');
     const hasPurchasePrice = Object.prototype.hasOwnProperty.call(updateData, 'purchasePrice');
-  
+
     if (hasMarketValue || hasPurchasePrice) {
-      const incomingMarketValue = updateData.marketValue;      // ممكن تكون 0 — مسموح
-      const incomingPurchasePrice = updateData.purchasePrice;  // ممكن تكون 0 — مسموح
-  
-      const existingCost = await AnimalCost.findOne({
-        animalTagId: updatedanimal.tagId,
-        owner: req.user.id
-      });
-  
-      const updateCostData = {};
-      if (hasMarketValue) updateCostData.marketValue = incomingMarketValue;
-      if (hasPurchasePrice) updateCostData.purchasePrice = incomingPurchasePrice;
-  
-      if (hasPurchasePrice) {
-        const feedCost = existingCost?.feedCost ?? 0;
-        const treatmentCost = existingCost?.treatmentCost ?? 0;
-        const vaccineCost = existingCost?.vaccineCost ?? 0;
-        const otherCost = existingCost?.otherCost ?? 0;
-        updateCostData.totalCost = Number(incomingPurchasePrice) + feedCost + treatmentCost + vaccineCost + otherCost;
-      }
-  
-      await AnimalCost.findOneAndUpdate(
-        { animalTagId: updatedanimal.tagId, owner: req.user.id },
-        { $set: updateCostData },
-        { new: true, runValidators: true, upsert: true } // upsert لو مفيش سجل قبل كده
-      );
+        const incomingMarketValue = updateData.marketValue;      // ممكن تكون 0 — مسموح
+        const incomingPurchasePrice = updateData.purchasePrice;  // ممكن تكون 0 — مسموح
+
+        const existingCost = await AnimalCost.findOne({
+            animalTagId: updatedanimal.tagId,
+            owner: req.user.id
+        });
+
+        const updateCostData = {};
+        if (hasMarketValue) updateCostData.marketValue = incomingMarketValue;
+        if (hasPurchasePrice) updateCostData.purchasePrice = incomingPurchasePrice;
+
+        if (hasPurchasePrice) {
+            const feedCost = existingCost?.feedCost ?? 0;
+            const treatmentCost = existingCost?.treatmentCost ?? 0;
+            const vaccineCost = existingCost?.vaccineCost ?? 0;
+            const otherCost = existingCost?.otherCost ?? 0;
+            updateCostData.totalCost = Number(incomingPurchasePrice) + feedCost + treatmentCost + vaccineCost + otherCost;
+        }
+
+        await AnimalCost.findOneAndUpdate(
+            { animalTagId: updatedanimal.tagId, owner: req.user.id },
+            { $set: updateCostData },
+            { new: true, runValidators: true, upsert: true } // upsert لو مفيش سجل قبل كده
+        );
     }
-  
+
     // إرجاع الحيوان بعد الـ populate
     const populatedAnimal = await Animal.findById(updatedanimal._id)
-      .populate('locationShed', 'locationShedName')
-      .populate('breed', 'breedName');
-  
+        .populate('locationShed', 'locationShedName')
+        .populate('breed', 'breedName');
+
     return res.status(200).json({
-      status: httpstatustext.SUCCESS,
-      data: { animal: populatedAnimal }
+        status: httpstatustext.SUCCESS,
+        data: { animal: populatedAnimal }
     });
-  });
-  
+});
+
 
 const deleteanimal = asyncwrapper(async (req, res, next) => {
-    const animalId =req.params.tagId; // Use consistent parameter name
-    
+    const animalId = req.params.tagId; // Use consistent parameter name
+
     // 1. Find the animal first to check existence
     const animal = await Animal.findById(animalId);
-    
+
     if (!animal) {
         return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
     }
 
     // 2. Perform cascading delete using the pre-delete hook
     await animal.deleteOne(); // This triggers your schema's pre-delete hook
-    
+
     // 3. Proper success response
     res.status(204).json({
         status: httpstatustext.SUCCESS,
@@ -591,9 +600,115 @@ const getAllMaleAnimalTagIds = asyncwrapper(async (req, res, next) => {
         data: tagIds
     });
 });
+const moveAnimals = asyncwrapper(async (req, res, next) => {
+    const userId = req.user.id;
 
+    const {
+        toLocationShed,
+        toLocationShedName,
+        fromLocationShed,
+        fromLocationShedName,
+        animalIds,
+        tagIds,
+        filter = {},
+        enforceFromShed = true
+    } = req.body;
 
-module.exports={
+    if (!toLocationShed && !toLocationShedName) {
+        return next(AppError.create('toLocationShed (id) أو toLocationShedName مطلوب', 400, httpstatustext.FAIL));
+    }
+
+    const toShed = await findShed({ id: toLocationShed, name: toLocationShedName, owner: userId });
+    if (!toShed) return next(AppError.create('العنبر الوجهة غير موجود لهذا المستخدم', 404, httpstatustext.FAIL));
+
+    let fromShed = null;
+    if (fromLocationShed || fromLocationShedName) {
+        fromShed = await findShed({ id: fromLocationShed, name: fromLocationShedName, owner: userId });
+        if (!fromShed) return next(AppError.create('العنبر المصدر غير موجود لهذا المستخدم', 404, httpstatustext.FAIL));
+        if (String(fromShed._id) === String(toShed._id)) {
+            return next(AppError.create('العنبر المصدر والوجهة لا يجب أن يكونا نفس العنبر', 400, httpstatustext.FAIL));
+        }
+    }
+
+    // ---- فلتر الحيوانات ----
+    const animalFilter = { owner: userId };
+
+    if (enforceFromShed && fromShed) animalFilter.locationShed = fromShed._id;
+
+    if (Array.isArray(animalIds) && animalIds.length) {
+        animalFilter._id = { $in: animalIds.filter(Boolean).map(id => new mongoose.Types.ObjectId(id)) };
+    } else if (Array.isArray(tagIds) && tagIds.length) {
+        animalFilter.tagId = { $in: tagIds.filter(Boolean) };
+    }
+
+    if (filter.gender) animalFilter.gender = filter.gender;
+    if (filter.animalType) animalFilter.animalType = filter.animalType;
+    if (filter.breed) animalFilter.breed = filter.breed; // _id للسلالة
+
+    // مهم: لا ننقل من هم بالفعل في عنبر الوجهة
+    animalFilter.locationShed = enforceFromShed && fromShed
+        ? fromShed._id
+        : { $ne: toShed._id };
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        // نجيب المرشحين للنقل (قبل التحديث)
+        const toMove = await Animal.find(animalFilter)
+            .session(session)
+            .select('_id tagId locationShed');
+
+        if (toMove.length === 0) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(200).json({
+                status: httpstatustext.SUCCESS,
+                moved: 0,
+                message: 'لا توجد حيوانات مطابقة للفلتر/الاختيار.',
+                data: { toShed: { id: toShed._id, name: toShed.locationShedName } }
+            });
+        }
+
+        // (1) نسجل الحركة قبل الـ commit (ما زلنا داخل الترانزاكشن)
+        const movementDocs = toMove.map(a => ({
+            animalId: a._id,
+            fromLocationShed: a.locationShed || (fromShed?._id || null),
+            toLocationShed: toShed._id,
+            owner: userId,
+            movedBy: req.user.id,
+            movedAt: new Date()
+        }));
+
+        await MovementLocation.insertMany(movementDocs, { session, ordered: false });
+
+        // (2) ننفذ النقل فعليًا
+        const result = await Animal.updateMany(
+            { _id: { $in: toMove.map(a => a._id) }, owner: userId },
+            { $set: { locationShed: toShed._id } },
+            { session }
+        );
+
+        // إنهاء الترانزاكشن
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(200).json({
+            status: httpstatustext.SUCCESS,
+            moved: result.modifiedCount || 0,
+            logged: movementDocs.length,
+            from: fromShed ? { id: fromShed._id, name: fromShed.locationShedName } : null,
+            to: { id: toShed._id, name: toShed.locationShedName },
+            animals: toMove.map(a => a.tagId)
+        });
+    } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+        return next(err);
+    }
+});
+
+module.exports = {
     getallanimals,
     getsingleanimal,
     addanimal,
@@ -605,4 +720,5 @@ module.exports={
     getAnimalStatistics,
     downloadAnimalTemplate,
     getAllMaleAnimalTagIds,
+    moveAnimals,
 }
