@@ -42,5 +42,5 @@ const Weightschema = new mongoose.Schema(
 
     }
 )
-
+Weightschema.index({ owner: 1, animalId: 1, Date: 1, weightType: 1 }, { unique: true });
 module.exports = mongoose.model('Weight', Weightschema)
