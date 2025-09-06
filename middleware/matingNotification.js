@@ -71,7 +71,7 @@ cron.schedule('0 8 * * *', async () => {
                         $gte: new Date(oneWeekFromNow.setHours(0, 0, 0, 0)),
                         $lte: new Date(oneWeekFromNow.setHours(23, 59, 59, 999))
                     },
-                    sonarRsult: 'positive',
+                    sonarResult: 'positive',
                     deliveryNotificationSent: false
                 }
             ]
@@ -83,7 +83,7 @@ cron.schedule('0 8 * * *', async () => {
                 await sendSingleNotification(mating.owner.email, mating, 'sonar');
             }
             
-            if (mating.expectedDeliveryDate && mating.sonarRsult === 'positive' && !mating.deliveryNotificationSent) {
+            if (mating.expectedDeliveryDate && mating.sonarResult === 'positive' && !mating.deliveryNotificationSent) {
                 await sendSingleNotification(mating.owner.email, mating, 'delivery');
             }
         }

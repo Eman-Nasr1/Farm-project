@@ -19,7 +19,7 @@ const matingValidationRules = () => {
         body('sonarDate')  
             .notEmpty().withMessage('Mating Date date is required') ,  
              
-        body('sonarRsult')  
+        body('sonarResult')  
             .optional()  
             .isIn(['positive', 'negative']).withMessage('Sonar Result must be either "positive" or "negative"'),  
         body('expectedDeliveryDate')  
