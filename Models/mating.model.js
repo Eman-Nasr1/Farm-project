@@ -81,7 +81,7 @@ MatingSchema.pre('save', function (next) {
         this.expectedDeliveryDate = new Date(this.matingDate.getTime() + remainingDays * 24 * 60 * 60 * 1000);
     }
     // Otherwise calculate normally if sonarResult is positive
-    else if (this.sonarRsult === 'positive' && this.matingDate) {
+    else if (this.sonarResult === 'positive' && this.matingDate) {
         const daysToAdd = 147;
         this.expectedDeliveryDate = new Date(this.matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
     }
@@ -128,7 +128,7 @@ MatingSchema.pre('findOneAndUpdate', async function (next) {
         }
     }
     // Otherwise calculate normally if sonarResult is positive
-    else if (update.sonarRsult === 'positive') {
+    else if (update.sonarResult === 'positive') {
         let matingDate;
         
         if (update.matingDate) {
@@ -142,7 +142,7 @@ MatingSchema.pre('findOneAndUpdate', async function (next) {
             const daysToAdd = 147;
             update.expectedDeliveryDate = new Date(matingDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
         }
-    } else if (update.sonarRsult === 'negative') {
+    } else if (update.sonarResult === 'negative') {
         update.expectedDeliveryDate = null;
     }
 
