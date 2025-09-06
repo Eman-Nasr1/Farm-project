@@ -9,5 +9,5 @@ router.get('/api/location/GetSingle-Locationshed/:locationShedId',verifytoken,lo
 router.post('/api/location/addlocationshed',verifytoken,locationShedController.addLocationShed);
 router.patch('/api/location/updatelocationShed/:locationShedId',verifytoken, locationShedController.updateLocationShed);
 router.delete('/api/location/deletelocationShed/:locationShedId',verifytoken,locationShedController.deleteLocationShed);
-
+router.get('/api/location/getanimalsinshed',verifytoken,locationShedController.getAnimalsInShed);
 module.exports=router;
