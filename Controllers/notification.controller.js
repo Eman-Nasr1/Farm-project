@@ -1,5 +1,5 @@
 const Notification = require('../Models/notification.model');
-const notificationChecker = require('../utilits/notificationChecker');
+const { collectAllNotifications } = require('../utilits/notificationChecker');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
 const AppError = require('../utilits/AppError');
@@ -71,67 +71,65 @@ const deleteNotification = asyncwrapper(async (req, res, next) => {
 // Check for new notifications
 const checkNotifications = asyncwrapper(async (req, res) => {
   const userId = req.user.id;
-  const lang = req.lang || req.user?.language || 'en';  // from middleware or user
+  const lang = req.lang || req.user?.language || 'en';
 
   try {
-    // ⬇️ Pass lang so messages come out localized
-    const notifications = await notificationChecker.checkExpiringItems(lang);
+    const notes = await collectAllNotifications(lang);
+    const userNotes = notes.filter(n => String(n.owner) === String(userId));
 
-    const userNotifications = notifications.filter(n => n.owner.toString() === userId);
-
-    // (Optional) prevent duplicates by upserting on (type,itemId,expiryDate)
-    // (Optional) prevent duplicates & control unread based on stage changes
-    await Promise.all(
-      userNotifications.map(async (n) => {
-        // دوري على إشعار قديم لنفس (owner, type, itemId)
+    await Promise.all(userNotes.map(async (n) => {
+      // الأنواع التي تميّز بالمَوعد dueDate
+      if ((n.type === 'Weight' || n.type === 'VaccineDose') && n.dueDate) {
         const existing = await Notification.findOne({
-          owner: userId,
-          type: n.type,
-          itemId: n.itemId
+          owner: userId, type: n.type, itemId: n.itemId, dueDate: n.dueDate
         });
-
         if (!existing) {
-          // أول مرة: أنشئيه Unread
           await Notification.create({
             owner: userId,
             type: n.type,
             itemId: n.itemId,
+            subtype: n.subtype,
+            dueDate: n.dueDate,
             message: n.message,
             severity: n.severity,
-            stage: n.stage,   // ← المرحلة
+            stage: n.stage,
             isRead: false
           });
-          return;
+        } else {
+          const stageChanged = existing.stage !== n.stage;
+          await Notification.updateOne(
+            { _id: existing._id },
+            { $set: { message: n.message, severity: n.severity, stage: n.stage, ...(stageChanged ? { isRead: false } : {}) } }
+          );
         }
+        return;
+      }
 
-        // لو المرحلة اتغيّرت (month→week أو week→expired)
+      // الأنواع القديمة بدون dueDate
+      const existing = await Notification.findOne({ owner: userId, type: n.type, itemId: n.itemId });
+      if (!existing) {
+        await Notification.create({
+          owner: userId,
+          type: n.type,
+          itemId: n.itemId,
+          message: n.message,
+          severity: n.severity,
+          stage: n.stage,
+          isRead: false
+        });
+      } else {
         const stageChanged = existing.stage !== n.stage;
-
         await Notification.updateOne(
           { _id: existing._id },
-          {
-            $set: {
-              message: n.message,
-              severity: n.severity,
-              stage: n.stage,
-              ...(stageChanged ? { isRead: false } : {}) // رجّعه Unread بس لو المرحلة اتغيّرت
-            }
-          }
+          { $set: { message: n.message, severity: n.severity, stage: n.stage, ...(stageChanged ? { isRead: false } : {}) } }
         );
-      })
-    );
+      }
+    }));
 
-
-    res.json({
-      status: httpstatustext.SUCCESS,
-      data: { notifications: userNotifications }
-    });
+    res.json({ status: httpstatustext.SUCCESS, data: { notifications: userNotes } });
   } catch (error) {
     console.error('Error checking notifications:', error);
-    res.status(500).json({
-      status: httpstatustext.ERROR,
-      message: i18n.__('FAILED_TO_CHECK_NOTIFICATIONS')
-    });
+    res.status(500).json({ status: httpstatustext.ERROR, message: i18n.__('FAILED_TO_CHECK_NOTIFICATIONS') });
   }
 });
 
