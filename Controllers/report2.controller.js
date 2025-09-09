@@ -365,7 +365,7 @@ async function buildCombinedReportData({ userId, animalType, fromDate, toDate, l
     vaccineConsumptionAgg, remainingVaccineStockAgg, animalReportAgg, excludedReportAgg,
     ...(user.registerationType === 'breeding' ? [] : []),
     Mating.aggregate([
-      { $match: { owner: userId, sonarRsult: 'positive', matingDate: { $gte: fromDate, $lte: toDate }, expectedDeliveryDate: { $gt: new Date() } } },
+      { $match: { owner: userId, sonarResult: 'positive', matingDate: { $gte: fromDate, $lte: toDate }, expectedDeliveryDate: { $gt: new Date() } } },
       { $lookup: { from: 'animals', localField: 'animalId', foreignField: '_id', as: 'animal' } },
       { $unwind: { path: '$animal', preserveNullAndEmptyArrays: true } },
       { $match: { 'animal.animalType': animalType } },
