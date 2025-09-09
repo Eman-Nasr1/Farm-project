@@ -10,6 +10,7 @@ const i18n = require('../i18n');
 const setLocale = require('../middleware/localeMiddleware');
 const upload = multer({ storage: storage }).single('file');
 const excelOps = require('../utilits/excelOperations');
+const { assertNotExcluded } = require('../helpers/excluded');
 
 
 const getallweight =asyncwrapper(async(req,res)=>{
@@ -77,54 +78,58 @@ const getsingleWeight = asyncwrapper(async (req, res, next) => {
 const addweight = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const { tagId, Date: rawDate, weight, ...rest } = req.body;
-
+  
     const weightDate = new Date(rawDate);
     if (isNaN(weightDate)) {
-        return next(AppError.create('Invalid date format', 400, httpstatustext.FAIL));
+      return next(AppError.create('Invalid date format', 400, httpstatustext.FAIL));
     }
-
+  
     const animal = await Animal.findOne({ tagId, owner: userId });
     if (!animal) {
-        return next(AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL));
+      return next(AppError.create('Animal not found for the provided tagId', 404, httpstatustext.FAIL));
     }
-
-    // Get the first weight
-    const firstWeight = await Weight.findOne({ 
-        animalId: animal._id 
-    }).sort({ Date: 1 });
-
+  
+    // ✅ امنع وزن لحيوان مستبعد
+    try {
+      await assertNotExcluded({ userId, animalId: animal._id, tagId, actionName: 'Adding weight' });
+    } catch (e) {
+      return next(e);
+    }
+  
+    // Get the first weight (أقدم وزن)
+    const firstWeight = await Weight.findOne({ animalId: animal._id }).sort({ Date: 1 });
+  
     let ADG = null;
     let conversionEfficiency = null;
-
+  
     if (firstWeight && firstWeight.Date.getTime() !== weightDate.getTime()) {
-        const weightDiffKg = weight - firstWeight.weight;
-        const daysDiff = Math.ceil((weightDate - firstWeight.Date) / (1000 * 60 * 60 * 24));
-        
-        if (daysDiff > 0 && weightDiffKg > 0) {
-            // Calculate and limit to 2 decimal places
-            ADG = parseFloat(((weightDiffKg * 1000) / daysDiff).toFixed(2));
-            conversionEfficiency = parseFloat((ADG / (firstWeight.weight * 1000) * 100).toFixed(2));
-        }
+      const weightDiffKg = weight - firstWeight.weight;
+      const daysDiff = Math.ceil((weightDate - firstWeight.Date) / (1000 * 60 * 60 * 24));
+  
+      if (daysDiff > 0 && weightDiffKg > 0) {
+        ADG = parseFloat(((weightDiffKg * 1000) / daysDiff).toFixed(2));
+        conversionEfficiency = parseFloat((ADG / (firstWeight.weight * 1000) * 100).toFixed(2));
+      }
     }
-
+  
     const newWeight = new Weight({
-        tagId,
-        Date: weightDate,
-        weight,
-        ...rest,
-        owner: userId,
-        animalId: animal._id,
-        ADG,
-        conversionEfficiency
+      tagId,
+      Date: weightDate,
+      weight,
+      ...rest,
+      owner: userId,
+      animalId: animal._id,
+      ADG,
+      conversionEfficiency,
     });
-
+  
     await newWeight.save();
-
+  
     res.json({
-        status: httpstatustext.SUCCESS,
-        data: { weight: newWeight }
+      status: httpstatustext.SUCCESS,
+      data: { weight: newWeight },
     });
-});
+  });
 const deleteweight= asyncwrapper(async(req,res,next)=>{
     const userId = req.user.id;
     const weightId = req.params.weightId;

@@ -12,7 +12,7 @@ const Animal = require("../Models/animal.model");
 const mongoose = require("mongoose");
 const { ConsoleMessage } = require("puppeteer");
 const i18n = require('../i18n');
-
+const { filterNonExcludedAnimals } = require('../helpers/excluded');
 const getallfeeds = asyncwrapper(async (req, res) => {
   const userId = req.user.id;
   const query = req.query;
@@ -145,143 +145,125 @@ const deletefeed = asyncwrapper(async (req, res,next) => {
 
 // --------------------------------------feed by shed ------------------------
 
+
+
 const addFeedToShed = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const { locationShed, feeds, date } = req.body;
 
   if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
-    return res.status(400).json({
-      status: "FAILURE",
-      message: "locationShed and feeds (array) are required.",
-    });
+    return res.status(400).json({ status: "FAILURE", message: "locationShed and feeds (array) are required." });
   }
 
-  // Find the locationShed document by its ID
-  const shed = await LocationShed.findById(locationShed);
-  if (!shed) {
-    return res.status(404).json({
-      status: "FAILURE",
-      message: `Location shed with ID "${locationShed}" not found.`,
-    });
+  let entryDate = new Date();
+  if (date) {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) {
+      return res.status(400).json({ status: "FAILURE", message: "Invalid date format. Please use ISO 8601 format." });
+    }
+    entryDate = d;
   }
 
-  // Find animals in the specified locationShed
-  const animals = await Animal.find({ locationShed });
-  if (animals.length === 0) {
-    return res.status(404).json({
-      status: "FAILURE",
-      message: `No animals found in shed "${shed.locationShedName}".`,
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const shed = await LocationShed.findById(locationShed).session(session);
+    if (!shed) throw AppError.create(`Location shed with ID "${locationShed}" not found.`, 404, httpstatustext.FAIL);
+
+    // مهم: اربط الحيوانات بالـ owner
+    const animalsRaw = await Animal.find({ locationShed, owner: userId }).session(session);
+    if (animalsRaw.length === 0) {
+      throw AppError.create(`No animals found in shed "${shed.locationShedName}".`, 404, httpstatustext.FAIL);
+    }
+
+    // ✅ استخدم الـ helper
+    const { eligible: animals, excluded } = await filterNonExcludedAnimals({ userId, animals: animalsRaw, session });
+    if (animals.length === 0) {
+      throw AppError.create(`All animals in shed "${shed.locationShedName}" are excluded; no feed allocation created.`, 400, httpstatustext.FAIL);
+    }
+
+    // تحقق من الأعلاف أولًا (من غير خصم)
+    const feedCosts = [];
+    const allFeeds = [];
+    const feedsToUpdate = [];
+
+    for (const { feedId, quantity } of feeds) {
+      if (!feedId || !quantity) throw AppError.create("Each feed must have feedId and quantity.", 400, httpstatustext.FAIL);
+      if (isNaN(quantity) || quantity <= 0) throw AppError.create(`Invalid quantity: "${quantity}".`, 400, httpstatustext.FAIL);
+
+      const feed = await Feed.findById(feedId).session(session);
+      if (!feed) throw AppError.create(`Feed with ID "${feedId}" not found.`, 404, httpstatustext.FAIL);
+      if (feed.owner.toString() !== userId.toString()) throw AppError.create("You are not authorized to use this feed.", 403, httpstatustext.FAIL);
+      if (feed.quantity < quantity) {
+        throw AppError.create(`Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Requested: ${quantity}.`, 400, httpstatustext.FAIL);
+      }
+
+      const cost = (feed.price || 0) * quantity;
+      feedCosts.push({ feed: feed._id, quantity, cost });
+      allFeeds.push({ feedId: feed._id, feedName: feed.name, quantity });
+      feedsToUpdate.push({ feed, quantity });
+    }
+
+    const totalFeedCost = feedCosts.reduce((s, i) => s + i.cost, 0);
+    const perAnimalFeedCost = totalFeedCost / animals.length;
+
+    // خصم المخزون بعد النجاح
+    for (const { feed, quantity } of feedsToUpdate) {
+      feed.quantity -= quantity;
+      await feed.save({ session });
+    }
+
+    // إنشاء السجل
+    const shedEntry = new ShedEntry({
+      locationShed: shed._id,
+      owner: userId,
+      feeds: allFeeds,
+      date: entryDate,
     });
-  }
+    await shedEntry.save({ session });
 
-  const feedCosts = [];
-  const allFeeds = [];
-
-  for (const feedItem of feeds) {
-    const { feedId, quantity } = feedItem;
-
-    if (!feedId || !quantity) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: "Each feed must have feedId and quantity.",
-      });
-    }
-
-    if (isNaN(quantity) || quantity <= 0) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Invalid quantity: "${quantity}". It must be a positive number.`,
-      });
-    }
-
-    const feed = await Feed.findById(feedId);
-    if (!feed) {
-      return res.status(404).json({
-        status: "FAILURE",
-        message: `Feed with ID "${feedId}" not found.`,
-      });
-    }
-
-    if (feed.owner.toString() !== userId.toString()) {
-      return res.status(403).json({
-        status: "FAILURE",
-        message: "You are not authorized to use this feed.",
-      });
-    }
-
-    if (feed.quantity < quantity) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Not enough stock for feed "${feed.name}". Available: ${feed.quantity}, Requested: ${quantity}.`,
-      });
-    }
-
-    feed.quantity -= quantity;
-    await feed.save();
-    const feedCost = feed.price * quantity;
-    feedCosts.push({ feed: feed._id, quantity, cost: feedCost });
-
-    allFeeds.push({
-      feedId: feed._id,
-      feedName: feed.name,
-      quantity: quantity,
-    });
-  }
-
-  const totalFeedCost = feedCosts.reduce((sum, item) => sum + item.cost, 0);
-  const perAnimalFeedCost = totalFeedCost / animals.length;
-
-  const shedEntry = new ShedEntry({
-    locationShed: shed._id, // Store the locationShed ID
-    owner: userId,
-    feeds: allFeeds,
-    date: date ? new Date(date) : Date.now(),
-  });
-
-  await shedEntry.save();
-
-  for (const animal of animals) {
-    let animalCostEntry = await AnimalCost.findOne({
-      animalTagId: animal.tagId,
-    });
-
-    if (animalCostEntry) {
-      animalCostEntry.feedCost += perAnimalFeedCost;
-    } else {
-      animalCostEntry = new AnimalCost({
-        animalTagId: animal.tagId,
-        feedCost: perAnimalFeedCost,
-        treatmentCost: 0,
-        vaccineCost:0,
-        purchasePrice:0,
-        marketValue:0,
-        date: date,
-        owner: userId,
-      });
-    }
-
-    await animalCostEntry.save();
-  }
-
-  res.status(201).json({
-    status: "SUCCESS",
-    data: {
-      shedEntry: {
-        _id: shedEntry._id,
-        locationShed: {
-          _id: shed._id,
-          locationShedName: shed.locationShedName, // Include locationShedName in the response
+    // تحديث تكاليف الحيوانات (eligible فقط)
+    const ops = animals.map(a => ({
+      updateOne: {
+        filter: { animalTagId: a.tagId, owner: userId },
+        update: {
+          $inc: { feedCost: perAnimalFeedCost },
+          $set: { date: entryDate },
+          $setOnInsert: { treatmentCost: 0, vaccineCost: 0, purchasePrice: 0, marketValue: 0, animalTagId: a.tagId, owner: userId }
         },
-        owner: shedEntry.owner,
-        feeds: shedEntry.feeds,
-        createdAt: shedEntry.createdAt,
-        __v: shedEntry.__v,
+        upsert: true
+      }
+    }));
+    if (ops.length) await AnimalCost.bulkWrite(ops, { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      status: "SUCCESS",
+      data: {
+        shedEntry: {
+          _id: shedEntry._id,
+          locationShed: { _id: shed._id, locationShedName: shed.locationShedName },
+          owner: shedEntry.owner,
+          feeds: shedEntry.feeds,
+          createdAt: shedEntry.createdAt,
+          __v: shedEntry.__v,
+        },
+        totalFeedCost,
+        perAnimalFeedCost,
+        animalsCount: animals.length,
+        skippedExcluded: excluded.map(a => a.tagId),
       },
-      totalFeedCost,
-      perAnimalFeedCost,
-    },
-  });
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    return next(err);
+  }
 });
+
 
 const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();
