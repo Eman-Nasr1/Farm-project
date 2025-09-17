@@ -147,6 +147,9 @@ Animalschema.pre('deleteOne', { document: true, query: false }, async function(n
     }
   });
 
+// Models/animal.model.js
+Animalschema.index({ owner: 1, animalType: 1 });
+Animalschema.index({ owner: 1, createdAt: 1 });
 
 
 module.exports = mongoose.model('Animal', Animalschema);

@@ -24,5 +24,7 @@ NotificationSchema.index(
   { owner:1, type:1, itemId:1 },
   { unique:true, partialFilterExpression:{ type:{ $in:['Treatment','Vaccine'] } }, name: 'owner_type_item_unique' }
 );
+// Models/notification.model.js
+NotificationSchema.index({ owner: 1, type: 1, dueDate: 1, stage: 1, severity: 1 });
 
 module.exports = mongoose.model('Notification', NotificationSchema);

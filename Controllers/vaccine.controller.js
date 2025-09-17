@@ -14,8 +14,9 @@ const xlsx = require('xlsx');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 const excelOps = require('../utilits/excelOperations');
-const { filterNonExcludedAnimals, assertAnimalNotExcluded } = require('../helpers/excluded');   
-const { upsertVaccineDoseNotification } = require('../helpers/notifyVaccineDose');      
+const { afterUpdateVaccineEntry, afterDeleteVaccineEntry, afterCreateVaccineEntry } = require('../utilits/vaccineAccounting');
+const { filterNonExcludedAnimals, assertAnimalNotExcluded } = require('../helpers/excluded');
+const { upsertVaccineDoseNotification } = require('../helpers/notifyVaccineDose');
 const { addDays, addMonths } = require('../helpers/dateHelpers');
 
 const addVaccine = asyncwrapper(async (req, res, next) => {
@@ -655,6 +656,12 @@ const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
+    await Promise.all(
+      createdVaccineEntries.map(async ({ entryId }) => {
+        const doc = await VaccineEntry.findById(entryId).lean();
+        if (doc) await afterCreateVaccineEntry(doc);
+      })
+    );
     // ✅ بعد نجاح العملية: احجز تنبيهات الجرعات (Booster & Annual) لكل إدخال
     const lang = req.lang || req.user?.language || 'en';
     const baseDate = new Date(date);
@@ -781,8 +788,10 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ✅ بعد النجاح: حجز تنبيهات الجرعات
     const entryDoc = newVaccineEntry[0];
+    await afterCreateVaccineEntry(entryDoc);
+    // ✅ بعد النجاح: حجز تنبيهات الجرعات
+
     const lang = req.lang || req.user?.language || 'en';
     const baseDate = new Date(date);
 
@@ -826,6 +835,8 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
 
 const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();
+  const beforeEntry = await VaccineEntry.findById(req.params.vaccineEntryId).lean();
+
   session.startTransaction();
 
   try {
@@ -855,7 +866,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // Find animal
-    const animal = await Animal.findOne({ tagId }).session(session);
+    const animal = await Animal.findOne({ tagId, owner: userId }).session(session);
     if (!animal) {
       await session.abortTransaction();
       session.endSession();
@@ -879,7 +890,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
         message: "New vaccine not found or unauthorized."
       });
     }
-    const vaccineName = Vaccine.otherVaccineName || (Vaccine.vaccineType?.englishName || "Unnamed Vaccine");
+    const vaccineName = newVaccine.otherVaccineName || (newVaccine.vaccineType?.englishName || "Unnamed Vaccine");
     // Check if new vaccine is expired
     if (newVaccine.isExpired()) {
       await session.abortTransaction();
@@ -960,7 +971,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
 
     await session.commitTransaction();
     session.endSession();
-
+    await afterUpdateVaccineEntry(beforeEntry, existingEntry);
     res.status(200).json({
       status: "SUCCESS",
       data: {
@@ -1012,7 +1023,7 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // Find vaccine and restore dose
-    const vaccine = await Vaccine.findById(entry.vaccine).session(session);
+    const vaccine = await Vaccine.findById(entry.Vaccine).session(session);
     if (vaccine) {
       vaccine.stock.totalDoses += 1;
       vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
@@ -1020,8 +1031,10 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // Update cost record
-    const dosePrice = vaccine?.pricing.dosePrice ||
-      (vaccine?.pricing.bottlePrice / vaccine?.stock.dosesPerBottle) || 0;
+
+    const dosePrice = vaccine?.pricing?.dosePrice ||
+      (vaccine?.pricing?.bottlePrice / vaccine?.stock?.dosesPerBottle) || 0;
+
 
     await AnimalCost.findOneAndUpdate(
       { animalTagId: entry.tagId },
@@ -1034,7 +1047,7 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
 
     await session.commitTransaction();
     session.endSession();
-
+    await afterDeleteVaccineEntry(entry);
     res.status(200).json({
       status: "SUCCESS",
       message: "Vaccine entry deleted successfully.",

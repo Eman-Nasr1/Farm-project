@@ -9,6 +9,7 @@ const TreatmentEntry = require("../Models/treatmentEntry.model");
 const AnimalCost = require("../Models/animalCost.model");
 const Supplier = require('../Models/supplier.model');
 const mongoose = require("mongoose");
+const { afterCreateTreatmentEntry, afterDeleteTreatmentEntry, afterUpdateTreatmentEntry } = require('../utilits/treatmentAccounting');
 const excelOps = require('../utilits/excelOperations');
 const i18n = require('../i18n');
 const { filterNonExcludedAnimals, assertAnimalNotExcluded } = require('../helpers/excluded');
@@ -282,7 +283,7 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
       message: `Location shed with ID "${locationShed}" not found.`,
     });
   }
-    //  فلترة الحيوانات غير المستبعدة
+  //  فلترة الحيوانات غير المستبعدة
   const { eligible: animals, excluded, excludedDocs } = await filterNonExcludedAnimals({ userId, animals: animalsRaw });
   if (animalsRaw.length === 0) {
     return res.status(404).json({
@@ -435,7 +436,8 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
     // Bulk insert treatments
     const insertedTreatments = await TreatmentEntry.insertMany(treatmentEntries);
     createdTreatments.push(...insertedTreatments);
-
+    // ⬅️ أضِف السطور دي لتسجيل المصروف في Accounting
+    await Promise.all(insertedTreatments.map(doc => afterCreateTreatmentEntry(doc)));
     // Bulk update animal costs
     if (animalCostUpdates.length > 0) {
       await AnimalCost.bulkWrite(animalCostUpdates);
@@ -612,7 +614,7 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     await newTreatmentEntry.save();
     createdTreatments.push(newTreatmentEntry);
-
+    await afterCreateTreatmentEntry(newTreatmentEntry);
     // Update animal costs
     await AnimalCost.findOneAndUpdate(
       { animalTagId: animal.tagId },
@@ -723,6 +725,9 @@ const getsingleTreatmentShed = asyncwrapper(async (req, res, next) => {
 
 const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();
+  // خدي لقطة قبل التعديل — خارج الترانزاكشن أفضل
+  const beforeEntry = await TreatmentEntry.findById(req.params.treatmentEntryId).lean();
+
   session.startTransaction();
 
   try {
@@ -774,6 +779,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       throw AppError.create(`Animal with tag ID "${tagId}" not found or doesn't belong to you.`, 404, httpstatustext.FAIL);
     }
 
+
     // --- Old treatment snapshot (assuming single treatment)
     const oldTreatmentData = existingTreatmentEntry.treatments?.[0];
     if (!oldTreatmentData) {
@@ -782,7 +788,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     const oldTreatmentId = oldTreatmentData.treatmentId;
     const oldVolume = Number(oldTreatmentData.volumePerAnimal) || 0;
-    const oldDoses  = Number(oldTreatmentData.numberOfDoses)    || 0;
+    const oldDoses = Number(oldTreatmentData.numberOfDoses) || 0;
 
     // --- New treatment payload (normalize numbers)
     const newTreatmentItem = treatments[0] || {};
@@ -793,7 +799,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     }
 
     const newVolumeRaw = newTreatmentItem.volumePerAnimal;
-    const newDosesRaw  = newTreatmentItem.numberOfDoses;
+    const newDosesRaw = newTreatmentItem.numberOfDoses;
 
     const newVolume = Number(newVolumeRaw);
     if (!Number.isFinite(newVolume) || newVolume <= 0) {
@@ -884,23 +890,23 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     // --- Doses (accept ISO or yyyy-mm-dd)
     const processedDoses = newDosesArray.length > 0
       ? newDosesArray.map(dose => {
-          const raw = dose?.date;
-          if (!raw) throw AppError.create("Dose date is required.", 400, httpstatustext.FAIL);
+        const raw = dose?.date;
+        if (!raw) throw AppError.create("Dose date is required.", 400, httpstatustext.FAIL);
 
-          const doseDate = typeof raw === 'string'
-            ? (raw.includes('T') ? new Date(raw) : new Date(`${raw}T00:00:00Z`))
-            : new Date(raw);
+        const doseDate = typeof raw === 'string'
+          ? (raw.includes('T') ? new Date(raw) : new Date(`${raw}T00:00:00Z`))
+          : new Date(raw);
 
-          if (isNaN(doseDate.getTime())) {
-            throw AppError.create(`Invalid dose date: ${raw}`, 400, httpstatustext.FAIL);
-          }
+        if (isNaN(doseDate.getTime())) {
+          throw AppError.create(`Invalid dose date: ${raw}`, 400, httpstatustext.FAIL);
+        }
 
-          return { date: doseDate, taken: !!dose.taken };
-        })
+        return { date: doseDate, taken: !!dose.taken };
+      })
       : Array.from({ length: actualNewDoses }, (_, i) => ({
-          date: new Date(mainDate.getTime() + i * 24 * 60 * 60 * 1000),
-          taken: false,
-        }));
+        date: new Date(mainDate.getTime() + i * 24 * 60 * 60 * 1000),
+        taken: false,
+      }));
 
     // --- Apply update
     existingTreatmentEntry.set({
@@ -912,12 +918,12 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       }],
       tagId,
       date: mainDate,
-      eyeCheck:        eyeCheck        ?? existingTreatmentEntry.eyeCheck        ?? "",
-      rectalCheck:     rectalCheck     ?? existingTreatmentEntry.rectalCheck     ?? "",
-      respiratoryCheck:respiratoryCheck?? existingTreatmentEntry.respiratoryCheck?? "",
-      rumenCheck:      rumenCheck      ?? existingTreatmentEntry.rumenCheck      ?? "",
-      diagnosis:       diagnosis       ?? existingTreatmentEntry.diagnosis       ?? "",
-      temperature:     (temperature ?? existingTreatmentEntry.temperature),
+      eyeCheck: eyeCheck ?? existingTreatmentEntry.eyeCheck ?? "",
+      rectalCheck: rectalCheck ?? existingTreatmentEntry.rectalCheck ?? "",
+      respiratoryCheck: respiratoryCheck ?? existingTreatmentEntry.respiratoryCheck ?? "",
+      rumenCheck: rumenCheck ?? existingTreatmentEntry.rumenCheck ?? "",
+      diagnosis: diagnosis ?? existingTreatmentEntry.diagnosis ?? "",
+      temperature: (temperature ?? existingTreatmentEntry.temperature),
     });
 
     await existingTreatmentEntry.save({ session });
@@ -938,6 +944,7 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
     await session.abortTransaction();
     session.endSession();
 
+    await afterUpdateTreatmentEntry(beforeEntry, existingTreatmentEntry);
     // ✅ بلاش instanceof هنا
     if (error?.statusCode) {
       return res.status(error.statusCode).json({
@@ -1126,7 +1133,7 @@ const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
     // Commit the transaction
     await session.commitTransaction();
     session.endSession();
-
+    await afterDeleteTreatmentEntry(treatmentEntry);
     res.status(200).json({
       status: "SUCCESS",
       message: "Treatment entry deleted successfully.",

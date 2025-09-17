@@ -10,6 +10,7 @@ const AnimalCost = require("../Models/animalCost.model");
 const Supplier = require('../Models/supplier.model');
 const Animal = require("../Models/animal.model");
 const mongoose = require("mongoose");
+const { afterCreateShedEntry ,afterUpdateShedEntry,afterDeleteShedEntry} = require('../utilits/feedAccounting');
 const { ConsoleMessage } = require("puppeteer");
 const i18n = require('../i18n');
 const { filterNonExcludedAnimals } = require('../helpers/excluded');
@@ -239,7 +240,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 
     await session.commitTransaction();
     session.endSession();
-
+    await afterCreateShedEntry(shedEntry);
     res.status(201).json({
       status: "SUCCESS",
       data: {
@@ -267,6 +268,7 @@ const addFeedToShed = asyncwrapper(async (req, res, next) => {
 
 const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   const session = await mongoose.startSession();
+  const beforeEntry = await ShedEntry.findById(req.params.shedEntryId).lean();
   session.startTransaction();
 
   try {
@@ -361,7 +363,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
           message: "You are not authorized to use this feed.",
         });
       }
-
+     
       // Find existing feed in shed entry
       const existingFeedIndex = existingShedEntry.feeds.findIndex(
         f => f.feedId.toString() === feedId.toString()
@@ -450,7 +452,7 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 
     await session.commitTransaction();
     session.endSession();
-
+    await afterUpdateShedEntry(beforeEntry, existingShedEntry);
     res.status(200).json({
       status: "SUCCESS",
       message: "Shed entry updated successfully.",
@@ -664,7 +666,7 @@ const deletefeedshed = asyncwrapper(async (req, res, next) => {
 
     await animalCostEntry.save();
   }
-
+  await afterDeleteShedEntry(deletedEntry);
   // Step 5: Respond with a success message
   res.status(200).json({ status: httpstatustext.SUCCESS, data: null });
 });

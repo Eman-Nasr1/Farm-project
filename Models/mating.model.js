@@ -148,5 +148,8 @@ MatingSchema.pre('findOneAndUpdate', async function (next) {
 
     next();
 });
+// Models/mating.model.js
+MatingSchema.index({ owner: 1, sonarResult: 1, createdAt: 1 });
+
 
 module.exports = mongoose.model('Mating', MatingSchema);

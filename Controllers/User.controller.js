@@ -129,7 +129,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
   const token = await jwt.sign(  
       { email: user.email, id: user._id, role: user.role }, // Include user info in the payload  
       process.env.JWT_SECRET_KEY,  
-      { expiresIn: '30d' }  
+      { expiresIn: '7d' }  
   );  
 
   // Send the token back to the admin  
@@ -163,7 +163,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
      const token=await jwt.sign(
         { email: newuser.email, id: newuser._id, role: newuser.role, name:newuser.name ,registerationType:newuser.registerationType}, // Include 'role' in the payload
         process.env.JWT_SECRET_KEY,
-        { expiresIn: '30d' }) 
+        { expiresIn: '7d' }) 
 
         newuser.token= token;
         await newuser.save(); 
@@ -190,7 +190,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
         const token = await jwt.sign(
           { email: user.email, id: user._id, role: user.role ,registerationType:user.registerationType}, // Include 'role' in the payload
           process.env.JWT_SECRET_KEY,
-          { expiresIn: '30d' }
+          { expiresIn: '7d' }
       );
         res.status(201).json({status:httpstatustext.SUCCESS,data:{token}});
       } 

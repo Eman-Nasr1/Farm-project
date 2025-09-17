@@ -14,4 +14,4 @@ router.delete('/api/supplier/deletesupplier/:supplierId', verifytoken, supplierC
 
 
 
-module.exports = router; 0
+module.exports = router; 

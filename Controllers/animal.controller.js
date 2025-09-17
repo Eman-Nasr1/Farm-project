@@ -7,6 +7,7 @@ const LocationShed = require('../Models/locationsed.model');
 const Breed = require('../Models/breed.model');
 const AnimalCost = require('../Models/animalCost.model');
 const Excluded = require('../Models/excluded.model');
+const { afterCreateAnimal,afterUpdateAnimalPurchase} = require('../utilits/animalAccounting');
 const mongoose = require('mongoose');
 const i18n = require('../i18n');
 const excelOps = require('../utilits/excelOperations');
@@ -425,7 +426,7 @@ const addanimal = asyncwrapper(async (req, res, next) => {
     });
 
     await newanimal.save();
-
+    await afterCreateAnimal(newanimal);
     if (newanimal.purchasePrice > 0 || newanimal.marketValue > 0) {
         await AnimalCost.create({
             animalTagId: newanimal.tagId,
@@ -475,7 +476,7 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
         );
         updateData.birthDate = calculatedDate;
     }
-
+    const beforeAnimal = await Animal.findOne({ _id: animalId, owner: req.user.id }).lean();
     // تنفيذ التحديث
     const updatedanimal = await Animal.findOneAndUpdate(
         { _id: animalId, owner: req.user.id },
@@ -486,7 +487,10 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
     if (!updatedanimal) {
         return next(AppError.create('Animal not found or unauthorized to update', 404, httpstatustext.FAIL));
     }
-
+     // ✅ لو اتغير purchasePrice نسجّل فرق محاسبي (زيادة مصروف/ردّ)
+     if (beforeAnimal && Object.prototype.hasOwnProperty.call(updateData, 'purchasePrice')) {
+       await afterUpdateAnimalPurchase(beforeAnimal, updatedanimal);
+     }
     // === تحديث AnimalCost لو اتغير marketValue أو purchasePrice ===
     const hasMarketValue = Object.prototype.hasOwnProperty.call(updateData, 'marketValue');
     const hasPurchasePrice = Object.prototype.hasOwnProperty.call(updateData, 'purchasePrice');
@@ -529,7 +533,6 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
         data: { animal: populatedAnimal }
     });
 });
-
 
 const deleteanimal = asyncwrapper(async (req, res, next) => {
     const animalId = req.params.tagId; // Use consistent parameter name

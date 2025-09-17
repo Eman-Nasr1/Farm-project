@@ -1,9 +1,15 @@
-const httpstatustext=require('../utilits/httpstatustext');
-const asyncwrapper=require('../middleware/asyncwrapper');
-const AppError=require('../utilits/AppError');
-const Excluded=require('../Models/excluded.model');
-const Animal=require('../Models/animal.model');
+const httpstatustext = require('../utilits/httpstatustext');
+const asyncwrapper = require('../middleware/asyncwrapper');
+const AppError = require('../utilits/AppError');
+const Excluded = require('../Models/excluded.model');
+const Animal = require('../Models/animal.model');
 const excelOps = require('../utilits/excelOperations');
+const {
+    afterCreateExcluded,
+    afterUpdateExcluded,
+    afterDeleteExcluded
+} = require('../utilits/excludedAccounting');
+
 const i18n = require('../i18n');
 const multer = require('multer');
 const storage = multer.memoryStorage();
@@ -21,33 +27,33 @@ const getallexcluded = asyncwrapper(async (req, res) => {
     if (query.tagId) {
         filter.tagId = query.tagId;
     }
-    
+
     if (query.excludedType) {
         filter.excludedType = query.excludedType;
     }
 
-    const excluded = await Excluded.find(filter, { "__v": false })  
-        .populate({  
-            path: 'animalId',  
-            select: 'animalType'  
-        })  
+    const excluded = await Excluded.find(filter, { "__v": false })
+        .populate({
+            path: 'animalId',
+            select: 'animalType'
+        })
         .sort({ createdAt: -1 }) // ✅ Always newest first
-        .limit(limit)  
-        .skip(skip);  
+        .limit(limit)
+        .skip(skip);
 
     const total = await Excluded.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
     // Filter by animalType if requested
-    if (query.animalType) {  
+    if (query.animalType) {
         const filteredexcludedData = excluded.filter(
             e => e.animalId && e.animalId.animalType === query.animalType
-        );  
+        );
         return res.json({
             status: httpstatustext.SUCCESS,
             data: { excluded: filteredexcludedData }
-        });  
-    }  
+        });
+    }
 
     res.json({
         status: httpstatustext.SUCCESS,
@@ -74,12 +80,12 @@ const getSingleExcluded = asyncwrapper(async (req, res, next) => {
     return res.json({ status: httpstatustext.SUCCESS, data: { excluded } });
 });
 
-const addexcluded = asyncwrapper(async (req, res,next) => {
+const addexcluded = asyncwrapper(async (req, res, next) => {
 
     const userId = req.user.id;
     const { tagId, ...excludedData } = req.body;
-    const animal = await Animal.findOne({  
-        tagId,  
+    const animal = await Animal.findOne({
+        tagId,
         owner: userId, // Ensure the animal belongs to the user  
     });
     if (!animal) {
@@ -89,26 +95,26 @@ const addexcluded = asyncwrapper(async (req, res,next) => {
     const newExcluded = new Excluded({ ...excludedData, owner: userId, tagId, animalId: animal._id });
 
     await newExcluded.save();
-
+    await afterCreateExcluded(newExcluded);
     res.json({ status: httpstatustext.SUCCESS, data: { excluded: newExcluded } });
 })
 
-const updateExcluded = asyncwrapper(async (req,res)=>{
+const updateExcluded = asyncwrapper(async (req, res) => {
     const userId = req.user.id;
     const excludedId = req.params.excludedId;
     const updatedData = req.body;
-
+    const beforeExcluded = await Excluded.findById(excludedId).lean();
     let excluded = await Excluded.findOne({ _id: excludedId, owner: userId });
-        if (!excluded) {
-            const error = AppError.create('Excluded information not found or unauthorized to update', 404, httpstatustext.FAIL);
-            return next(error);
-        }
-        excluded = await Excluded.findOneAndUpdate({ _id: excludedId }, updatedData, { new: true });
-
-        res.json({ status: httpstatustext.SUCCESS, data: { excluded } });
+    if (!excluded) {
+        const error = AppError.create('Excluded information not found or unauthorized to update', 404, httpstatustext.FAIL);
+        return next(error);
+    }
+    excluded = await Excluded.findOneAndUpdate({ _id: excludedId }, updatedData, { new: true });
+    await afterUpdateExcluded(beforeExcluded, excluded );
+    res.json({ status: httpstatustext.SUCCESS, data: { excluded } });
 })
 
-const deleteExcluded= asyncwrapper(async(req,res,next)=>{
+const deleteExcluded = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const excludedId = req.params.excludedId;
 
@@ -118,7 +124,7 @@ const deleteExcluded= asyncwrapper(async(req,res,next)=>{
         return next(error);
     }
     await Excluded.deleteOne({ _id: excludedId });
-
+    await afterDeleteExcluded(excluded);
     res.json({ status: httpstatustext.SUCCESS, message: i18n.__('EXCLUDED_DELETED') });
 })
 
@@ -284,11 +290,11 @@ const exportExcludedToExcel = asyncwrapper(async (req, res, next) => {
     }
 });
 
-module.exports={
+module.exports = {
     deleteExcluded,
     updateExcluded,
-    addexcluded ,
-    getallexcluded ,
+    addexcluded,
+    getallexcluded,
     getSingleExcluded,
     downloadExcludedTemplate,
     importExcludedFromExcel,

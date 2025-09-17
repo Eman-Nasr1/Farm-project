@@ -38,5 +38,7 @@ const Excludedschema=new mongoose.Schema(
          
     }
 )
+// Models/excluded.model.js
+Excludedschema.index({ owner: 1, excludedType: 1, createdAt: 1 });
 
 module.exports= mongoose.model('Excluded',Excludedschema)
