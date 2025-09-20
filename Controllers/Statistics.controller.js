@@ -152,46 +152,89 @@ exports.getUserStats = async (req, res) => {
 // ====== ADMIN STATS (نسختك الحالية) ======
 exports.getAdminStats = async (req, res) => {
   try {
+    // أرقام النظام العامة (كل الحيوانات)
     const [users, animals, openAlerts] = await Promise.all([
       User.countDocuments({}),
       Animal.countDocuments({}),
       Notification.countDocuments({ stage: { $in: ['week', 'expired'] }, severity: 'high' }),
     ]);
 
-    const topUsers = await Animal.aggregate([
-      { $group: { _id: '$owner', animals: { $sum: 1 } } },
-      { $sort: { animals: -1 } },
-      { $limit: 5 },
+    // تعريف حالات الاستبعاد النهائي
+    const terminalTypes = ['death', 'sale', 'sweep'];
+
+    // 1) Top users حسب "الحيوانات النشطة" فقط
+    const activeLeaders = await Animal.aggregate([
+      {
+        $lookup: {
+          from: 'excludeds',
+          let: { aid: '$_id', own: '$owner' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$animalId', '$$aid'] },
+                    { $eq: ['$owner', '$$own'] },
+                    { $in: ['$type', terminalTypes] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: 'ex',
+        },
+      },
+      { $match: { 'ex.0': { $exists: false } } }, // نشِطة فقط
+      { $group: { _id: '$owner', activeAnimals: { $sum: 1 } } },
       { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'u' } },
-      { $project: { animals: 1, ownerName: { $first: '$u.name' }, ownerEmail: { $first: '$u.email' } } },
+      {
+        $project: {
+          _id: 0,
+          ownerId: '$_id',
+          activeAnimals: 1,
+          ownerName: { $ifNull: [{ $first: '$u.name' }, '—'] },
+          ownerEmail: { $ifNull: [{ $first: '$u.email' }, '—'] },
+        },
+      },
+      { $sort: { activeAnimals: -1 } },
+      { $limit: 5 },
     ]);
 
+    // 2) إجمالي الحيوانات (كلها) لكل مالك — لضمّه بجانب activeAnimals
+    const totalsPerOwner = await Animal.aggregate([
+      { $group: { _id: '$owner', totalAnimals: { $sum: 1 } } },
+    ]);
+    const totalsMap = new Map(totalsPerOwner.map((x) => [String(x._id), x.totalAnimals]));
+
+    const leaders = activeLeaders.map((row) => ({
+      _id: row.ownerId,
+      ownerName: row.ownerName,
+      ownerEmail: row.ownerEmail,
+      activeAnimals: row.activeAnimals,
+      totalAnimals: totalsMap.get(String(row.ownerId)) || 0,
+    }));
+
+    // 3) ترند الحيوانات (كل الحيوانات)
     const sixMonthsAgo = new Date(new Date().getFullYear(), new Date().getMonth() - 5, 1);
     const animalsPerMonth = await Animal.aggregate([
       { $match: { createdAt: { $gte: sixMonthsAgo } } },
       { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
-      { $sort: { '_id.y': 1, '_id.m': 1 } }
-    ]);
-
-    // جودة بيانات بسيطة
-    const [missingBreed, missingShed] = await Promise.all([
-      Animal.countDocuments({ $or: [{ breed: { $exists: false } }, { breed: null }] }),
-      Animal.countDocuments({ $or: [{ locationShed: { $exists: false } }, { locationShed: null }] }),
+      { $sort: { '_id.y': 1, '_id.m': 1 } },
     ]);
 
     res.json({
       data: {
         system: { users, animals, openAlerts },
-        leaders: topUsers,
-        dataQuality: { missingBreed, missingShed },
-        trends: { animalsPerMonth }
-      }
+        leaders,
+        trends: { animalsPerMonth },
+      },
     });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Failed to compute admin stats' });
   }
 };
+
 
 // ====== USER STATS V2 (مطوّرة) ======
 exports.getUserStatsV2 = async (req, res) => {

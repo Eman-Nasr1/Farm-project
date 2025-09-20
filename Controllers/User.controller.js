@@ -1,14 +1,95 @@
-const User=require('../Models/user.model');
-const httpstatustext=require('../utilits/httpstatustext');
-const asyncwrapper=require('../middleware/asyncwrapper');
-const AppError=require('../utilits/AppError');
-const bcrypt=require('bcryptjs');
-const jwt =require('jsonwebtoken');
+const User = require('../Models/user.model');
+const httpstatustext = require('../utilits/httpstatustext');
+const asyncwrapper = require('../middleware/asyncwrapper');
+const AppError = require('../utilits/AppError');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer'); 
+const nodemailer = require('nodemailer');
 const i18n = require('../i18n');
+const { v4: uuidv4 } = require('uuid');
+const ImpersonationSession = require('../Models/ImpersonationSession');
+const IMPERSONATION_SECRET = process.env.IMPERSONATION_SECRET || process.env.JWT_SECRET_KEY;
+const APP_URL = process.env.APP_URL || 'http://localhost:5173';
+ // غيريها حسب بيئتك
 
- const getallusers = asyncwrapper(async (req, res, next) => {
+
+const startImpersonation = asyncwrapper(async (req, res, next) => {
+  const { userId } = req.params;
+
+  // لازم إدمن
+  if (!req.user || req.user.role !== 'admin') {
+    return next(AppError.create('Admin access only', 403, httpstatustext.ERROR));
+  }
+
+  const target = await User.findById(userId);
+  if (!target) return next(AppError.create('User not found', 404, httpstatustext.FAIL));
+
+  // امنعي انتحال إدمن
+  if (target.role === 'admin') {
+    return next(AppError.create('Cannot impersonate another admin', 403, httpstatustext.ERROR));
+  }
+
+  const jti = uuidv4();
+  const expiresInSec = 120; // صلاحية 2 دقيقة
+  const expDate = new Date(Date.now() + expiresInSec * 1000);
+
+  await ImpersonationSession.create({
+    jti,
+    targetUser: target._id,
+    byAdmin: req.user.id,
+    expiresAt: expDate,
+  });
+
+  const impToken = jwt.sign(
+    { typ: 'imp', sub: String(target._id), by: String(req.user.id), jti },
+    IMPERSONATION_SECRET,
+    { expiresIn: `${expiresInSec}s` }
+  );
+
+  const url = `${APP_URL}/impersonate?token=${encodeURIComponent(impToken)}`;
+  return res.json({ status: httpstatustext.SUCCESS, data: { url } });
+});
+const redeemImpersonation = asyncwrapper(async (req, res, next) => {
+  const { token } = req.query;
+  if (!token) return next(AppError.create('Missing token', 400, httpstatustext.FAIL));
+
+  let payload;
+  try {
+    payload = jwt.verify(token, IMPERSONATION_SECRET);
+  } catch (e) {
+    return next(AppError.create('Invalid or expired token', 400, httpstatustext.FAIL));
+  }
+
+  if (payload.typ !== 'imp') {
+    return next(AppError.create('Invalid token type', 400, httpstatustext.FAIL));
+  }
+
+  const session = await ImpersonationSession.findOne({ jti: payload.jti });
+  if (!session || session.used) {
+    return next(AppError.create('Token already used or not found', 400, httpstatustext.FAIL));
+  }
+
+  const user = await User.findById(payload.sub);
+  if (!user) return next(AppError.create('User not found', 404, httpstatustext.ERROR));
+
+  const normalToken = jwt.sign(
+    { email: user.email, id: user._id, role: user.role, imp: true, impBy: payload.by, impJti: payload.jti },
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: '7d' }
+  );
+
+  session.used = true;
+  await session.save();
+
+  return res.json({
+    status: httpstatustext.SUCCESS,
+    data: { token: normalToken }
+  });
+});
+
+
+const getallusers = asyncwrapper(async (req, res, next) => {
   if (req.user.role !== 'admin') {
     const error = AppError.create('Admin access only', 403, httpstatustext.ERROR);
     return next(error);
@@ -43,15 +124,15 @@ const i18n = require('../i18n');
     data: { users }
   });
 });
- const getsnigleuser =asyncwrapper(async( req, res, next)=>{
- 
-    const user=await User.findById(req.params.userId);
-    if (!user) {
-      
-      const error=AppError.create('User not found', 404, httpstatustext.FAIL)
-      return next(error);
+const getsnigleuser = asyncwrapper(async (req, res, next) => {
+
+  const user = await User.findById(req.params.userId);
+  if (!user) {
+
+    const error = AppError.create('User not found', 404, httpstatustext.FAIL)
+    return next(error);
   }
-     return res.json({status:httpstatustext.SUCCESS,data:{user}});
+  return res.json({ status: httpstatustext.SUCCESS, data: { user } });
 })
 const updateUser = asyncwrapper(async (req, res, next) => {
   const { userId } = req.params;
@@ -60,23 +141,23 @@ const updateUser = asyncwrapper(async (req, res, next) => {
   // Find the user by ID
   const user = await User.findById(userId);
   if (!user) {
-      const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.FAIL);
-      return next(error);
+    const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.FAIL);
+    return next(error);
   }
 
   // Validate email uniqueness if being updated
   if (email && email !== user.email) {
-      const emailExists = await User.findOne({ email });
-      if (emailExists) {
-          const error = AppError.create(i18n.__('EMAIL_IN_USE'), 400, httpstatustext.FAIL);
-          return next(error);
-      }
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      const error = AppError.create(i18n.__('EMAIL_IN_USE'), 400, httpstatustext.FAIL);
+      return next(error);
+    }
   }
 
   // Handle password update if provided
   if (password) {
-      const hashedPassword = await bcrypt.hash(password, 7);
-      user.password = hashedPassword;
+    const hashedPassword = await bcrypt.hash(password, 7);
+    user.password = hashedPassword;
   }
 
   // Update other user details
@@ -85,124 +166,124 @@ const updateUser = asyncwrapper(async (req, res, next) => {
   if (phone) user.phone = phone;
   if (country) user.country = country;
   if (role) user.role = role;
-  
+
 
   // Save the updated user
   await user.save();
 
   res.status(200).json({
-      status: httpstatustext.SUCCESS,
-      data: { user },
+    status: httpstatustext.SUCCESS,
+    data: { user },
   });
 });
-const deleteUser= asyncwrapper(async(req,res,next)=>{
+const deleteUser = asyncwrapper(async (req, res, next) => {
   if (req.role !== 'admin') {
     const error = AppError.create(i18n.__('ADMIN_ACCESS_ONLY'), 403, httpstatustext.ERROR);
     return next(error);
   }
-  await User.deleteOne({_id:req.params.userId});
- res.status(200).json({status:httpstatustext.SUCCESS,data:null});
+  await User.deleteOne({ _id: req.params.userId });
+  res.status(200).json({ status: httpstatustext.SUCCESS, data: null });
 
 })
-const loginAsUser = asyncwrapper(async (req, res, next) => {  
+const loginAsUser = asyncwrapper(async (req, res, next) => {
   const { userId } = req.params; // Get the user ID from the request parameters  
 
   // Find the user by ID  
-  const user = await User.findById(userId);  
+  const user = await User.findById(userId);
   //console.log('User to log in as:', user); // Log the user being logged in as
 
-  if (!user) {  
-      const error = AppError.create('User not found', 404, httpstatustext.FAIL);  
-      return next(error);  
-  }  
+  if (!user) {
+    const error = AppError.create('User not found', 404, httpstatustext.FAIL);
+    return next(error);
+  }
 
   // Log the requester's details
   // console.log('Requester:', req.user);
 
   // Check if the requester is an admin  
-  if (!req.user || req.user.role !== 'admin') {  
-      const error = AppError.create('Not authorized', 403, httpstatustext.FAIL);  
-      return next(error);  
-  }  
+  if (!req.user || req.user.role !== 'admin') {
+    const error = AppError.create('Not authorized', 403, httpstatustext.FAIL);
+    return next(error);
+  }
 
   // Create a token for the user  
-  const token = await jwt.sign(  
-      { email: user.email, id: user._id, role: user.role }, // Include user info in the payload  
-      process.env.JWT_SECRET_KEY,  
-      { expiresIn: '7d' }  
-  );  
+  const token = await jwt.sign(
+    { email: user.email, id: user._id, role: user.role }, // Include user info in the payload  
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: '7d' }
+  );
 
   // Send the token back to the admin  
-  return res.json({ status: httpstatustext.SUCCESS, data: { token } });  
+  return res.json({ status: httpstatustext.SUCCESS, data: { token } });
 });
- 
- const register=asyncwrapper(async(req,res,next)=>{
-    const {name,email,password,confirmpassword,phone,country,role,registerationType}=req.body;
 
-    const olderuser=await User.findOne({email:email});
-    if(olderuser){
-        const error = AppError.create(i18n.__('USER_EXISTS'), 400, httpstatustext.FAIL);
-         return next(error);
-    }
-    if (password !== confirmpassword) {
-        const error = AppError.create(i18n.__('PASSWORD_MISMATCH'), 400, httpstatustext.FAIL);
-        return next(error);
-      }
+const register = asyncwrapper(async (req, res, next) => {
+  const { name, email, password, confirmpassword, phone, country, role, registerationType } = req.body;
 
-     const hashpassword= await bcrypt.hash(password,7);
-     const newuser=new User({
-        name,
-        email,
-        password:hashpassword,
-        confirmpassword:hashpassword,
-        phone,
-        role,
-        registerationType,
-        country
-     })
-     const token=await jwt.sign(
-        { email: newuser.email, id: newuser._id, role: newuser.role, name:newuser.name ,registerationType:newuser.registerationType}, // Include 'role' in the payload
-        process.env.JWT_SECRET_KEY,
-        { expiresIn: '7d' }) 
+  const olderuser = await User.findOne({ email: email });
+  if (olderuser) {
+    const error = AppError.create(i18n.__('USER_EXISTS'), 400, httpstatustext.FAIL);
+    return next(error);
+  }
+  if (password !== confirmpassword) {
+    const error = AppError.create(i18n.__('PASSWORD_MISMATCH'), 400, httpstatustext.FAIL);
+    return next(error);
+  }
 
-        newuser.token= token;
-        await newuser.save(); 
-        
-        res.status(201).json({status:httpstatustext.SUCCESS,data:{user:newuser}});
+  const hashpassword = await bcrypt.hash(password, 7);
+  const newuser = new User({
+    name,
+    email,
+    password: hashpassword,
+    confirmpassword: hashpassword,
+    phone,
+    role,
+    registerationType,
+    country
+  })
+  const token = await jwt.sign(
+    { email: newuser.email, id: newuser._id, role: newuser.role, name: newuser.name, registerationType: newuser.registerationType }, // Include 'role' in the payload
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: '7d' })
 
- })
+  newuser.token = token;
+  await newuser.save();
 
- const login=asyncwrapper(async(req,res,next)=>{
-    const{email,password}=req.body;
-    if(!email && !password){
-        const error = AppError.create(i18n.__('EMAIL_PASSWORD_REQUIRED'), 400, httpstatustext.FAIL);
-        return next(error);
-    }
-    const user=await User.findOne({email:email});
+  res.status(201).json({ status: httpstatustext.SUCCESS, data: { user: newuser } });
 
-    if(!user){
-      const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.ERROR);
-      return next(error);
-    }
+})
 
-    const matchedpassword=bcrypt.compare(password,user.password);
-    if(user && matchedpassword){
-        const token = await jwt.sign(
-          { email: user.email, id: user._id, role: user.role ,registerationType:user.registerationType}, // Include 'role' in the payload
-          process.env.JWT_SECRET_KEY,
-          { expiresIn: '7d' }
-      );
-        res.status(201).json({status:httpstatustext.SUCCESS,data:{token}});
-      } 
-      else {
-        const error = AppError.create(i18n.__('SOMETHING_WRONG'), 500, httpstatustext.ERROR);
-        return next(error);
-      }
+const login = asyncwrapper(async (req, res, next) => {
+  const { email, password } = req.body;
+  if (!email && !password) {
+    const error = AppError.create(i18n.__('EMAIL_PASSWORD_REQUIRED'), 400, httpstatustext.FAIL);
+    return next(error);
+  }
+  const user = await User.findOne({ email: email });
 
- })
+  if (!user) {
+    const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.ERROR);
+    return next(error);
+  }
+
+  const matchedpassword = bcrypt.compare(password, user.password);
+  if (user && matchedpassword) {
+    const token = await jwt.sign(
+      { email: user.email, id: user._id, role: user.role, registerationType: user.registerationType }, // Include 'role' in the payload
+      process.env.JWT_SECRET_KEY,
+      { expiresIn: '7d' }
+    );
+    res.status(201).json({ status: httpstatustext.SUCCESS, data: { token } });
+  }
+  else {
+    const error = AppError.create(i18n.__('SOMETHING_WRONG'), 500, httpstatustext.ERROR);
+    return next(error);
+  }
+
+})
 
 
- const forgotPassword = asyncwrapper(async (req, res, next) => {
+const forgotPassword = asyncwrapper(async (req, res, next) => {
   const { email } = req.body;
 
   if (!email) {
@@ -246,7 +327,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
   res.status(200).json({ status: httpstatustext.SUCCESS, message: i18n.__('VERIFICATION_CODE_SENT') });
 });
 
- 
+
 const verifyCode = asyncwrapper(async (req, res, next) => {
   const { verificationCode } = req.body;
 
@@ -311,15 +392,17 @@ const resetPassword = asyncwrapper(async (req, res, next) => {
 
 
 
- module.exports={
-    getallusers,
-    register,
-    login,
-    resetPassword ,
-    forgotPassword,
-    verifyCode,
-    getsnigleuser,
-    deleteUser,
-    updateUser,
-    loginAsUser
+module.exports = {
+  getallusers,
+  register,
+  login,
+  resetPassword,
+  forgotPassword,
+  verifyCode,
+  getsnigleuser,
+  deleteUser,
+  updateUser,
+  loginAsUser,
+  startImpersonation,
+  redeemImpersonation,
 }
