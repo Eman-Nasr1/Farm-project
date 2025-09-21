@@ -177,7 +177,7 @@ const updateUser = asyncwrapper(async (req, res, next) => {
   });
 });
 const deleteUser = asyncwrapper(async (req, res, next) => {
-  if (req.role !== 'admin') {
+  if (req.user.role !== 'admin') {
     const error = AppError.create(i18n.__('ADMIN_ACCESS_ONLY'), 403, httpstatustext.ERROR);
     return next(error);
   }
@@ -266,7 +266,7 @@ const login = asyncwrapper(async (req, res, next) => {
     return next(error);
   }
 
-  const matchedpassword = bcrypt.compare(password, user.password);
+  const matchedpassword = await bcrypt.compare(password, user.password);
   if (user && matchedpassword) {
     const token = await jwt.sign(
       { email: user.email, id: user._id, role: user.role, registerationType: user.registerationType }, // Include 'role' in the payload

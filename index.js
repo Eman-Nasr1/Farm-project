@@ -6,11 +6,25 @@ const cronJobs = require('./utilits/cronJobs');
 
 const notificationCron = require('./middleware/notificationCron');
 const matingNotificationCron = require('./middleware/matingNotification');
-
+ 
 const cors=require('cors');
 require('dotenv').config();
-app.use(cors());
 
+const ALLOWLIST = [
+    'http://localhost:3000',    // CRA (لو بتجربي محليًا)
+    'https://online-farm.vercel.app' // الدومين بتاع الفرونت
+  ];
+  
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);                 // Postman/Server-to-Server
+      if (ALLOWLIST.includes(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type','Authorization'],
+    credentials: true
+  }));
 const url=process.env.MONGO_URL;
 mongoose.connect(url).then(()=>{
     console.log("mongoose start");
