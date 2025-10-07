@@ -243,63 +243,66 @@ exports.getUserStatsV2 = async (req, res) => {
     const terminalTypes = ['death', 'sale', 'sweep'];
     const now = new Date();
 
-    // مستبعَدين نهائيًا
+    // مستبعَدين نهائيًا (باستخدام الحقل الصحيح excludedType)
     const excludedIds = await Excluded.distinct('animalId', {
-      owner: ownerId, type: { $in: terminalTypes }
+      owner: ownerId,
+      excludedType: { $in: terminalTypes }
     });
 
-    // مواليد 30 يوم (Animal أو Breeding)
+    // مواليد آخر 30 يوم (Animal أو Breeding)
     const births30_A = await Animal.countDocuments({
       owner: ownerId, birthDate: { $gte: daysAgo(30) }
     });
     const births30_B = Breeding
       ? await Breeding.aggregate([
-        { $match: { owner: ownerId } },
-        { $unwind: '$birthEntries' },
-        { $match: { 'birthEntries.birthDate': { $gte: daysAgo(30) } } },
-        { $count: 'c' },
-      ]).then(r => r[0]?.c || 0)
+          { $match: { owner: ownerId } },
+          { $unwind: '$birthEntries' },
+          { $match: { 'birthEntries.birthDate': { $gte: daysAgo(30) } } },
+          { $count: 'c' },
+        ]).then(r => r[0]?.c || 0)
       : 0;
     const births30 = Breeding ? births30_B : births30_A;
 
-    // عدادات أساسية + dueSoon
+    // عدادات أساسية + dueSoon (استبعاد المستبعدين) + وفيات + سونار إيجابي
     const [animals, goats, sheep, deaths30, sonarPos30, dueSoon] = await Promise.all([
       Animal.countDocuments({ owner: ownerId, _id: { $nin: excludedIds } }),
       Animal.countDocuments({ owner: ownerId, animalType: 'goat', _id: { $nin: excludedIds } }),
       Animal.countDocuments({ owner: ownerId, animalType: 'sheep', _id: { $nin: excludedIds } }),
-      Excluded.countDocuments({ owner: ownerId, type: 'death', createdAt: { $gte: daysAgo(30) } }),
-      Mating.countDocuments({ owner: ownerId, sonarResult: 'positive', createdAt: { $gte: daysAgo(30) } }),
+
+      // وفيات آخر 30 يوم (لو عايزة تاريخ الواقعة بدّلي createdAt -> Date)
+      Excluded.countDocuments({
+        owner: ownerId,
+        excludedType: 'death',
+        createdAt: { $gte: daysAgo(30) }
+        // Date: { $gte: daysAgo(30) }
+      }),
+
+      // سونار إيجابي آخر 30 يوم:
+      // - يدعم sonarResult و sonarRsult (داتا قديمة) + يعتمد sonarDate ثم createdAt كـ fallback
+      Mating.countDocuments({
+        owner: ownerId,
+        $and: [
+          { $or: [
+            { sonarResult: { $regex: /^positive$/i } },
+            { sonarRsult:  { $regex: /^positive$/i } }, // دعم اسم الحقل القديم لو موجود
+          ]},
+          { $or: [
+            { sonarDate:  { $gte: daysAgo(30) } },
+            { createdAt:  { $gte: daysAgo(30) } },
+          ]},
+        ]
+      }),
+
       Notification.countDocuments({
         owner: ownerId, type: { $in: ['Treatment', 'Vaccine', 'Weight'] },
         dueDate: { $lte: daysAhead(7) }, stage: { $nin: ['done'] },
       }),
     ]);
 
-    // animalsPerMonth (last 6m, active only)
+    // animalsPerMonth (آخر 6 شهور) — استبعاد المستبعَدين مباشرة بـ $nin
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     const animalsPerMonth = await Animal.aggregate([
-      { $match: { owner: ownerId, createdAt: { $gte: sixMonthsAgo } } },
-      {
-        $lookup: {
-          from: 'excludeds',
-          let: { aid: '$_id', own: '$owner' },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ['$animalId', '$$aid'] },
-                    { $eq: ['$owner', '$$own'] },
-                    { $in: ['$type', terminalTypes] }
-                  ]
-                }
-              }
-            }
-          ],
-          as: 'ex'
-        }
-      },
-      { $match: { 'ex.0': { $exists: false } } },
+      { $match: { owner: ownerId, createdAt: { $gte: sixMonthsAgo }, _id: { $nin: excludedIds } } },
       { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
       { $sort: { '_id.y': 1, '_id.m': 1 } }
     ]);
@@ -341,7 +344,7 @@ exports.getUserStatsV2 = async (req, res) => {
       { $sort: { '_id.y': 1, '_id.m': 1 } },
     ]);
 
-    // KPIs: Vaccine adherence & overdue + Conception & Weaning
+    // KPIs
     const monthDueVacc = await Notification.countDocuments({
       owner: ownerId, type: 'Vaccine', dueDate: { $gte: monthStart }
     });
@@ -356,23 +359,33 @@ exports.getUserStatsV2 = async (req, res) => {
     const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const [sonarTotal, sonarPos, born, weaned] = await Promise.all([
       Mating.countDocuments({ owner: ownerId, createdAt: { $gte: periodStart } }),
-      Mating.countDocuments({ owner: ownerId, sonarResult: 'positive', createdAt: { $gte: periodStart } }),
+      Mating.countDocuments({
+        owner: ownerId,
+        $and: [
+          { $or: [
+            { sonarResult: { $regex: /^positive$/i } },
+            { sonarRsult:  { $regex: /^positive$/i } },
+          ]},
+          { $or: [
+            { sonarDate:  { $gte: periodStart } },
+            { createdAt:  { $gte: periodStart } },
+          ]},
+        ]
+      }),
       Breeding
         ? Breeding.aggregate([
-          { $match: { owner: ownerId, 'birthEntries.birthDate': { $gte: periodStart } } },
-          { $unwind: '$birthEntries' },
-          { $match: { 'birthEntries.birthDate': { $gte: periodStart } } },
-          { $count: 'c' },
-        ]).then(r => r[0]?.c || 0)
+            { $match: { owner: ownerId, 'birthEntries.birthDate': { $gte: periodStart } } },
+            { $unwind: '$birthEntries' },
+            { $match: { 'birthEntries.birthDate': { $gte: periodStart } } },
+            { $count: 'c' },
+          ]).then(r => r[0]?.c || 0)
         : Animal.countDocuments({ owner: ownerId, birthDate: { $gte: periodStart } }),
       Weights.countDocuments({ owner: ownerId, weightType: 'Weaning', Date: { $gte: periodStart } }),
     ]);
     const conceptionRate = sonarTotal ? Math.round((sonarPos / sonarTotal) * 100) : 0;
     const weaningRate = born ? Math.round((weaned / born) * 100) : 0;
 
-    // Occupancy (إشغال العنابر)
-    // Occupancy (إشغال العنابر)
-    // توزيع الحيوانات على العنابر (بدون capacity/occupancyPct)
+    // Occupancy (توزيع الحيوانات النشِطة على العنابر)
     const shedsAgg = await Animal.aggregate([
       { $match: { owner: ownerId, _id: { $nin: excludedIds } } },
       { $group: { _id: '$locationShed', count: { $sum: 1 } } },
@@ -385,7 +398,7 @@ exports.getUserStatsV2 = async (req, res) => {
           animals: '$count'
         }
       },
-      { $sort: { animals: -1 } }, // رتب حسب عدد الحيوانات
+      { $sort: { animals: -1 } },
     ]);
 
     // نمو آخر 30 يوم + cost/kg
@@ -397,26 +410,25 @@ exports.getUserStatsV2 = async (req, res) => {
         $group: {
           _id: '$tagId',
           firstW: { $first: '$weight' },
-          lastW: { $last: '$weight' },
-          count: { $sum: 1 },
+          lastW:  { $last:  '$weight' },
+          count:  { $sum: 1 },
         }
       },
       {
         $addFields: {
           deltaKg: { $subtract: ['$lastW', '$firstW'] },
-          adg: { $divide: [{ $subtract: ['$lastW', '$firstW'] }, 30] },
+          adg:     { $divide: [{ $subtract: ['$lastW', '$firstW'] }, 30] },
         }
       },
     ]);
 
     const costLast30 = await AnimalCost.aggregate([
       { $match: { owner: ownerId, date: { $gte: since } } },
-      {
-        $group: {
+      { $group: {
           _id: '$animalTagId',
-          feed: { $sum: '$feedCost' },
+          feed:  { $sum: '$feedCost' },
           treat: { $sum: '$treatmentCost' },
-          vacc: { $sum: '$vaccineCost' },
+          vacc:  { $sum: '$vaccineCost' },
         }
       },
       { $project: { totalCost: { $add: ['$feed', '$treat', '$vacc'] } } },
@@ -446,7 +458,7 @@ exports.getUserStatsV2 = async (req, res) => {
           month: {
             revenue: round2(monthRevenue),
             expenses: round2(monthExpenses),
-            net: monthNet,
+            net: round2(monthNet),
             topExpenseCategories: topExpenseCats.map(c => ({ category: c._id || 'other', total: round2(c.total) })),
           },
           last6m: last6mFinance.map(r => ({
@@ -454,12 +466,7 @@ exports.getUserStatsV2 = async (req, res) => {
           })),
         },
         kpis: { vaccineAdherencePct, overdueVaccines: overdueVacc, conceptionRate, weaningRate },
-        sheds: shedsAgg.map(s => ({
-          shedId: s.shedId,
-          shedName: s.shedName,
-          animals: s.animals,
-        })),
-
+        sheds: shedsAgg.map(s => ({ shedId: s.shedId, shedName: s.shedName, animals: s.animals })),
         growth: { last30d: growth },
       }
     });
@@ -468,6 +475,8 @@ exports.getUserStatsV2 = async (req, res) => {
     res.status(500).json({ message: 'Failed to compute user stats v2' });
   }
 };
+
+
 
 // ====== DAILY TASKS (مهام اليوم) ======
 exports.getDailyTasks = async (req, res) => {
