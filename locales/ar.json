@@ -84,6 +84,21 @@
     "VACCINE_BOOSTER_DUE_TODAY": "جرعة البوستر للقاح {{name}} للحيوان {{tagId}} مستحقة اليوم ({{date}}).",
     "VACCINE_BOOSTER_DUE_IN_DAYS": "جرعة البوستر للقاح {{name}} للحيوان {{tagId}} بعد {{days}}يوم ({{date}}).",
     "VACCINE_ANNUAL_DUE_TODAY": "الجرعة السنوية للقاح {{name}} للحيوان {{tagId}} مستحقة اليوم ({{date}}).",
-    "VACCINE_ANNUAL_DUE_IN_DAYS": "الجرعة السنوية للقاح {{name}} للحيوان {{tagId}} بعد {{days} }يوم ({{date}})."
-
+    "VACCINE_ANNUAL_DUE_IN_DAYS": "الجرعة السنوية للقاح {{name}} للحيوان {{tagId}} بعد {{days} }يوم ({{date}}).",
+    "NOTIFICATION_MARKED_READ": "تم وضع علامة مقروء على الإشعار",
+    "FAILED_TO_CHECK_NOTIFICATIONS": "فشل التحقق من الإشعارات",
+    "PREFERENCES_UPDATED": "تم تحديث التفضيلات بنجاح",
+    "NOTIFICATIONS_CLEANED_UP": "تم تنظيف الإشعارات بنجاح",
+    "DIGEST_NOT_ENABLED": "الملخص غير مفعّل لهذا المستخدم",
+    "PAGE_NUMBER_INVALID": "رقم الصفحة يجب أن يكون أكبر من 0",
+    "LIMIT_INVALID": "الحد يجب أن يكون بين 1 و 100",
+    "TOTAL_NOTIFICATIONS": "إجمالي الإشعارات",
+    "UNREAD": "غير مقروءة",
+    "CRITICAL": "حرجة",
+    "HIGH": "عالية",
+    "MEDIUM": "متوسطة",
+    "LOW": "منخفضة",
+    "WEEK": "الأسبوع",
+    "OF": "من",
+    "WEEKLY_DIGEST": "ملخص أسبوعي"
 }

@@ -83,5 +83,21 @@
     "VACCINE_BOOSTER_DUE_TODAY": "Booster dose of {{name}} for animal {{tagId}} is due today ({{date}}).",
     "VACCINE_BOOSTER_DUE_IN_DAYS": "Booster dose of {{name}} for animal {{tagId}} is due in {days} day(s) ({{date}}).",
     "VACCINE_ANNUAL_DUE_TODAY": "Annual dose of {{name}} for animal {{tagId}} is due today ({{date}}).",
-    "VACCINE_ANNUAL_DUE_IN_DAYS": "Annual dose of {{name}} for animal {{tagId}} is due in {days} day(s) ({{date}})."
+    "VACCINE_ANNUAL_DUE_IN_DAYS": "Annual dose of {{name}} for animal {{tagId}} is due in {days} day(s) ({{date}}).",
+    "NOTIFICATION_MARKED_READ": "Notification marked as read",
+    "FAILED_TO_CHECK_NOTIFICATIONS": "Failed to check for notifications",
+    "PREFERENCES_UPDATED": "Preferences updated successfully",
+    "NOTIFICATIONS_CLEANED_UP": "Notifications cleaned up successfully",
+    "DIGEST_NOT_ENABLED": "Digest not enabled for this user",
+    "PAGE_NUMBER_INVALID": "Page number must be greater than 0",
+    "LIMIT_INVALID": "Limit must be between 1 and 100",
+    "TOTAL_NOTIFICATIONS": "Total Notifications",
+    "UNREAD": "Unread",
+    "CRITICAL": "Critical",
+    "HIGH": "High",
+    "MEDIUM": "Medium",
+    "LOW": "Low",
+    "WEEK": "Week",
+    "OF": "of",
+    "WEEKLY_DIGEST": "Weekly Digest"
 }

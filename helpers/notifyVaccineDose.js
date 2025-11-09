@@ -1,6 +1,6 @@
-const Notification = require('../Models/notification.model');
+const NotificationService = require('../utilits/notificationService');
 const i18n = require('../i18n');
-const { daysUntil, getStage, fmt, addDays } = require('./dateHelpers')
+const { daysUntil, getStage, fmt, addDays } = require('./dateHelpers');
 
 async function upsertVaccineDoseNotification({
     owner,
@@ -8,9 +8,9 @@ async function upsertVaccineDoseNotification({
     subtype,           // 'booster' | 'annual'
     dueDate,           // تاريخ الجرعة الفعلي
     tagId,
-    vaccineName,       // <<< ضيفي الاسم من الكولر
+    vaccineName,       // اسم اللقاح
     lang = 'en',
-    twoPoints = true   // لو شغّال الهيلبر بشكل دوري، خليه true. لو بتنده وهو بعيد عن الموعد، ممكن يبقى no-op.
+    twoPoints = true   // تشغيل على نقطتين: -7 أيام واليوم نفسه
 }) {
     if (!dueDate) return;
 
@@ -43,12 +43,26 @@ async function upsertVaccineDoseNotification({
         ? addDays(dueDate, -7)
         : dueDate;
 
-    // upsert يمنع التكرار على (owner,type,itemId,dueDate)
-    await Notification.updateOne(
-        { owner, type: 'VaccineDose', itemId: vaccineEntryId, dueDate: storedDueDate },
-        { $set: { subtype, message, severity, stage, isRead: false } },
-        { upsert: true }
-    );
+    // Use notification service with idempotency
+    await NotificationService.upsertNotification({
+        type: 'VaccineDose',
+        owner,
+        itemId: vaccineEntryId,
+        dueDate: storedDueDate,
+        subtype,
+        message,
+        severity,
+        stage,
+        category: 'medical',
+        metadata: {
+            tagId,
+            vaccineName,
+            dateStr,
+            delta
+        },
+        itemTagId: tagId,
+        itemName: vaccineName
+    });
 }
 
 module.exports = { upsertVaccineDoseNotification };

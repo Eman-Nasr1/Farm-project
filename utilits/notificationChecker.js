@@ -74,15 +74,43 @@ const checkExpiringItems = async (lang = 'en') => {
                         severity = 'medium';
                     }
 
-                    // مثال داخل لوب الـ treatments (بعد ما تحسبي daysUntilExpiry و message و severity)
+                    // Generate both English and Arabic messages
+                    let messageAr = message;
+                    let messageEn = message;
+                    
+                    // Generate English message
+                    i18n.setLocale('en');
+                    if (daysUntilExpiry <= 0) {
+                        messageEn = i18n.__('TREATMENT_EXPIRED', { name: treatment.name, date: expireDateFormatted });
+                    } else if (daysUntilExpiry <= 7) {
+                        messageEn = i18n.__('TREATMENT_EXPIRE_SOON', { name: treatment.name, days: daysUntilExpiry, date: expireDateFormatted });
+                    } else {
+                        messageEn = i18n.__('TREATMENT_EXPIRE_WARNING', { name: treatment.name, days: daysUntilExpiry, date: expireDateFormatted });
+                    }
+                    
+                    // Generate Arabic message
+                    i18n.setLocale('ar');
+                    if (daysUntilExpiry <= 0) {
+                        messageAr = i18n.__('TREATMENT_EXPIRED', { name: treatment.name, date: expireDateFormatted });
+                    } else if (daysUntilExpiry <= 7) {
+                        messageAr = i18n.__('TREATMENT_EXPIRE_SOON', { name: treatment.name, days: daysUntilExpiry, date: expireDateFormatted });
+                    } else {
+                        messageAr = i18n.__('TREATMENT_EXPIRE_WARNING', { name: treatment.name, days: daysUntilExpiry, date: expireDateFormatted });
+                    }
+                    
+                    // Reset to original language
+                    i18n.setLocale(lang);
+                    
                     notifications.push({
                         type: 'Treatment',
                         itemId: treatment._id,
-                        message,
-                        expiryDate: treatment.expireDate,   // اختياري لو عايزاه
+                        message: messageAr, // Default to Arabic if lang=ar, otherwise English
+                        messageAr,
+                        messageEn,
+                        expiresAt: treatment.expireDate,
                         owner: treatment.owner,
                         severity,
-                        stage: getStageExpiry(daysUntilExpiry)     // ← أضفنا المرحلة
+                        stage: getStageExpiry(daysUntilExpiry)
                     });
 
                 }
@@ -104,23 +132,44 @@ const checkExpiringItems = async (lang = 'en') => {
             const displayName = getVaccineDisplayName(vaccine, lang);
 
             if (daysUntilExpiry <= warningDays) {
-                let message, severity;
+                let message, messageAr, messageEn, severity;
 
+                // Generate English message
+                i18n.setLocale('en');
+                const displayNameEn = getVaccineDisplayName(vaccine, 'en');
                 if (daysUntilExpiry <= 0) {
-                    message = i18n.__('VACCINE_EXPIRED', { name: displayName, date: expireDateFormatted });
-                    severity = 'high';
+                    messageEn = i18n.__('VACCINE_EXPIRED', { name: displayNameEn, date: expireDateFormatted });
                 } else if (daysUntilExpiry <= 7) {
-                    message = i18n.__('VACCINE_EXPIRE_SOON', { name: displayName, days: daysUntilExpiry, date: expireDateFormatted });
-                    severity = 'high';
+                    messageEn = i18n.__('VACCINE_EXPIRE_SOON', { name: displayNameEn, days: daysUntilExpiry, date: expireDateFormatted });
                 } else {
-                    message = i18n.__('VACCINE_EXPIRE_WARNING', { name: displayName, days: daysUntilExpiry, date: expireDateFormatted });
-                    severity = 'medium';
+                    messageEn = i18n.__('VACCINE_EXPIRE_WARNING', { name: displayNameEn, days: daysUntilExpiry, date: expireDateFormatted });
                 }
+                
+                // Generate Arabic message
+                i18n.setLocale('ar');
+                const displayNameAr = getVaccineDisplayName(vaccine, 'ar');
+                if (daysUntilExpiry <= 0) {
+                    messageAr = i18n.__('VACCINE_EXPIRED', { name: displayNameAr, date: expireDateFormatted });
+                } else if (daysUntilExpiry <= 7) {
+                    messageAr = i18n.__('VACCINE_EXPIRE_SOON', { name: displayNameAr, days: daysUntilExpiry, date: expireDateFormatted });
+                } else {
+                    messageAr = i18n.__('VACCINE_EXPIRE_WARNING', { name: displayNameAr, days: daysUntilExpiry, date: expireDateFormatted });
+                }
+
+                // Reset to original language
+                i18n.setLocale(lang);
+                
+                // Determine severity
+                severity = daysUntilExpiry <= 7 ? 'high' : 'medium';
+                message = lang === 'ar' ? messageAr : messageEn;
+                
                 notifications.push({
                     type: 'Vaccine',
                     itemId: vaccine._id,
                     message,
-                    expiryDate: vaccine.expiryDate,      // اختياري
+                    messageAr,
+                    messageEn,
+                    expiresAt: vaccine.expiryDate,
                     owner: vaccine.owner,
                     severity,
                     stage: getStageExpiry(daysUntilExpiry)
