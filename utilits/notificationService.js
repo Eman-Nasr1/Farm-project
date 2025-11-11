@@ -9,9 +9,10 @@ const i18n = require('../i18n');
  * Handles creation, delivery, digest, and cleanup of notifications
  */
 class NotificationService {
-  
+
   /**
    * Create or update a notification with idempotency
+   * - details = { meta: <metadata>, history: [] }
    */
   static async upsertNotification(notificationData) {
     try {
@@ -22,40 +23,42 @@ class NotificationService {
         category = 'routine', metadata = {},
         itemTagId, itemName
       } = notificationData;
-  
+
       const idempotencyKey = Notification.generateIdempotencyKey(
         type, owner, itemId, dueDate, subtype
       );
-  
+
       // ابحث عن إشعار موجود بنفس (owner/type/itemId[/dueDate])
       let notification = await Notification.findOne({
         owner, type, itemId, ...(dueDate && { dueDate })
       });
-  
+
       if (notification) {
         const stageChanged = notification.stage !== stage;
-  
-        Object.assign(notification, {
-          message, messageAr, messageEn, severity, stage, category,
-          details: metadata, itemTagId, itemName, idempotencyKey
-        });
-  
+
+        // حدّث الحقول البسيطة
+        notification.message = message;
+        notification.messageAr = messageAr;
+        notification.messageEn = messageEn;
+        notification.severity = severity;
+        notification.stage = stage;
+        notification.category = category;
+        notification.itemTagId = itemTagId;
+        notification.itemName = itemName;
+        notification.idempotencyKey = idempotencyKey;
+
+        // عدّل meta بدون لمس جذر details
+        notification.set('details.meta', metadata);
+
         if (stageChanged) notification.isRead = false;
-  
-        // سجلّ تاريخ خفيف داخل details.history
-        try {
-          notification.details = notification.details || {};
-          notification.details.history = notification.details.history || [];
-          notification.details.history.push({
-            at: new Date(),
-            stage,
-            severity,
-            message
-          });
-        } catch (_) {}
-  
+
+        // ضيف history بأمان
+        const hist = notification.get('details.history') || [];
+        hist.push({ at: new Date(), stage, severity, message });
+        notification.set('details.history', hist);
+
         await notification.save();
-  
+
         // اربط الأشقاء فقط لسيناريوهات نقطتين (VaccineDose/Weight)
         try {
           if (['VaccineDose', 'Weight'].includes(type)) {
@@ -65,7 +68,7 @@ class NotificationService {
               itemId,
               _id: { $ne: notification._id }
             }).select('_id').lean();
-  
+
             const sibIds = siblings.map(s => s._id);
             if (sibIds.length) {
               await Notification.updateOne(
@@ -81,27 +84,29 @@ class NotificationService {
         } catch (e) {
           console.error('Failed to link relatedNotifications (update path):', e.message);
         }
-  
+
         return notification;
       }
-  
+
       // إنشاء جديد
       notification = await Notification.create({
         type, owner, itemId, dueDate, subtype,
         message, messageAr, messageEn, severity, stage,
-        category, details: metadata, idempotencyKey,
+        category,
+        details: { meta: metadata, history: [] }, // تفاصيل مهيكلة
+        idempotencyKey,
         itemTagId, itemName,
         isRead: false, isDelivered: false, includeInDigest: true
       });
-  
-      // Seed history لأول مرة
+
+      // Seed history في عملية منفصلة لتفادي أي تعارض
       try {
         await Notification.updateOne(
           { _id: notification._id },
           { $push: { 'details.history': { at: new Date(), stage, severity, message } } }
         );
       } catch (_) {}
-  
+
       // اربط الأشقاء (لو النوع ثنائي النقطة)
       try {
         if (['VaccineDose', 'Weight'].includes(type)) {
@@ -111,7 +116,7 @@ class NotificationService {
             itemId,
             _id: { $ne: notification._id }
           }).select('_id').lean();
-  
+
           const sibIds = siblings.map(s => s._id);
           if (sibIds.length) {
             await Notification.updateOne(
@@ -127,33 +132,78 @@ class NotificationService {
       } catch (e) {
         console.error('Failed to link relatedNotifications (create path):', e.message);
       }
-  
+
       return notification;
     } catch (error) {
       console.error('Error upserting notification:', error);
       throw error;
     }
   }
-  
 
   /**
-   * Create multiple notifications in batch
+   * Create multiple notifications in batch (bulk, idempotent, بدون تعارض على details)
    */
   static async createBatchNotifications(notificationsArray) {
-    const results = [];
-    
-    for (const notif of notificationsArray) {
-      try {
-        const created = await this.upsertNotification(notif);
-        results.push(created);
-      } catch (error) {
-        console.error(`Error creating notification for ${notif.type}:`, error);
-        results.push(null);
-      }
-    }
-    
-    return results.filter(Boolean);
+    if (!notificationsArray?.length) return [];
+  
+    const now = new Date();
+  
+    const ops = notificationsArray.map(n => {
+      const {
+        type, owner, itemId, dueDate, subtype,
+        message, messageAr, messageEn,
+        severity = 'medium', stage = 'month',
+        category = 'routine', metadata = {},
+        itemTagId, itemName
+      } = n;
+  
+      const filter = {
+        owner, type, itemId,
+        ...(typeof subtype !== 'undefined' ? { subtype } : {}),
+        ...(dueDate ? { dueDate } : {})
+      };
+  
+      const update = {
+        // لا تلمس الجذر details إطلاقًا
+        $set: {
+          message, messageAr, messageEn,
+          severity, stage, category,
+          itemTagId, itemName,
+          isDelivered: false,
+          includeInDigest: true,
+          'details.meta': metadata,            // ✅ نحدث meta فقط
+        },
+        $setOnInsert: {
+          owner, type, itemId, dueDate, subtype,
+          idempotencyKey: Notification.generateIdempotencyKey(type, owner, itemId, dueDate, subtype),
+          isRead: false,
+          // ❌ لا تكتب 'details.history' هنا
+        },
+        $push: {
+          'details.history': {                 // ✅ الإضافة الوحيدة لـ history
+            at: now, stage, severity, message
+          }
+        }
+      };
+  
+      return { updateOne: { filter, update, upsert: true } };
+    });
+  
+    await Notification.bulkWrite(ops, { ordered: false });
+  
+    const owners = [...new Set(notificationsArray.map(n => String(n.owner)))];
+    const types  = [...new Set(notificationsArray.map(n => n.type))];
+    const itemIds= [...new Set(notificationsArray.map(n => String(n.itemId)))];
+  
+    const docs = await Notification.find({
+      owner: { $in: owners },
+      type:  { $in: types  },
+      itemId:{ $in: itemIds }
+    }).sort({ createdAt: -1 }).lean();
+  
+    return docs;
   }
+  
 
   /**
    * Mark notification as delivered
@@ -165,15 +215,15 @@ class NotificationService {
 
       notification.isDelivered = true;
       notification.deliveredAt = new Date();
-      
+
       if (!notification.deliveryChannels) {
         notification.deliveryChannels = [];
       }
-      
+
       if (!notification.deliveryChannels.includes(deliveryChannel)) {
         notification.deliveryChannels.push(deliveryChannel);
       }
-      
+
       await notification.save();
       return notification;
     } catch (error) {
@@ -188,48 +238,52 @@ class NotificationService {
   static async shouldSendNotification(userId, notificationData) {
     try {
       const preferences = await UserAlertPreference.findOne({ user: userId });
-      
+
       if (!preferences || !preferences.defaultEnabled) {
         return { shouldSend: false, reason: 'notifications_disabled' };
       }
 
       // Check severity preference
-      if (!preferences.severityPreferences[notificationData.severity]) {
+      if (preferences.severityPreferences && !preferences.severityPreferences[notificationData.severity]) {
         return { shouldSend: false, reason: 'severity_filtered' };
       }
 
       // Check type preference
-      if (!preferences.typePreferences[notificationData.type]) {
+      if (preferences.typePreferences && !preferences.typePreferences[notificationData.type]) {
         return { shouldSend: false, reason: 'type_filtered' };
       }
 
       // Check category preference
-      if (notificationData.category && 
+      if (notificationData.category &&
+          preferences.categoryPreferences &&
           !preferences.categoryPreferences[notificationData.category]) {
         return { shouldSend: false, reason: 'category_filtered' };
       }
 
       // Check quiet hours
-      if (preferences.quietHours.enabled) {
+      if (preferences.quietHours?.enabled) {
         const now = new Date();
         const isCritical = notificationData.severity === 'critical';
-        
+
         // Skip quiet hours check if critical and allowed
         if (!isCritical || !preferences.quietHours.allowCritical) {
-          if (preferences.isInQuietHours(now, isCritical)) {
-            return { shouldSend: false, reason: 'quiet_hours' };
+          // لو عندك method اسمها isInQuietHours في الموديل استخدميها، وإلا طبّقي المنطق هنا
+          if (typeof preferences.isInQuietHours === 'function') {
+            if (preferences.isInQuietHours(now, isCritical)) {
+              return { shouldSend: false, reason: 'quiet_hours' };
+            }
           }
         }
       }
 
       // Check channel preferences
-      const enabledChannels = preferences.channels
+      const enabledChannels = (preferences.channels || [])
         .filter(c => c.enabled)
         .map(c => c.channel);
 
       return {
         shouldSend: true,
-        enabledChannels,
+        enabledChannels: enabledChannels.length ? enabledChannels : ['app'],
         preferences
       };
     } catch (error) {
@@ -251,13 +305,11 @@ class NotificationService {
         'digestPeriod.weekNumber': weekNumber
       });
 
-      if (existing) {
-        return existing;
-      }
+      if (existing) return existing;
 
       // Get user preferences
       const preferences = await UserAlertPreference.findOne({ user: userId });
-      
+
       if (!preferences || !preferences.digestPreferences?.enabled) {
         return null;
       }
@@ -270,10 +322,7 @@ class NotificationService {
       // Find notifications for this week
       const notifications = await Notification.find({
         owner: userId,
-        createdAt: {
-          $gte: startOfWeek,
-          $lte: endOfWeek
-        },
+        createdAt: { $gte: startOfWeek, $lte: endOfWeek },
         ...((preferences.digestPreferences?.includeRead) ? {} : { isRead: false })
       });
 
@@ -282,18 +331,11 @@ class NotificationService {
       const includeByType = preferences.digestPreferences?.includeByType || {};
       const includeByCategory = preferences.digestPreferences?.includeByCategory || {};
       const maxItems = preferences.digestPreferences?.maxItems || 20;
-      
+
       const filteredNotifications = notifications.filter(notif => {
-        // Default to true if preference not set (backward compatibility)
-        if (includeBySeverity[notif.severity] === false) {
-          return false;
-        }
-        if (includeByType[notif.type] === false) {
-          return false;
-        }
-        if (notif.category && includeByCategory[notif.category] === false) {
-          return false;
-        }
+        if (includeBySeverity[notif.severity] === false) return false;
+        if (includeByType[notif.type] === false) return false;
+        if (notif.category && includeByCategory[notif.category] === false) return false;
         return true;
       }).slice(0, maxItems);
 
@@ -301,11 +343,7 @@ class NotificationService {
       const summary = this.generateDigestSummary(filteredNotifications);
 
       // Create digest
-      const idempotencyKey = NotificationDigest.generateIdempotencyKey(
-        userId, 
-        year, 
-        weekNumber
-      );
+      const idempotencyKey = NotificationDigest.generateIdempotencyKey(userId, year, weekNumber);
 
       const digest = await NotificationDigest.create({
         owner: userId,
@@ -320,7 +358,7 @@ class NotificationService {
         highlights: this.extractHighlights(filteredNotifications),
         idempotencyKey,
         deliveryStatus: 'pending',
-        scheduledFor: new Date(endOfWeek.getTime() + 24 * 60 * 60 * 1000), // Send on Monday after week ends
+        scheduledFor: new Date(endOfWeek.getTime() + 24 * 60 * 60 * 1000), // Monday after week ends
         locale: preferences.language || 'en',
         preferencesSnapshot: {
           digestFrequency: preferences.digestPreferences?.frequency || 'weekly',
@@ -333,10 +371,10 @@ class NotificationService {
         }
       });
 
-      // Update notifications to link to digest
+      // Link notifications to digest
       await Notification.updateMany(
         { _id: { $in: filteredNotifications.map(n => n._id) } },
-        { digestId: digest._id }
+        { $set: { digestId: digest._id } }
       );
 
       return digest;
@@ -361,20 +399,11 @@ class NotificationService {
     };
 
     notifications.forEach(notif => {
-      // Count by type
-      const typeCount = summary.byType.get(notif.type) || 0;
-      summary.byType.set(notif.type, typeCount + 1);
-
-      // Count by category
-      const categoryCount = summary.byCategory.get(notif.category) || 0;
-      summary.byCategory.set(notif.category, categoryCount + 1);
-
-      // Count by severity
-      const severityCount = summary.bySeverity.get(notif.severity) || 0;
-      summary.bySeverity.set(notif.severity, severityCount + 1);
+      summary.byType.set(notif.type, (summary.byType.get(notif.type) || 0) + 1);
+      summary.byCategory.set(notif.category, (summary.byCategory.get(notif.category) || 0) + 1);
+      summary.bySeverity.set(notif.severity, (summary.bySeverity.get(notif.severity) || 0) + 1);
     });
 
-    // Convert Maps to Objects
     summary.byType = Object.fromEntries(summary.byType);
     summary.byCategory = Object.fromEntries(summary.byCategory);
     summary.bySeverity = Object.fromEntries(summary.bySeverity);
@@ -398,7 +427,7 @@ class NotificationService {
 
     return sorted.map(n => ({
       notificationId: n._id,
-      headline: n.title || n.message.substring(0, 100),
+      headline: n.title || (n.message || '').substring(0, 100),
       priority: n.severity,
       actionRequired: n.severity === 'critical' || n.severity === 'high'
     }));
@@ -411,12 +440,12 @@ class NotificationService {
     const date = new Date(year, 0, 1);
     const days = (weekNumber - 1) * 7;
     date.setDate(date.getDate() + days);
-    
+
     // Adjust to Monday of that week
     const dayOfWeek = date.getDay();
     const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
     date.setDate(diff);
-    
+
     return new Date(date.setHours(0, 0, 0, 0));
   }
 
@@ -498,7 +527,7 @@ class NotificationService {
   static async cleanupOldNotifications(userId) {
     try {
       const preferences = await UserAlertPreference.findOne({ user: userId });
-      
+
       if (!preferences) {
         return { deleted: 0 };
       }
@@ -530,21 +559,9 @@ class NotificationService {
         $group: {
           _id: null,
           total: { $sum: 1 },
-          unread: {
-            $sum: { $cond: [{ $eq: ['$isRead', false] }, 1, 0] }
-          },
-          bySeverity: {
-            $push: {
-              severity: '$severity',
-              isRead: '$isRead'
-            }
-          },
-          byType: {
-            $push: {
-              type: '$type',
-              isRead: '$isRead'
-            }
-          }
+          unread: { $sum: { $cond: [{ $eq: ['$isRead', false] }, 1, 0] } },
+          bySeverity: { $push: { severity: '$severity', isRead: '$isRead' } },
+          byType: { $push: { type: '$type', isRead: '$isRead' } }
         }
       }
     ]);
@@ -560,27 +577,24 @@ class NotificationService {
     }
 
     const stat = stats[0];
-    
-    // Count by severity
+
     const bySeverity = {};
     stat.bySeverity.forEach(n => {
       bySeverity[n.severity] = (bySeverity[n.severity] || 0) + 1;
     });
 
-    // Count by type
     const byType = {};
     stat.byType.forEach(n => {
       byType[n.type] = (byType[n.type] || 0) + 1;
     });
 
-    // Get recent unread
     const recentUnread = await Notification.find({
       owner: userId,
       isRead: false
     })
-    .sort({ createdAt: -1 })
-    .limit(5)
-    .select('type message severity stage createdAt');
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('type message severity stage createdAt');
 
     return {
       total: stat.total,
@@ -594,4 +608,3 @@ class NotificationService {
 }
 
 module.exports = NotificationService;
-

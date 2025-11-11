@@ -172,17 +172,32 @@ const checkNotifications = asyncwrapper(async (req, res) => {
   const lang = req.lang || req.user?.language || 'en';
 
   try {
-    // Collect all potential notifications
-    const notes = await collectAllNotifications(lang);
-    const userNotes = notes.filter(n => String(n.owner) === String(userId));
+    const userNotes = await collectAllNotifications(userId, lang);
 
-    // Create notifications using the service with idempotency
-    const createdNotifications = await NotificationService.createBatchNotifications(
-      userNotes.map(n => ({
+    if (!userNotes.length) {
+      return res.json({
+        status: httpstatustext.SUCCESS,
+        data: { notifications: [], checked: 0, created: 0, unreadCount: 0 }
+      });
+    }
+
+    // فلترة أي عنصر ناقص له مفاتيح أساسية قبل الـ bulk
+    const validNotes = userNotes.filter(n =>
+      n?.type && n?.owner && n?.itemId
+    );
+
+    if (validNotes.length !== userNotes.length) {
+      console.warn('Some notes were skipped due to missing keys', {
+        total: userNotes.length, valid: validNotes.length
+      });
+    }
+
+    const createdOrUpdated = await NotificationService.createBatchNotifications(
+      validNotes.map(n => ({
         type: n.type,
-        owner: userId,
+        owner: n.owner,           // خليه زي ما جه من المصدر (ObjectId)
         itemId: n.itemId,
-        dueDate: n.dueDate,
+        dueDate: n.dueDate,       // ممكن undefined — تمام
         subtype: n.subtype,
         message: n.message,
         messageAr: n.messageAr,
@@ -190,27 +205,34 @@ const checkNotifications = asyncwrapper(async (req, res) => {
         severity: n.severity,
         stage: n.stage,
         category: n.category || 'routine',
-        metadata: n.details || {}
+        metadata: n.details || {},
+        itemTagId: n.itemTagId,
+        itemName: n.itemName
       }))
     );
 
-    // Get unread count
-    const unreadCount = createdNotifications.filter(n => !n.isRead).length;
+    const unreadCount = createdOrUpdated.filter(n => !n.isRead).length;
 
-    res.json({ 
-      status: httpstatustext.SUCCESS, 
-      data: { 
-        notifications: createdNotifications,
+    res.json({
+      status: httpstatustext.SUCCESS,
+      data: {
+        notifications: createdOrUpdated,
         checked: userNotes.length,
-        created: createdNotifications.length,
+        created: createdOrUpdated.length,
         unreadCount
-      } 
+      }
     });
   } catch (error) {
-    console.error('Error checking notifications:', error);
-    res.status(500).json({ status: httpstatustext.ERROR, message: i18n.__('FAILED_TO_CHECK_NOTIFICATIONS') });
+    console.error('[checkNotifications] failed:', error?.message, error?.stack);
+    // تأكدي إن i18n متستورد في نفس الملف
+    return res.status(500).json({
+      status: httpstatustext.ERROR,
+      message: i18n.__('FAILED_TO_CHECK_NOTIFICATIONS')
+    });
   }
 });
+
+
 
 // Get notification statistics
 const getNotificationStats = asyncwrapper(async (req, res) => {

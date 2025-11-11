@@ -5,7 +5,7 @@ const VaccineEntrySchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'LocationShed'
       }, 
-      Vaccine: {
+      vaccine: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Vaccine'
   },
