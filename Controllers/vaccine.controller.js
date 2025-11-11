@@ -294,7 +294,7 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
   const filter = { owner: userId };
   if (tagId) filter.tagId = tagId;
   if (entryType) filter.entryType = entryType;
-  if (vaccineId) filter.Vaccine = vaccineId;
+  if (vaccineId) filter.vaccine = vaccineId;
 
   // Date range filtering
   if (dateFrom || dateTo) {
@@ -329,7 +329,7 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
   // Get paginated results
   const entries = await VaccineEntry.find(filter)
     .populate({
-      path: 'Vaccine',
+      path: 'vaccine',
       select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
       populate: {
         path: 'vaccineType',
@@ -347,20 +347,20 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
     tagId: entry.tagId,
     date: entry.date,
     entryType: entry.entryType,
-    vaccine: entry.Vaccine ? {
-      _id: entry.Vaccine._id,
-      name: entry.Vaccine.otherVaccineName ||
+    vaccine: entry.vaccine ? {  
+      _id: entry.vaccine._id,
+      name: entry.vaccine.otherVaccineName ||
         (lang === 'ar'
-          ? entry.Vaccine.vaccineType?.arabicName
-          : entry.Vaccine.vaccineType?.englishName) ||
+          ? entry.vaccine.vaccineType?.arabicName
+          : entry.vaccine.vaccineType?.englishName) ||
         (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
       diseaseType: lang === 'ar'
-        ? entry.Vaccine.vaccineType?.arabicDiseaseType
-        : entry.Vaccine.vaccineType?.englishDiseaseType ||
+          ? entry.vaccine.vaccineType?.arabicDiseaseType
+        : entry.vaccine.vaccineType?.englishDiseaseType ||
         (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
-      dosePrice: entry.Vaccine.pricing?.dosePrice,
-      expiryDate: entry.Vaccine.expiryDate,
-      isExpired: entry.Vaccine.expiryDate < new Date()
+      dosePrice: entry.vaccine.pricing?.dosePrice,
+      expiryDate: entry.vaccine.expiryDate,
+      isExpired: entry.vaccine.expiryDate < new Date()
     } : null,
     locationShed: entry.locationShed ? {
       _id: entry.locationShed._id,
@@ -405,7 +405,7 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   // Get all vaccine entries for this animal
   const vaccineEntries = await VaccineEntry.find({ tagId: animal.tagId })
     .populate({
-      path: 'Vaccine',
+      path: 'vaccine',
       select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
       populate: {
         path: 'vaccineType',
@@ -436,21 +436,23 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
       _id: entry._id,
       date: entry.date,
       entryType: entry.entryType,
-      vaccine: entry.Vaccine ? {
-        _id: entry.Vaccine._id,
-        name: entry.Vaccine.otherVaccineName ||
+        vaccine: entry.vaccine ? {
+        _id: entry.vaccine._id,
+        name: entry.vaccine.otherVaccineName ||
           (lang === 'ar'
-            ? entry.Vaccine.vaccineType?.arabicName
-            : entry.Vaccine.vaccineType?.englishName) ||
+            ? entry.vaccine.vaccineType?.arabicName
+            : entry.vaccine.vaccineType?.englishName) ||
           (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
         diseaseType: lang === 'ar'
-          ? entry.Vaccine.vaccineType?.arabicDiseaseType
-          : entry.Vaccine.vaccineType?.englishDiseaseType ||
+          ? entry.vaccine.vaccineType?.arabicDiseaseType
+          : entry.vaccine.vaccineType?.englishDiseaseType ||
           (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
-        dosePrice: entry.Vaccine.pricing?.dosePrice,
-        isExpired: entry.Vaccine.expiryDate < new Date(),
-        boosterDose: entry.Vaccine.BoosterDose,
-        annualDose: entry.Vaccine.AnnualDose
+        dosePrice: entry.vaccine.pricing?.dosePrice,
+        isExpired: entry.vaccine.expiryDate < new Date(),
+        boosterDose: entry.vaccine.BoosterDose,
+        annualDose: entry.vaccine.AnnualDose,
+        expiryDate: entry.vaccine.expiryDate,
+        isExpired: entry.vaccine.expiryDate < new Date(),
       } : null,
       locationShed: entry.locationShed ? {
         _id: entry.locationShed._id,
@@ -478,7 +480,7 @@ const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
       owner: userId
     })
       .populate({
-        path: 'Vaccine',
+        path: 'vaccine',
         select: 'otherVaccineName vaccineType BoosterDose AnnualDose pricing.dosePrice expiryDate',
         populate: {
           path: 'vaccineType',
@@ -516,22 +518,22 @@ const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
       } : null,
       date: vaccineEntry.date,
       entryType: vaccineEntry.entryType,
-      vaccine: vaccineEntry.Vaccine ? {
-        _id: vaccineEntry.Vaccine._id,
-        name: vaccineEntry.Vaccine.otherVaccineName ||
+      vaccine: vaccineEntry.vaccine ? {
+        _id: vaccineEntry.vaccine._id,
+        name: vaccineEntry.vaccine.otherVaccineName ||
           (lang === 'ar'
-            ? vaccineEntry.Vaccine.vaccineType?.arabicName
-            : vaccineEntry.Vaccine.vaccineType?.englishName) ||
+              ? vaccineEntry.vaccine.vaccineType?.arabicName
+            : vaccineEntry.vaccine.vaccineType?.englishName) ||
           (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
         diseaseType: lang === 'ar'
-          ? vaccineEntry.Vaccine.vaccineType?.arabicDiseaseType
-          : vaccineEntry.Vaccine.vaccineType?.englishDiseaseType ||
+          ? vaccineEntry.vaccine.vaccineType?.arabicDiseaseType
+          : vaccineEntry.vaccine.vaccineType?.englishDiseaseType ||
           (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
-        dosePrice: vaccineEntry.Vaccine.pricing?.dosePrice,
-        isExpired: vaccineEntry.Vaccine.expiryDate < new Date(),
-        boosterDose: vaccineEntry.Vaccine.BoosterDose,
-        annualDose: vaccineEntry.Vaccine.AnnualDose,
-        expiryDate: vaccineEntry.Vaccine.expiryDate
+        dosePrice: vaccineEntry.vaccine.pricing?.dosePrice,
+        isExpired: vaccineEntry.vaccine.expiryDate < new Date(),
+        boosterDose: vaccineEntry.vaccine.BoosterDose,
+        annualDose: vaccineEntry.vaccine.AnnualDose,
+        expiryDate: vaccineEntry.vaccine.expiryDate
       } : null,
       createdAt: vaccineEntry.createdAt,
       updatedAt: vaccineEntry.updatedAt
@@ -626,7 +628,7 @@ const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
 
     for (const animal of animals) {
       const newVaccineEntry = new VaccineEntry({
-        Vaccine: vaccine._id,
+        vaccine: vaccine._id,
         tagId: animal.tagId,
         locationShed: shed._id,
         date: new Date(date),
@@ -768,7 +770,7 @@ const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
     await vaccine.save({ session });
 
     const newVaccineEntry = await VaccineEntry.create([{
-      Vaccine: vaccine._id,
+      vaccine: vaccine._id,
       tagId: animal.tagId,
       locationShed: animal.locationShed,
       date: new Date(date),
@@ -910,8 +912,8 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
     let oldVaccine = null;
 
     // Only check old vaccine if reference exists
-    if (existingEntry.Vaccine) {
-      oldVaccine = await Vaccine.findById(existingEntry.Vaccine).session(session);
+    if (existingEntry.vaccine) {
+      oldVaccine = await Vaccine.findById(existingEntry.vaccine).session(session);
       if (oldVaccine) {
         oldDosePrice = oldVaccine.pricing?.dosePrice ||
           (oldVaccine.pricing?.bottlePrice / oldVaccine.stock?.dosesPerBottle) || 0;
@@ -919,7 +921,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // If changing vaccine and old vaccine exists
-    if (existingEntry.Vaccine && existingEntry.Vaccine.toString() !== vaccineId && oldVaccine) {
+    if (existingEntry.vaccine && existingEntry.vaccine.toString() !== vaccineId && oldVaccine) {
       // Return dose to old vaccine
       oldVaccine.stock.totalDoses += 1;
       oldVaccine.stock.bottles = Math.ceil(oldVaccine.stock.totalDoses / oldVaccine.stock.dosesPerBottle);
@@ -937,7 +939,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
       newVaccine.stock.totalDoses -= 1;
       newVaccine.stock.bottles = Math.ceil(newVaccine.stock.totalDoses / newVaccine.stock.dosesPerBottle);
       await newVaccine.save({ session });
-    } else if (!existingEntry.Vaccine) {
+    } else if (!existingEntry.vaccine) {
       // If no previous vaccine, just deduct from new one
       if (newVaccine.stock.totalDoses < 1) {
         await session.abortTransaction();
@@ -962,7 +964,7 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // Update entry
-    existingEntry.Vaccine = newVaccine._id;
+    existingEntry.vaccine = newVaccine._id;
     existingEntry.tagId = tagId;
     existingEntry.date = new Date(date);
     existingEntry.entryType = entryType;
@@ -1023,7 +1025,7 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // Find vaccine and restore dose
-    const vaccine = await Vaccine.findById(entry.Vaccine).session(session);
+      const vaccine = await Vaccine.findById(entry.vaccine).session(session);
     if (vaccine) {
       vaccine.stock.totalDoses += 1;
       vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
@@ -1154,7 +1156,7 @@ const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
 
       // Create new vaccine entry
       const newVaccineEntry = new VaccineEntry({
-        Vaccine: vaccine._id,
+        vaccine: vaccine._id,
         tagId,
         locationShed,
         date,
@@ -1223,7 +1225,7 @@ const exportVaccineEntriesToExcel = asyncwrapper(async (req, res, next) => {
 
     const entries = await VaccineEntry.find(filter)
       .sort({ date: 1 })
-      .populate('Vaccine', 'vaccineName pricing.dosePrice')
+      .populate('vaccine', 'vaccineName pricing.dosePrice')
       .populate('locationShed', 'locationShedName');
 
     if (entries.length === 0) {
@@ -1238,12 +1240,12 @@ const exportVaccineEntriesToExcel = asyncwrapper(async (req, res, next) => {
 
     const data = entries.map(entry => [
       entry.tagId,
-      entry.Vaccine?.vaccineName || '',
+      entry.vaccine?.vaccineName || '',
       entry.entryType,
       entry.date?.toISOString().split('T')[0] || '',
       entry.locationShed?.locationShedName || '',
-      entry.Vaccine?.pricing?.dosePrice ||
-      (entry.Vaccine?.pricing?.bottlePrice / entry.Vaccine?.stock?.dosesPerBottle) || '',
+      entry.vaccine?.pricing?.dosePrice ||
+      (entry.vaccine?.pricing?.bottlePrice / entry.vaccine?.stock?.dosesPerBottle) || '',
       entry.createdAt?.toISOString().split('T')[0] || ''
     ]);
 
