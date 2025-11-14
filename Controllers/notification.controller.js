@@ -89,6 +89,11 @@ const getNotifications = asyncwrapper(async (req, res) => {
     delete mapped.messageAr;
     delete mapped.messageEn;
     
+    // Remove history from details if it exists
+    if (mapped.details && mapped.details.history) {
+      delete mapped.details.history;
+    }
+    
     return mapped;
   });
 
@@ -211,14 +216,23 @@ const checkNotifications = asyncwrapper(async (req, res) => {
       }))
     );
 
-    const unreadCount = createdOrUpdated.filter(n => !n.isRead).length;
+    // Remove history from details if it exists
+    const cleanedNotifications = createdOrUpdated.map(notif => {
+      const cleaned = notif.toObject ? notif.toObject() : { ...notif };
+      if (cleaned.details && cleaned.details.history) {
+        delete cleaned.details.history;
+      }
+      return cleaned;
+    });
+
+    const unreadCount = cleanedNotifications.filter(n => !n.isRead).length;
 
     res.json({
       status: httpstatustext.SUCCESS,
       data: {
-        notifications: createdOrUpdated,
+        notifications: cleanedNotifications,
         checked: userNotes.length,
-        created: createdOrUpdated.length,
+        created: cleanedNotifications.length,
         unreadCount
       }
     });
@@ -292,6 +306,14 @@ const getUnreadNotifications = asyncwrapper(async (req, res) => {
     Notification.countDocuments(query)
   ]);
 
+  // Remove history from details if it exists
+  const cleanedNotifications = notifications.map(notif => {
+    if (notif.details && notif.details.history) {
+      delete notif.details.history;
+    }
+    return notif;
+  });
+
   // Calculate pagination metadata
   const totalPages = Math.ceil(totalDocuments / limitNum);
   const hasNextPage = pageNum < totalPages;
@@ -300,7 +322,7 @@ const getUnreadNotifications = asyncwrapper(async (req, res) => {
   res.json({
     status: httpstatustext.SUCCESS,
     data: { 
-      notifications,
+      notifications: cleanedNotifications,
       pagination: {
         currentPage: pageNum,
         totalPages,
@@ -409,6 +431,11 @@ const getWeeklyDigest = asyncwrapper(async (req, res) => {
       // Remove language-specific fields from response
       delete mapped.messageAr;
       delete mapped.messageEn;
+      
+      // Remove history from details if it exists
+      if (mapped.details && mapped.details.history) {
+        delete mapped.details.history;
+      }
       
       return mapped;
     });

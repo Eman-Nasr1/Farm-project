@@ -12,7 +12,7 @@ class NotificationService {
 
   /**
    * Create or update a notification with idempotency
-   * - details = { meta: <metadata>, history: [] }
+   * - details = { meta: <metadata> }
    */
   static async upsertNotification(notificationData) {
     try {
@@ -52,11 +52,6 @@ class NotificationService {
 
         if (stageChanged) notification.isRead = false;
 
-        // ضيف history بأمان
-        const hist = notification.get('details.history') || [];
-        hist.push({ at: new Date(), stage, severity, message });
-        notification.set('details.history', hist);
-
         await notification.save();
 
         // اربط الأشقاء فقط لسيناريوهات نقطتين (VaccineDose/Weight)
@@ -93,19 +88,11 @@ class NotificationService {
         type, owner, itemId, dueDate, subtype,
         message, messageAr, messageEn, severity, stage,
         category,
-        details: { meta: metadata, history: [] }, // تفاصيل مهيكلة
+        details: { meta: metadata }, // تفاصيل مهيكلة
         idempotencyKey,
         itemTagId, itemName,
         isRead: false, isDelivered: false, includeInDigest: true
       });
-
-      // Seed history في عملية منفصلة لتفادي أي تعارض
-      try {
-        await Notification.updateOne(
-          { _id: notification._id },
-          { $push: { 'details.history': { at: new Date(), stage, severity, message } } }
-        );
-      } catch (_) {}
 
       // اربط الأشقاء (لو النوع ثنائي النقطة)
       try {
@@ -176,13 +163,7 @@ class NotificationService {
         $setOnInsert: {
           owner, type, itemId, dueDate, subtype,
           idempotencyKey: Notification.generateIdempotencyKey(type, owner, itemId, dueDate, subtype),
-          isRead: false,
-          // ❌ لا تكتب 'details.history' هنا
-        },
-        $push: {
-          'details.history': {                 // ✅ الإضافة الوحيدة لـ history
-            at: now, stage, severity, message
-          }
+          isRead: false
         }
       };
   
