@@ -14,7 +14,8 @@ const ALLOWLIST = [
   'http://localhost:3000',              // لوكال
   'https://online-farm.vercel.app',     // الدومين القديم لو لسه بتستخدميه
   'https://mazraaonline.com',           // الدومين الجديد
-  'https://www.mazraaonline.com'        // لو فيه www
+  'https://www.mazraaonline.com' ,
+  'https://app.mazraaonline.com'         // لو فيه www
 ];
   
   app.use(cors({
