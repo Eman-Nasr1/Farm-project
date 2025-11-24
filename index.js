@@ -11,9 +11,11 @@ const cors=require('cors');
 require('dotenv').config();
 
 const ALLOWLIST = [
-    'http://localhost:3000',    // CRA (لو بتجربي محليًا)
-    'https://online-farm.vercel.app' // الدومين بتاع الفرونت
-  ];
+  'http://localhost:3000',              // لوكال
+  'https://online-farm.vercel.app',     // الدومين القديم لو لسه بتستخدميه
+  'https://mazraaonline.com',           // الدومين الجديد
+  'https://www.mazraaonline.com'        // لو فيه www
+];
   
   app.use(cors({
     origin: (origin, cb) => {
