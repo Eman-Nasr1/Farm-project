@@ -47,6 +47,21 @@ const Userschema=new mongoose.Schema(
           resetPasswordExpires: {
             type: Date,
           },
+        // Stripe subscription fields
+        subscriptionStatus: { 
+            type: String, 
+            enum: ["active", "canceled", "past_due", "trialing", "none"], 
+            default: "none" 
+        },
+        stripeCustomerId: { 
+            type: String 
+        },
+        stripeSubscriptionId: { 
+            type: String 
+        },
+        subscriptionCurrentPeriodEnd: { 
+            type: Date 
+        },
         createdAt: {  
             type: Date,  
             default: Date.now  // Automatically set to the current date/time when created  
