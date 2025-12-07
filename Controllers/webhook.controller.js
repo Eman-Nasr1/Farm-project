@@ -110,13 +110,16 @@ async function handleCheckoutSessionCompleted(session) {
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const status = mapStripeStatusToLocal(subscription.status);
-    const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+    const currentPeriodEnd = safeTimestampToDate(subscription.current_period_end);
 
     // Update user subscription info
     user.planId = planId;
     user.subscriptionStatus = status;
     user.stripeSubscriptionId = subscriptionId;
-    user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+    // Only set currentPeriodEnd if it's a valid date
+    if (currentPeriodEnd) {
+      user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+    }
     // Trial is now over (user has paid subscription)
     // Keep trialStart and trialEnd for historical purposes, but status is now 'active'
 
@@ -135,7 +138,7 @@ async function handleSubscriptionCreated(subscription) {
   const customerId = subscription.customer;
   const subscriptionId = subscription.id;
   const status = mapStripeStatusToLocal(subscription.status);
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+  const currentPeriodEnd = safeTimestampToDate(subscription.current_period_end);
 
   // Find user by Stripe customer ID
   const user = await User.findOne({ stripeCustomerId: customerId });
@@ -154,7 +157,10 @@ async function handleSubscriptionCreated(subscription) {
   // Update user subscription info
   user.stripeSubscriptionId = subscriptionId;
   user.subscriptionStatus = status;
-  user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+  // Only set currentPeriodEnd if it's a valid date
+  if (currentPeriodEnd) {
+    user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+  }
 
   await user.save();
   console.log(`✅ Subscription created for user ${user._id}: ${status}`);
@@ -168,7 +174,7 @@ async function handleSubscriptionUpdated(subscription) {
   const customerId = subscription.customer;
   const subscriptionId = subscription.id;
   const status = mapStripeStatusToLocal(subscription.status);
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+  const currentPeriodEnd = safeTimestampToDate(subscription.current_period_end);
 
   // Find user by Stripe customer ID
   const user = await User.findOne({ stripeCustomerId: customerId });
@@ -187,7 +193,10 @@ async function handleSubscriptionUpdated(subscription) {
   // Update user subscription info
   user.stripeSubscriptionId = subscriptionId;
   user.subscriptionStatus = status;
-  user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+  // Only set currentPeriodEnd if it's a valid date
+  if (currentPeriodEnd) {
+    user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+  }
 
   await user.save();
   console.log(`✅ Subscription updated for user ${user._id}: ${status}`);
@@ -243,7 +252,7 @@ async function handleInvoicePaymentSucceeded(invoice) {
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const status = mapStripeStatusToLocal(subscription.status);
-    const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+    const currentPeriodEnd = safeTimestampToDate(subscription.current_period_end);
 
     // Extract planId from subscription metadata if available
     const planId = subscription.metadata?.planId;
@@ -252,7 +261,10 @@ async function handleInvoicePaymentSucceeded(invoice) {
     }
 
     user.subscriptionStatus = status;
-    user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+    // Only set currentPeriodEnd if it's a valid date
+    if (currentPeriodEnd) {
+      user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+    }
 
     await user.save();
     console.log(`✅ Payment succeeded for user ${user._id}, subscription: ${status}`);
@@ -286,6 +298,22 @@ async function handleInvoicePaymentFailed(invoice) {
 
   await user.save();
   console.log(`⚠️  Payment failed for user ${user._id}`);
+}
+
+/**
+ * Safely convert Stripe timestamp to Date object
+ * Returns null if timestamp is invalid or missing
+ */
+function safeTimestampToDate(timestamp) {
+  if (!timestamp || typeof timestamp !== 'number' || isNaN(timestamp)) {
+    return null;
+  }
+  const date = new Date(timestamp * 1000);
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
 }
 
 /**
