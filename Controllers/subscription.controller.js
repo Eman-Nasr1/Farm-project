@@ -105,7 +105,7 @@ const createCheckoutSession = asyncwrapper(async (req, res, next) => {
     await user.save();
   }
 
-  // Create Stripe Checkout Session with 1-month free trial
+  // Create Stripe Checkout Session (NO trial_period_days - user already used free trial)
   const session = await stripe.checkout.sessions.create({
     customer: stripeCustomerId,
     mode: 'subscription',
@@ -117,7 +117,6 @@ const createCheckoutSession = asyncwrapper(async (req, res, next) => {
       },
     ],
     subscription_data: {
-      trial_period_days: 30, // 1 month free trial
       metadata: {
         userId: userId.toString(),
         planId: planId.toString(),
@@ -149,30 +148,61 @@ const createCheckoutSession = asyncwrapper(async (req, res, next) => {
 const getSubscriptionStatus = asyncwrapper(async (req, res, next) => {
   // Get authenticated user
   const userId = req.user.id;
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).populate('planId');
 
   if (!user) {
     return next(AppError.create('User not found', 404, httpstatustext.FAIL));
   }
 
-  // Get the plan if user has a subscription
-  let plan = null;
-  if (user.stripeSubscriptionId) {
-    // Optionally fetch subscription details from Stripe
-    try {
-      const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-      // You can include more Stripe subscription details here if needed
-    } catch (error) {
-      console.error('Error fetching subscription from Stripe:', error);
+  // Initialize trial for existing users who don't have one yet (only if no subscription)
+  if (!user.trialStart && !user.trialEnd && user.subscriptionStatus === 'none' && !user.planId) {
+    const now = new Date();
+    user.subscriptionStatus = 'trialing';
+    user.trialStart = now;
+    user.trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    await user.save();
+  }
+
+  const now = new Date();
+  let isTrialActive = false;
+  let isTrialExpired = false;
+  let animalLimit = null;
+
+  // Determine trial status
+  if (user.subscriptionStatus === 'active') {
+    // Active paid subscription - trial is expired
+    isTrialActive = false;
+    isTrialExpired = true;
+    // Get animal limit from plan
+    if (user.planId) {
+      animalLimit = user.planId.animalLimit;
     }
+  } else if (user.subscriptionStatus === 'trialing') {
+    // Check if trial is still active
+    if (user.trialEnd && now <= user.trialEnd) {
+      isTrialActive = true;
+      isTrialExpired = false;
+    } else {
+      // Trial expired but no active subscription
+      isTrialActive = false;
+      isTrialExpired = true;
+    }
+  } else {
+    // No trial and no active subscription
+    isTrialActive = false;
+    isTrialExpired = true;
   }
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
     data: {
       subscriptionStatus: user.subscriptionStatus,
-      stripeCustomerId: user.stripeCustomerId,
-      stripeSubscriptionId: user.stripeSubscriptionId,
+      trialStart: user.trialStart,
+      trialEnd: user.trialEnd,
+      isTrialActive,
+      isTrialExpired,
+      planId: user.planId ? user.planId._id : null,
+      animalLimit,
       subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd,
       registerationType: user.registerationType,
     },

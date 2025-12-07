@@ -46,6 +46,12 @@ const PlanSchema = new mongoose.Schema({
     required: true 
   }, // in smallest unit (e.g. cents for USD)
   
+  // maximum number of animals allowed for this plan
+  animalLimit: {
+    type: Number,
+    required: true,
+  },
+  
   isActive: { 
     type: Boolean, 
     default: true 

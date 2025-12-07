@@ -231,6 +231,9 @@ const register = asyncwrapper(async (req, res, next) => {
   }
 
   const hashpassword = await bcrypt.hash(password, 7);
+  const now = new Date();
+  const trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+  
   const newuser = new User({
     name,
     email,
@@ -239,7 +242,12 @@ const register = asyncwrapper(async (req, res, next) => {
     phone,
     role,
     registerationType,
-    country
+    country,
+    // Start 30-day free trial (no Stripe subscription yet)
+    subscriptionStatus: 'trialing',
+    trialStart: now,
+    trialEnd: trialEnd,
+    planId: null // no paid plan yet
   })
   const token = await jwt.sign(
     { email: newuser.email, id: newuser._id, role: newuser.role, name: newuser.name, registerationType: newuser.registerationType }, // Include 'role' in the payload
@@ -268,6 +276,15 @@ const login = asyncwrapper(async (req, res, next) => {
 
   const matchedpassword = await bcrypt.compare(password, user.password);
   if (user && matchedpassword) {
+    // Initialize trial for existing users who don't have one yet (only if no subscription)
+    if (!user.trialStart && !user.trialEnd && user.subscriptionStatus === 'none' && !user.planId) {
+      const now = new Date();
+      user.subscriptionStatus = 'trialing';
+      user.trialStart = now;
+      user.trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      await user.save();
+    }
+    
     const token = await jwt.sign(
       { email: user.email, id: user._id, role: user.role, registerationType: user.registerationType }, // Include 'role' in the payload
       process.env.JWT_SECRET_KEY,

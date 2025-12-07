@@ -15,11 +15,16 @@ const asyncwrapper = require('../middleware/asyncwrapper');
  * POST /api/admin/plans
  */
 const createPlan = asyncwrapper(async (req, res, next) => {
-  const { name, registerationType, stripePriceId, currency, interval, intervalCount, amount, isActive } = req.body;
+  const { name, registerationType, stripePriceId, currency, interval, intervalCount, amount, animalLimit, isActive } = req.body;
 
   // Validate required fields
-  if (!name || !registerationType || !stripePriceId || !amount) {
-    return next(AppError.create('Missing required fields: name, registerationType, stripePriceId, amount', 400, httpstatustext.FAIL));
+  if (!name || !registerationType || !stripePriceId || !amount || animalLimit === undefined || animalLimit === null) {
+    return next(AppError.create('Missing required fields: name, registerationType, stripePriceId, amount, animalLimit', 400, httpstatustext.FAIL));
+  }
+
+  // Validate animalLimit is a positive number
+  if (typeof animalLimit !== 'number' || animalLimit <= 0) {
+    return next(AppError.create('animalLimit must be a positive number', 400, httpstatustext.FAIL));
   }
 
   // Check if plan with same registrationType and stripePriceId already exists
@@ -40,6 +45,7 @@ const createPlan = asyncwrapper(async (req, res, next) => {
     currency: currency || 'usd',
     interval: interval || 'month',
     amount,
+    animalLimit: Number(animalLimit),
     isActive: isActive !== undefined ? isActive : true,
   };
 
@@ -97,12 +103,20 @@ const getPlanById = asyncwrapper(async (req, res, next) => {
  */
 const updatePlan = asyncwrapper(async (req, res, next) => {
   const { id } = req.params;
-  const { name, registerationType, stripePriceId, currency, interval, intervalCount, amount, isActive } = req.body;
+  const { name, registerationType, stripePriceId, currency, interval, intervalCount, amount, animalLimit, isActive } = req.body;
 
   const plan = await Plan.findById(id);
 
   if (!plan) {
     return next(AppError.create('Plan not found', 404, httpstatustext.FAIL));
+  }
+
+  // Validate animalLimit if provided
+  if (animalLimit !== undefined && animalLimit !== null) {
+    if (typeof animalLimit !== 'number' || animalLimit <= 0) {
+      return next(AppError.create('animalLimit must be a positive number', 400, httpstatustext.FAIL));
+    }
+    plan.animalLimit = Number(animalLimit);
   }
 
   // Update fields if provided

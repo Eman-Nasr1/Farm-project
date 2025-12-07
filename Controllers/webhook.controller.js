@@ -8,6 +8,7 @@
  */
 
 const User = require('../Models/user.model');
+const Plan = require('../Models/Plan');
 const stripe = require('../config/stripe');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
@@ -42,6 +43,10 @@ const handleStripeWebhook = asyncwrapper(async (req, res, next) => {
   // Handle the event
   try {
     switch (event.type) {
+      case 'checkout.session.completed':
+        await handleCheckoutSessionCompleted(event.data.object);
+        break;
+
       case 'customer.subscription.created':
         await handleSubscriptionCreated(event.data.object);
         break;
@@ -76,6 +81,53 @@ const handleStripeWebhook = asyncwrapper(async (req, res, next) => {
 });
 
 /**
+ * Handle checkout.session.completed event
+ * When a checkout session is completed (user successfully subscribed)
+ */
+async function handleCheckoutSessionCompleted(session) {
+  // Only handle subscription checkouts
+  if (session.mode !== 'subscription') {
+    return;
+  }
+
+  const userId = session.metadata?.userId;
+  const planId = session.metadata?.planId;
+  const subscriptionId = session.subscription;
+
+  if (!userId || !planId || !subscriptionId) {
+    console.error('Missing required metadata in checkout session:', { userId, planId, subscriptionId });
+    return;
+  }
+
+  // Find user
+  const user = await User.findById(userId);
+  if (!user) {
+    console.error(`User not found for ID: ${userId}`);
+    return;
+  }
+
+  // Retrieve subscription from Stripe to get full details
+  try {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const status = mapStripeStatusToLocal(subscription.status);
+    const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+
+    // Update user subscription info
+    user.planId = planId;
+    user.subscriptionStatus = status;
+    user.stripeSubscriptionId = subscriptionId;
+    user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
+    // Trial is now over (user has paid subscription)
+    // Keep trialStart and trialEnd for historical purposes, but status is now 'active'
+
+    await user.save();
+    console.log(`✅ Checkout completed for user ${user._id}, subscription: ${status}, plan: ${planId}`);
+  } catch (error) {
+    console.error('Error retrieving subscription from Stripe:', error);
+  }
+}
+
+/**
  * Handle subscription.created event
  * When a new subscription is created (e.g., after checkout)
  */
@@ -91,6 +143,12 @@ async function handleSubscriptionCreated(subscription) {
   if (!user) {
     console.error(`User not found for customer ID: ${customerId}`);
     return;
+  }
+
+  // Extract planId from subscription metadata if available
+  const planId = subscription.metadata?.planId;
+  if (planId) {
+    user.planId = planId;
   }
 
   // Update user subscription info
@@ -118,6 +176,12 @@ async function handleSubscriptionUpdated(subscription) {
   if (!user) {
     console.error(`User not found for customer ID: ${customerId}`);
     return;
+  }
+
+  // Extract planId from subscription metadata if available
+  const planId = subscription.metadata?.planId;
+  if (planId) {
+    user.planId = planId;
   }
 
   // Update user subscription info
@@ -180,6 +244,12 @@ async function handleInvoicePaymentSucceeded(invoice) {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const status = mapStripeStatusToLocal(subscription.status);
     const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+
+    // Extract planId from subscription metadata if available
+    const planId = subscription.metadata?.planId;
+    if (planId && !user.planId) {
+      user.planId = planId;
+    }
 
     user.subscriptionStatus = status;
     user.subscriptionCurrentPeriodEnd = currentPeriodEnd;
