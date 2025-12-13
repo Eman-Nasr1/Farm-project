@@ -50,9 +50,11 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
   if (activeGateway === 'paymob') {
     // For Paymob: only plans with prices array (multi-currency support)
     // Must have at least EGP price (since all users pay in EGP)
-    query.prices = { $exists: true, $ne: [] };
-    // Ensure plan has EGP price
-    query['prices.currency'] = 'EGP';
+    query.prices = { 
+      $exists: true, 
+      $ne: [],
+      $elemMatch: { currency: 'EGP' }
+    };
   } else if (activeGateway === 'stripe') {
     // For Stripe: only plans with stripePriceId
     query.stripePriceId = { $exists: true, $ne: null };
