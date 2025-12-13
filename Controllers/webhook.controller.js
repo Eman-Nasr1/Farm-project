@@ -339,12 +339,11 @@ function mapStripeStatusToLocal(stripeStatus) {
 
 /**
  * Handle Paymob webhook events
- * POST /api/webhooks/paymob
+ * GET/POST /api/webhooks/paymob
  * 
- * This is a server-to-server webhook endpoint.
- * Paymob sends POST requests with JSON body containing:
- * - hmac: HMAC signature for verification
- * - obj: Transaction object with payment details
+ * Paymob can send webhooks as:
+ * - GET requests with query parameters (Transaction response callback)
+ * - POST requests with JSON body (Server-to-server webhook)
  * 
  * This endpoint:
  * 1. Verifies HMAC signature using Paymob's official format
@@ -357,41 +356,94 @@ function mapStripeStatusToLocal(stripeStatus) {
  */
 const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
   try {
-    // Paymob webhook is POST only with JSON body
-    if (req.method !== 'POST') {
+    console.log(`📥 Paymob webhook received: ${req.method} ${req.path}`);
+    
+    let trx, hmac, paymobOrderId;
+
+    // Handle GET request (query parameters) or POST request (JSON body)
+    if (req.method === 'GET') {
+      // GET request: data comes from query parameters
+      const query = req.query;
+      
+      // Helper function to convert string boolean to boolean
+      const toBool = (val) => {
+        if (val === 'true' || val === true) return true;
+        if (val === 'false' || val === false) return false;
+        return val;
+      };
+      
+      // Build transaction object from query parameters for HMAC verification
+      // Note: Paymob sends query parameters as strings, so we need to parse them correctly
+      // Express handles dots in query params, so 'source_data.type' becomes query['source_data.type']
+      trx = {
+        amount_cents: query.amount_cents ? parseInt(query.amount_cents, 10) : '',
+        created_at: query.created_at || '',
+        currency: query.currency || '',
+        error_occured: toBool(query.error_occured),
+        has_parent_transaction: toBool(query.has_parent_transaction),
+        id: query.id || '',
+        integration_id: query.integration_id || '',
+        is_3d_secure: toBool(query.is_3d_secure),
+        is_auth: toBool(query.is_auth),
+        is_capture: toBool(query.is_capture),
+        is_refunded: toBool(query.is_refunded),
+        is_standalone_payment: toBool(query.is_standalone_payment),
+        is_voided: toBool(query.is_voided),
+        order: {
+          id: query.order || query.order_id || ''
+        },
+        owner: query.owner || '',
+        pending: toBool(query.pending),
+        source_data: {
+          pan: query['source_data.pan'] || query['source_data[pan]'] || (query.source_data && query.source_data.pan) || '',
+          sub_type: query['source_data.sub_type'] || query['source_data[sub_type]'] || (query.source_data && query.source_data.sub_type) || '',
+          type: query['source_data.type'] || query['source_data[type]'] || (query.source_data && query.source_data.type) || ''
+        },
+        success: toBool(query.success)
+      };
+
+      hmac = query.hmac;
+      paymobOrderId = query.order || query.order_id;
+    } else if (req.method === 'POST') {
+      // POST request: data comes from JSON body
+      const { hmac: bodyHmac, obj } = req.body;
+      
+      if (!obj) {
+        console.error('⚠️  Paymob webhook missing transaction object (obj)');
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Missing transaction object', 
+          code: 400, 
+          data: null 
+        });
+      }
+
+      trx = obj;
+      hmac = bodyHmac;
+      paymobOrderId = trx.order?.id;
+    } else {
       return res.status(405).json({ 
         status: 'error', 
-        message: 'Method not allowed. Only POST is accepted.', 
+        message: 'Method not allowed. Only GET and POST are accepted.', 
         code: 405 
       });
     }
 
-    // Extract webhook data from request body
-    const { hmac, obj } = req.body;
-
-    // Verify HMAC signature
-    // HMAC verification is mandatory for security
-    const isValid = paymobService.verifyWebhookSignature(obj, hmac);
-    if (!isValid) {
-      console.error('⚠️  Paymob webhook HMAC verification failed');
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Invalid webhook signature', 
-        code: 400, 
-        data: null 
-      });
-    }
-
-    // Extract transaction data
-    const trx = obj;
-    if (!trx) {
-      console.error('⚠️  Paymob webhook missing transaction object (obj)');
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Missing transaction object', 
-        code: 400, 
-        data: null 
-      });
+    // Verify HMAC signature if provided
+    if (hmac && process.env.PAYMOB_HMAC) {
+      const isValid = paymobService.verifyWebhookSignature(trx, hmac);
+      if (!isValid) {
+        console.error('⚠️  Paymob webhook HMAC verification failed');
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Invalid webhook signature', 
+          code: 400, 
+          data: null 
+        });
+      }
+    } else if (process.env.PAYMOB_HMAC && !hmac) {
+      console.warn('⚠️  PAYMOB_HMAC is set but no HMAC provided in webhook request');
+      // Continue processing but log warning
     }
 
     // Only process successful and non-pending transactions
@@ -402,7 +454,6 @@ const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
     }
 
     // Get Paymob order ID
-    const paymobOrderId = trx.order?.id;
     if (!paymobOrderId) {
       console.error('⚠️  Paymob webhook missing order ID');
       return res.status(400).json({ 

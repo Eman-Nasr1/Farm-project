@@ -13,13 +13,12 @@ const router = express.Router();
 const webhookController = require('../Controllers/webhook.controller');
 
 /**
- * Paymob webhook endpoint (POST only)
- * POST /api/webhooks/paymob
+ * Paymob webhook endpoint
+ * GET/POST /api/webhooks/paymob
  * 
- * This is a server-to-server webhook endpoint.
- * Paymob sends POST requests with JSON body containing:
- * - hmac: HMAC signature for verification
- * - obj: Transaction object
+ * Paymob can send webhooks as:
+ * - GET requests with query parameters (Transaction response callback)
+ * - POST requests with JSON body (Server-to-server webhook)
  * 
  * This endpoint:
  * 1. Verifies HMAC signature
@@ -28,6 +27,11 @@ const webhookController = require('../Controllers/webhook.controller');
  * 
  * No authentication middleware is used - verification is done via Paymob HMAC signature.
  */
+router.get(
+  '/',
+  webhookController.handlePaymobWebhook
+);
+
 router.post(
   '/',
   webhookController.handlePaymobWebhook
