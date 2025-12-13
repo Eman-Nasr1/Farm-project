@@ -231,6 +231,10 @@ const getSubscriptionStatus = asyncwrapper(async (req, res, next) => {
     isTrialExpired = true;
   }
 
+  // Determine if subscription is paid and active
+  const isPaidSubscription = user.subscriptionStatus === 'active' && user.planId;
+  const isSubscriptionExpired = user.subscriptionCurrentPeriodEnd && new Date() > user.subscriptionCurrentPeriodEnd;
+
   res.status(200).json({
     status: httpstatustext.SUCCESS,
     data: {
@@ -243,6 +247,12 @@ const getSubscriptionStatus = asyncwrapper(async (req, res, next) => {
       animalLimit,
       subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd,
       registerationType: user.registerationType,
+      // Additional helpful fields
+      isPaidSubscription, // true if user has paid subscription
+      isSubscriptionExpired, // true if paid subscription has expired
+      daysUntilExpiry: user.subscriptionCurrentPeriodEnd 
+        ? Math.ceil((user.subscriptionCurrentPeriodEnd - new Date()) / (1000 * 60 * 60 * 24))
+        : null,
     },
   });
 });

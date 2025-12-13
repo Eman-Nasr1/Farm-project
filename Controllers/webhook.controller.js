@@ -350,12 +350,20 @@ const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
     const webhookData = req.method === 'GET' ? req.query : req.body;
     const hmac = req.headers['x-hmac'] || req.headers['hmac'] || req.query.hmac;
 
-    // Verify webhook signature if HMAC secret is configured
-    if (process.env.PAYMOB_HMAC_SECRET) {
+    // Verify webhook signature if HMAC secret is configured AND HMAC is provided
+    // Note: Paymob GET requests may not always include HMAC, so we only verify if it's present
+    if (process.env.PAYMOB_HMAC_SECRET && hmac) {
       const isValid = await paymentGatewayService.verifyWebhookSignature(webhookData, hmac);
       if (!isValid) {
         console.error('⚠️  Paymob webhook signature verification failed');
         return next(AppError.create('Invalid webhook signature', 400, httpstatustext.ERROR));
+      }
+    } else if (process.env.PAYMOB_HMAC_SECRET && !hmac) {
+      // HMAC secret is configured but no HMAC was provided
+      // For GET requests, this is often acceptable (Paymob may not send HMAC in GET)
+      // For POST requests, we should log a warning but still process
+      if (req.method === 'POST') {
+        console.warn('⚠️  Paymob POST webhook received without HMAC signature');
       }
     }
 

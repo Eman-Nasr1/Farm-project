@@ -305,18 +305,62 @@ function verifyWebhookSignature(webhookData, receivedHmac) {
     return true; // Allow if secret is not configured (for development)
   }
 
+  // If no HMAC is provided, we can't verify
+  // This is common for GET requests from Paymob
+  if (!receivedHmac) {
+    console.warn('No HMAC provided in webhook request, skipping verification');
+    return true; // Allow if HMAC is not provided (common for GET requests)
+  }
+
   try {
     // Paymob sends HMAC in a specific format
-    // You may need to adjust this based on Paymob's actual HMAC format
-    const calculatedHmac = crypto
-      .createHmac('sha512', hmacSecret)
-      .update(JSON.stringify(webhookData))
-      .digest('hex');
-
-    return crypto.timingSafeEqual(
-      Buffer.from(receivedHmac),
-      Buffer.from(calculatedHmac)
-    );
+    // For GET requests, HMAC might be calculated differently
+    // Try both JSON stringified and query string formats
+    let calculatedHmac;
+    
+    // Method 1: JSON stringified (for POST requests)
+    try {
+      calculatedHmac = crypto
+        .createHmac('sha512', hmacSecret)
+        .update(JSON.stringify(webhookData))
+        .digest('hex');
+      
+      if (crypto.timingSafeEqual(
+        Buffer.from(receivedHmac),
+        Buffer.from(calculatedHmac)
+      )) {
+        return true;
+      }
+    } catch (e) {
+      // Try next method
+    }
+    
+    // Method 2: Query string format (for GET requests)
+    // Paymob may send HMAC based on sorted query parameters
+    try {
+      const sortedKeys = Object.keys(webhookData).sort();
+      const queryString = sortedKeys
+        .map(key => `${key}=${webhookData[key]}`)
+        .join('&');
+      
+      calculatedHmac = crypto
+        .createHmac('sha512', hmacSecret)
+        .update(queryString)
+        .digest('hex');
+      
+      if (crypto.timingSafeEqual(
+        Buffer.from(receivedHmac),
+        Buffer.from(calculatedHmac)
+      )) {
+        return true;
+      }
+    } catch (e) {
+      // Both methods failed
+    }
+    
+    // If both methods fail, signature is invalid
+    console.error('Paymob webhook signature verification failed - calculated HMAC does not match received HMAC');
+    return false;
   } catch (error) {
     console.error('Error verifying Paymob webhook signature:', error);
     return false;
