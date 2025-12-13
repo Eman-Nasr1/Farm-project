@@ -1,7 +1,7 @@
 /**
  * Webhook Routes
  * 
- * Routes for handling external webhooks (e.g., Stripe).
+ * Routes for handling external webhooks (Stripe and Paymob).
  * These routes do NOT use authentication middleware as they are
  * verified using webhook signatures instead.
  */
@@ -11,8 +11,7 @@ const router = express.Router();
 const webhookController = require('../Controllers/webhook.controller');
 
 // IMPORTANT: Stripe webhooks require raw body for signature verification
-// We need to use express.raw() middleware for this route
-// This should be configured in index.js before the general express.json() middleware
+// This is configured in index.js before the general express.json() middleware
 
 /**
  * Stripe webhook endpoint

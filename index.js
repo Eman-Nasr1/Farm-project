@@ -33,12 +33,17 @@ mongoose.connect(url).then(()=>{
     console.log("mongoose start");
     // Start cron jobs after database connection
     cronJobs.scheduleExpiryCheck();
+    cronJobs.scheduleSubscriptionRenewals();
 })
 
 // IMPORTANT: Stripe webhook needs raw body for signature verification
-// Register webhook route BEFORE express.json() middleware
+// Register webhook routes BEFORE express.json() middleware
 const webhookRoutes = require('./Routes/webhookRoutes');
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), webhookRoutes);
+
+// Paymob webhook uses JSON (not raw body)
+const paymobWebhookRoutes = require('./Routes/paymobWebhookRoutes');
+app.use('/api/webhooks/paymob', express.json(), paymobWebhookRoutes);
 
 // Now use express.json() for all other routes
 app.use (express.json());
@@ -105,6 +110,9 @@ app.use('/', subscriptionRoutes);
 
 const planRoutes = require('./Routes/planRoutes');
 app.use('/', planRoutes);
+
+const settingsRoutes = require('./Routes/settingsRoutes');
+app.use('/', settingsRoutes);
 
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 

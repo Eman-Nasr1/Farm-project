@@ -16,11 +16,20 @@ router.use(verifytoken);
 // Get available subscription plans
 router.get('/api/subscriptions/plans', subscriptionController.getAvailablePlans);
 
-// Create checkout session for subscription
-router.post('/api/subscriptions/checkout', subscriptionController.createCheckoutSession);
+// Create checkout session for subscription (unified - uses active payment gateway)
+router.post('/api/subscriptions/checkout', subscriptionController.createCheckout);
+
+// Legacy Stripe checkout (kept for backward compatibility)
+router.post('/api/subscriptions/checkout/stripe', subscriptionController.createCheckoutSession);
 
 // Get subscription status
 router.get('/api/subscriptions/status', subscriptionController.getSubscriptionStatus);
+
+// Toggle auto-renewal
+router.put('/api/subscriptions/auto-renew', subscriptionController.toggleAutoRenew);
+
+// Cancel subscription
+router.put('/api/subscriptions/cancel', subscriptionController.cancelSubscription);
 
 module.exports = router;
 

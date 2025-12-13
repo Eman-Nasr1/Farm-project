@@ -2,7 +2,7 @@
  * Plan Controller
  * 
  * Handles CRUD operations for subscription plans (admin only).
- * Plans map to Stripe Prices and are associated with registration types.
+ * Supports both Stripe (legacy) and Paymob (multi-currency) payment gateways.
  */
 
 const Plan = require('../Models/Plan');
@@ -13,13 +13,28 @@ const asyncwrapper = require('../middleware/asyncwrapper');
 /**
  * Create a new subscription plan (Admin only)
  * POST /api/admin/plans
+ * 
+ * Supports two formats:
+ * 1. Stripe plan: requires stripePriceId and amount
+ * 2. Paymob plan: requires prices array (multi-currency)
  */
 const createPlan = asyncwrapper(async (req, res, next) => {
-  const { name, registerationType, stripePriceId, currency, interval, intervalCount, amount, animalLimit, isActive } = req.body;
+  const { 
+    name, 
+    registerationType, 
+    stripePriceId, 
+    currency, 
+    interval, 
+    intervalCount, 
+    amount, 
+    prices, // Multi-currency prices array for Paymob
+    animalLimit, 
+    isActive 
+  } = req.body;
 
   // Validate required fields
-  if (!name || !registerationType || !stripePriceId || !amount || animalLimit === undefined || animalLimit === null) {
-    return next(AppError.create('Missing required fields: name, registerationType, stripePriceId, amount, animalLimit', 400, httpstatustext.FAIL));
+  if (!name || !registerationType || animalLimit === undefined || animalLimit === null) {
+    return next(AppError.create('Missing required fields: name, registerationType, animalLimit', 400, httpstatustext.FAIL));
   }
 
   // Validate animalLimit is a positive number
@@ -27,27 +42,68 @@ const createPlan = asyncwrapper(async (req, res, next) => {
     return next(AppError.create('animalLimit must be a positive number', 400, httpstatustext.FAIL));
   }
 
-  // Check if plan with same registrationType and stripePriceId already exists
+  // Determine if this is a Stripe or Paymob plan
+  const isStripePlan = stripePriceId && amount;
+  const isPaymobPlan = prices && Array.isArray(prices) && prices.length > 0;
+
+  if (!isStripePlan && !isPaymobPlan) {
+    return next(AppError.create(
+      'Either provide stripePriceId + amount (for Stripe) OR prices array (for Paymob multi-currency)',
+      400,
+      httpstatustext.FAIL
+    ));
+  }
+
+  // Validate Paymob prices array if provided
+  if (isPaymobPlan) {
+    for (const price of prices) {
+      if (!price.country || !price.currency || price.amount === undefined) {
+        return next(AppError.create(
+          'Each price in prices array must have: country, currency, and amount',
+          400,
+          httpstatustext.FAIL
+        ));
+      }
+      if (typeof price.amount !== 'number' || price.amount < 0) {
+        return next(AppError.create('Price amount must be a non-negative number', 400, httpstatustext.FAIL));
+      }
+    }
+  }
+
+  // Check if plan with same registrationType and name already exists
   const existingPlan = await Plan.findOne({ 
     registerationType, 
-    stripePriceId 
+    name 
   });
 
   if (existingPlan) {
-    return next(AppError.create('Plan with this registration type and Stripe price ID already exists', 400, httpstatustext.FAIL));
+    return next(AppError.create('Plan with this registration type and name already exists', 400, httpstatustext.FAIL));
   }
 
   // Prepare plan data
   const planData = {
     name,
     registerationType,
-    stripePriceId,
-    currency: currency || 'usd',
     interval: interval || 'month',
-    amount,
     animalLimit: Number(animalLimit),
     isActive: isActive !== undefined ? isActive : true,
   };
+
+  // Add Stripe-specific fields if provided
+  if (isStripePlan) {
+    planData.stripePriceId = stripePriceId;
+    planData.currency = currency || 'usd';
+    planData.amount = amount;
+  }
+
+  // Add Paymob multi-currency prices if provided
+  if (isPaymobPlan) {
+    planData.prices = prices.map(p => ({
+      country: p.country.toUpperCase(),
+      currency: p.currency.toUpperCase(),
+      amount: Number(p.amount),
+    }));
+  }
 
   // Always include intervalCount (convert to number if provided)
   if (intervalCount !== undefined && intervalCount !== null) {
@@ -103,7 +159,18 @@ const getPlanById = asyncwrapper(async (req, res, next) => {
  */
 const updatePlan = asyncwrapper(async (req, res, next) => {
   const { id } = req.params;
-  const { name, registerationType, stripePriceId, currency, interval, intervalCount, amount, animalLimit, isActive } = req.body;
+  const { 
+    name, 
+    registerationType, 
+    stripePriceId, 
+    currency, 
+    interval, 
+    intervalCount, 
+    amount, 
+    prices, // Multi-currency prices array for Paymob
+    animalLimit, 
+    isActive 
+  } = req.body;
 
   const plan = await Plan.findById(id);
 
@@ -117,6 +184,30 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
       return next(AppError.create('animalLimit must be a positive number', 400, httpstatustext.FAIL));
     }
     plan.animalLimit = Number(animalLimit);
+  }
+
+  // Validate prices array if provided
+  if (prices !== undefined) {
+    if (!Array.isArray(prices) || prices.length === 0) {
+      return next(AppError.create('prices must be a non-empty array', 400, httpstatustext.FAIL));
+    }
+    for (const price of prices) {
+      if (!price.country || !price.currency || price.amount === undefined) {
+        return next(AppError.create(
+          'Each price in prices array must have: country, currency, and amount',
+          400,
+          httpstatustext.FAIL
+        ));
+      }
+      if (typeof price.amount !== 'number' || price.amount < 0) {
+        return next(AppError.create('Price amount must be a non-negative number', 400, httpstatustext.FAIL));
+      }
+    }
+    plan.prices = prices.map(p => ({
+      country: p.country.toUpperCase(),
+      currency: p.currency.toUpperCase(),
+      amount: Number(p.amount),
+    }));
   }
 
   // Update fields if provided

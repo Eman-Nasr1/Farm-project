@@ -4,19 +4,26 @@
  * Handles subscription-related operations:
  * - Getting available plans
  * - Creating Stripe checkout sessions
+ * - Creating Paymob checkout (multi-currency support)
  * - Getting subscription status
  */
 
 const User = require('../Models/user.model');
 const Plan = require('../Models/Plan');
+const UserSubscription = require('../Models/UserSubscription');
 const stripe = require('../config/stripe');
+const paymentGatewayService = require('../services/paymentGatewayService');
+const Settings = require('../Models/Settings');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
 
 /**
  * Get available subscription plans
- * Returns only active plans that match the user's registration type
+ * Returns only active plans that match:
+ * - User's registration type
+ * - Active payment gateway (Paymob or Stripe)
+ * 
  * GET /api/subscriptions/plans
  */
 const getAvailablePlans = asyncwrapper(async (req, res, next) => {
@@ -28,18 +35,47 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
     return next(AppError.create('User not found', 404, httpstatustext.FAIL));
   }
 
-  // If user has a registration type, filter plans by it
-  // Otherwise, return all active plans
+  // Get active payment gateway
+  const activeGateway = await paymentGatewayService.getActiveGateway();
+
+  // Build query based on registration type and payment gateway
   const query = { isActive: true };
+  
+  // Filter by registration type
   if (user.registerationType) {
     query.registerationType = user.registerationType;
   }
 
-  const plans = await Plan.find(query).sort({ amount: 1 });
+  // Filter by payment gateway
+  if (activeGateway === 'paymob') {
+    // For Paymob: only plans with prices array (multi-currency support)
+    // Must have at least EGP price (since all users pay in EGP)
+    query.prices = { $exists: true, $ne: [] };
+    // Ensure plan has EGP price
+    query['prices.currency'] = 'EGP';
+  } else if (activeGateway === 'stripe') {
+    // For Stripe: only plans with stripePriceId
+    query.stripePriceId = { $exists: true, $ne: null };
+  }
+
+  const plans = await Plan.find(query).sort({ createdAt: -1 });
+
+  // Filter plans to ensure they match gateway requirements
+  const filteredPlans = plans.filter(plan => {
+    if (activeGateway === 'paymob') {
+      // Must have EGP price in prices array
+      return plan.prices && plan.prices.some(p => p.currency === 'EGP');
+    } else if (activeGateway === 'stripe') {
+      // Must have stripePriceId
+      return plan.stripePriceId && plan.stripePriceId.trim().length > 0;
+    }
+    return true;
+  });
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
-    data: plans,
+    data: filteredPlans,
+    gateway: activeGateway,
   });
 });
 
@@ -209,9 +245,279 @@ const getSubscriptionStatus = asyncwrapper(async (req, res, next) => {
   });
 });
 
+/**
+ * Create a checkout session for subscription (Paymob or Stripe based on active gateway)
+ * POST /api/subscriptions/checkout
+ * 
+ * This endpoint automatically uses the active payment gateway (Paymob or Stripe).
+ * For Paymob: Returns iframe URL for payment
+ * For Stripe: Returns checkout session URL
+ * 
+ * Request body:
+ * {
+ *   "planId": "MongoPlanId"
+ * }
+ * 
+ * Response (Paymob):
+ * {
+ *   "status": "success",
+ *   "data": {
+ *     "url": "https://accept.paymob.com/api/acceptance/iframes/...",
+ *     "orderId": "123456",
+ *     "paymentKey": "token_xxx",
+ *     "amount": 10000,
+ *     "currency": "EGP"
+ *   }
+ * }
+ */
+const createCheckout = asyncwrapper(async (req, res, next) => {
+  const { planId } = req.body;
+
+  if (!planId) {
+    return next(AppError.create('Missing required field: planId', 400, httpstatustext.FAIL));
+  }
+
+  // Get authenticated user
+  const userId = req.user.id;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    return next(AppError.create('User not found', 404, httpstatustext.FAIL));
+  }
+
+  // Load the plan
+  const plan = await Plan.findById(planId);
+
+  if (!plan) {
+    return next(AppError.create('Plan not found', 404, httpstatustext.FAIL));
+  }
+
+  if (!plan.isActive) {
+    return next(AppError.create('Plan is not active', 400, httpstatustext.FAIL));
+  }
+
+  // Ensure user's registration type matches the plan
+  if (user.registerationType && user.registerationType !== plan.registerationType) {
+    return next(AppError.create(
+      `This plan is for ${plan.registerationType} registration type, but your account is ${user.registerationType}`,
+      400,
+      httpstatustext.FAIL
+    ));
+  }
+
+  // Get USD price for display (all users see USD price in UI)
+  // But we'll charge everyone in EGP via Paymob
+  const userCountry = user.country?.toUpperCase() || 'US';
+  
+  // Get USD price for display purposes
+  const usdPriceInfo = plan.prices?.find(p => p.currency === 'USD') || 
+                       (plan.prices && plan.prices.length > 0 ? plan.prices[0] : null);
+  
+  if (!usdPriceInfo || !usdPriceInfo.amount || usdPriceInfo.amount <= 0) {
+    return next(AppError.create(
+      'No USD price configured for this plan. Please contact support.',
+      400,
+      httpstatustext.FAIL
+    ));
+  }
+
+  // Get EGP price for Paymob payment (all users pay in EGP)
+  const egpPriceInfo = plan.prices?.find(p => p.currency === 'EGP');
+  
+  if (!egpPriceInfo || !egpPriceInfo.amount || egpPriceInfo.amount <= 0) {
+    return next(AppError.create(
+      'No EGP price configured for this plan. Please contact support.',
+      400,
+      httpstatustext.FAIL
+    ));
+  }
+
+  // Display price in USD, but charge in EGP
+  const displayPrice = {
+    amount: usdPriceInfo.amount,
+    currency: 'USD',
+  };
+
+  // Actual payment amount in EGP (for Paymob)
+  const paymentPrice = {
+    amount: egpPriceInfo.amount,
+    currency: 'EGP',
+  };
+
+  // Create checkout using EGP for Paymob (all users pay in EGP)
+  try {
+    const checkoutData = await paymentGatewayService.createCheckout(
+      paymentPrice.amount,
+      paymentPrice.currency,
+      user,
+      plan
+    );
+
+    // Calculate next billing date (default: 1 month from now)
+    const nextBillingDate = new Date();
+    if (plan.interval === 'year') {
+      nextBillingDate.setFullYear(nextBillingDate.getFullYear() + (plan.intervalCount || 1));
+    } else {
+      nextBillingDate.setMonth(nextBillingDate.getMonth() + (plan.intervalCount || 1));
+    }
+
+    // Get active gateway to determine payment method
+    const activeGateway = await paymentGatewayService.getActiveGateway();
+
+    // Create or update UserSubscription record (status: 'trialing' until payment succeeds)
+    // Store actual payment amount (EGP) but keep display price (USD) in metadata
+    const subscriptionData = {
+      userId: user._id,
+      planId: plan._id,
+      status: 'trialing', // Will be updated to 'active' when webhook confirms payment
+      paymentMethod: activeGateway,
+      currency: paymentPrice.currency.toUpperCase(), // EGP (actual payment)
+      amount: paymentPrice.amount, // EGP amount (actual payment)
+      nextBillingDate: nextBillingDate,
+      metadata: {
+        displayPrice: displayPrice, // USD price for UI display
+        displayCurrency: 'USD',
+      },
+    };
+
+    if (activeGateway === 'paymob' && checkoutData.orderId) {
+      subscriptionData.paymobOrderId = checkoutData.orderId.toString();
+    } else if (activeGateway === 'stripe' && checkoutData.sessionId) {
+      subscriptionData.stripeSubscriptionId = checkoutData.sessionId;
+    }
+
+    // Check if user already has a subscription for this plan
+    let subscription = await UserSubscription.findOne({
+      userId: user._id,
+      planId: plan._id,
+      status: { $in: ['trialing', 'active'] },
+    });
+
+    if (subscription) {
+      // Update existing subscription
+      Object.assign(subscription, subscriptionData);
+      await subscription.save();
+    } else {
+      // Create new subscription
+      subscription = await UserSubscription.create(subscriptionData);
+    }
+
+    res.status(200).json({
+      status: httpstatustext.SUCCESS,
+      message: 'Checkout created successfully',
+      data: {
+        ...checkoutData,
+        // Display price in USD for UI
+        displayPrice: {
+          amount: displayPrice.amount,
+          currency: displayPrice.currency,
+        },
+        // Actual payment amount in EGP (for reference)
+        paymentAmount: {
+          amount: paymentPrice.amount,
+          currency: paymentPrice.currency,
+        },
+        planId: plan._id,
+        planName: plan.name,
+        subscriptionId: subscription._id,
+      },
+    });
+  } catch (error) {
+    console.error('Checkout creation error:', error);
+    return next(AppError.create(
+      `Failed to create checkout: ${error.message}`,
+      500,
+      httpstatustext.ERROR
+    ));
+  }
+});
+
+/**
+ * Toggle auto-renewal for current user's subscription
+ * PUT /api/subscriptions/auto-renew
+ * 
+ * Request body:
+ * {
+ *   "autoRenew": true/false
+ * }
+ */
+const toggleAutoRenew = asyncwrapper(async (req, res, next) => {
+  const { autoRenew } = req.body;
+  const userId = req.user.id;
+
+  if (typeof autoRenew !== 'boolean') {
+    return next(AppError.create('autoRenew must be a boolean value', 400, httpstatustext.FAIL));
+  }
+
+  // Find active subscription for user
+  const subscription = await UserSubscription.findOne({
+    userId: userId,
+    status: 'active',
+  });
+
+  if (!subscription) {
+    return next(AppError.create('No active subscription found', 404, httpstatustext.FAIL));
+  }
+
+  subscription.autoRenew = autoRenew;
+  await subscription.save();
+
+  res.status(200).json({
+    status: httpstatustext.SUCCESS,
+    message: `Auto-renewal ${autoRenew ? 'enabled' : 'disabled'} successfully`,
+    data: {
+      subscriptionId: subscription._id,
+      autoRenew: subscription.autoRenew,
+    },
+  });
+});
+
+/**
+ * Cancel subscription
+ * PUT /api/subscriptions/cancel
+ */
+const cancelSubscription = asyncwrapper(async (req, res, next) => {
+  const userId = req.user.id;
+
+  // Find active subscription for user
+  const subscription = await UserSubscription.findOne({
+    userId: userId,
+    status: 'active',
+  });
+
+  if (!subscription) {
+    return next(AppError.create('No active subscription found', 404, httpstatustext.FAIL));
+  }
+
+  // Disable auto-renewal and mark as canceled
+  subscription.autoRenew = false;
+  subscription.status = 'canceled';
+  subscription.canceledAt = new Date();
+  await subscription.save();
+
+  // Update user status
+  const user = await User.findById(userId);
+  if (user) {
+    user.subscriptionStatus = 'canceled';
+    await user.save();
+  }
+
+  res.status(200).json({
+    status: httpstatustext.SUCCESS,
+    message: 'Subscription canceled successfully',
+    data: {
+      subscriptionId: subscription._id,
+      canceledAt: subscription.canceledAt,
+    },
+  });
+});
+
 module.exports = {
   getAvailablePlans,
-  createCheckoutSession,
+  createCheckoutSession, // Legacy Stripe method (kept for backward compatibility)
+  createCheckout, // New unified checkout method (uses active gateway)
   getSubscriptionStatus,
+  toggleAutoRenew,
+  cancelSubscription,
 };
 
