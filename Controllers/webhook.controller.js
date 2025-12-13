@@ -12,6 +12,7 @@ const Plan = require('../Models/Plan');
 const UserSubscription = require('../Models/UserSubscription');
 const stripe = require('../config/stripe');
 const paymentGatewayService = require('../services/paymentGatewayService');
+const paymobService = require('../services/paymobService');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
@@ -340,134 +341,149 @@ function mapStripeStatusToLocal(stripeStatus) {
  * Handle Paymob webhook events
  * POST /api/webhooks/paymob
  * 
- * This endpoint receives transaction callbacks from Paymob and updates subscription status.
- * Paymob sends transaction data after payment completion.
+ * This is a server-to-server webhook endpoint.
+ * Paymob sends POST requests with JSON body containing:
+ * - hmac: HMAC signature for verification
+ * - obj: Transaction object with payment details
+ * 
+ * This endpoint:
+ * 1. Verifies HMAC signature using Paymob's official format
+ * 2. Processes successful transactions (success=true, pending=false)
+ * 3. Activates subscriptions in the database
+ * 4. Updates user subscription status
+ * 
+ * IMPORTANT: This route does NOT use authentication middleware.
+ * Verification is done via Paymob HMAC signature.
  */
 const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
   try {
-    // Paymob sends webhook as GET with query parameters OR POST with body
-    // Handle both cases
-    const webhookData = req.method === 'GET' ? req.query : req.body;
-    const hmac = req.headers['x-hmac'] || req.headers['hmac'] || req.query.hmac;
-
-    // Verify webhook signature if HMAC secret is configured AND HMAC is provided
-    // Note: Paymob GET requests may not always include HMAC, so we only verify if it's present
-    if (process.env.PAYMOB_HMAC_SECRET && hmac) {
-      const isValid = await paymentGatewayService.verifyWebhookSignature(webhookData, hmac);
-      if (!isValid) {
-        console.error('⚠️  Paymob webhook signature verification failed');
-        return next(AppError.create('Invalid webhook signature', 400, httpstatustext.ERROR));
-      }
-    } else if (process.env.PAYMOB_HMAC_SECRET && !hmac) {
-      // HMAC secret is configured but no HMAC was provided
-      // For GET requests, this is often acceptable (Paymob may not send HMAC in GET)
-      // For POST requests, we should log a warning but still process
-      if (req.method === 'POST') {
-        console.warn('⚠️  Paymob POST webhook received without HMAC signature');
-      }
+    // Paymob webhook is POST only with JSON body
+    if (req.method !== 'POST') {
+      return res.status(405).json({ 
+        status: 'error', 
+        message: 'Method not allowed. Only POST is accepted.', 
+        code: 405 
+      });
     }
 
-    // Paymob webhook structure may vary:
-    // GET request: query parameters (id, amount_cents, success, etc.)
-    // POST request: body with obj.order.id, obj.amount_cents, etc.
-    
-    // Extract data from GET query parameters or POST body
-    let orderId, transactionId, amount, currency, isSuccess;
-    
-    if (req.method === 'GET') {
-      // GET request with query parameters
-      orderId = webhookData.id || webhookData.order_id;
-      transactionId = webhookData.id || webhookData.transaction_id;
-      amount = webhookData.amount_cents ? parseInt(webhookData.amount_cents, 10) : null;
-      currency = webhookData.currency || 'EGP';
-      isSuccess = webhookData.success === 'true' || webhookData.success === true;
-    } else {
-      // POST request with body
-      orderId = webhookData.obj?.order?.id || webhookData.order?.id || webhookData.id;
-      transactionId = webhookData.obj?.id || webhookData.id;
-      amount = webhookData.obj?.amount_cents || webhookData.amount_cents;
-      currency = webhookData.obj?.currency || webhookData.currency || 'EGP';
-      isSuccess = webhookData.obj?.success === true || webhookData.success === true;
+    // Extract webhook data from request body
+    const { hmac, obj } = req.body;
+
+    // Verify HMAC signature
+    // HMAC verification is mandatory for security
+    const isValid = paymobService.verifyWebhookSignature(obj, hmac);
+    if (!isValid) {
+      console.error('⚠️  Paymob webhook HMAC verification failed');
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Invalid webhook signature', 
+        code: 400, 
+        data: null 
+      });
     }
 
-    if (!orderId) {
-      console.error('⚠️  Paymob webhook missing order ID:', webhookData);
-      return res.status(200).json({ received: true, error: 'Missing order ID' });
+    // Extract transaction data
+    const trx = obj;
+    if (!trx) {
+      console.error('⚠️  Paymob webhook missing transaction object (obj)');
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Missing transaction object', 
+        code: 400, 
+        data: null 
+      });
+    }
+
+    // Only process successful and non-pending transactions
+    if (trx.success !== true || trx.pending !== false) {
+      console.log(`ℹ️  Paymob webhook received non-successful transaction: success=${trx.success}, pending=${trx.pending}`);
+      // Return 200 to acknowledge receipt, but don't activate subscription
+      return res.status(200).json({ status: 'ok', message: 'Transaction not successful or still pending' });
+    }
+
+    // Get Paymob order ID
+    const paymobOrderId = trx.order?.id;
+    if (!paymobOrderId) {
+      console.error('⚠️  Paymob webhook missing order ID');
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Missing order ID', 
+        code: 400, 
+        data: null 
+      });
     }
 
     // Find the subscription by Paymob order ID
-    const subscription = await UserSubscription.findOne({ paymobOrderId: orderId.toString() });
-
+    const subscription = await UserSubscription.findOne({ paymobOrderId: paymobOrderId.toString() });
     if (!subscription) {
-      console.error(`⚠️  Subscription not found for Paymob order ID: ${orderId}`);
-      return res.status(200).json({ received: true, error: 'Subscription not found' });
+      console.error(`⚠️  Subscription not found for Paymob order ID: ${paymobOrderId}`);
+      // Return 200 to acknowledge receipt (don't let Paymob retry)
+      return res.status(200).json({ status: 'ok', message: 'Subscription not found' });
     }
 
-    // Verify amount and currency match
-    if (amount && subscription.amount !== amount) {
-      console.error(`⚠️  Amount mismatch for order ${orderId}. Expected: ${subscription.amount}, Received: ${amount}`);
+    // Verify amount matches (optional check)
+    if (trx.amount_cents && subscription.amount !== trx.amount_cents) {
+      console.warn(`⚠️  Amount mismatch for order ${paymobOrderId}. Expected: ${subscription.amount}, Received: ${trx.amount_cents}`);
       // Still process, but log the discrepancy
     }
 
-    if (currency && subscription.currency !== currency.toUpperCase()) {
-      console.error(`⚠️  Currency mismatch for order ${orderId}. Expected: ${subscription.currency}, Received: ${currency}`);
-      // Still process, but log the discrepancy
+    // Payment successful - activate subscription
+    subscription.status = 'active';
+    subscription.paymobTransactionId = trx.id?.toString();
+    
+    // Save payment token if provided (for auto-renewal)
+    const paymentToken = trx.token;
+    if (paymentToken && !subscription.paymentToken) {
+      subscription.paymentToken = paymentToken;
+      console.log(`💳 Saved payment token for subscription ${subscription._id}`);
     }
-
-    if (isSuccess) {
-      // Payment successful - activate subscription
-      subscription.status = 'active';
-      subscription.paymobTransactionId = transactionId?.toString();
-      
-      // Save payment token if provided (for auto-renewal)
-      const paymentToken = webhookData.obj?.token || webhookData.token;
-      if (paymentToken && !subscription.paymentToken) {
-        subscription.paymentToken = paymentToken;
-        console.log(`💳 Saved payment token for subscription ${subscription._id}`);
+    
+    // Calculate next billing date based on plan interval
+    const plan = await Plan.findById(subscription.planId);
+    if (plan) {
+      const nextBillingDate = new Date();
+      if (plan.interval === 'year') {
+        nextBillingDate.setFullYear(nextBillingDate.getFullYear() + (plan.intervalCount || 1));
+      } else {
+        // Default to monthly
+        nextBillingDate.setMonth(nextBillingDate.getMonth() + (plan.intervalCount || 1));
       }
-      
-      // Calculate next billing date if this is a renewal
-      const plan = await Plan.findById(subscription.planId);
-      if (plan) {
-        const nextBillingDate = new Date();
-        if (plan.interval === 'year') {
-          nextBillingDate.setFullYear(nextBillingDate.getFullYear() + (plan.intervalCount || 1));
-        } else {
-          nextBillingDate.setMonth(nextBillingDate.getMonth() + (plan.intervalCount || 1));
-        }
-        subscription.nextBillingDate = nextBillingDate;
-      }
-      
-      // Reset failed renewal attempts on successful payment
-      subscription.failedRenewalAttempts = 0;
-      
-      // Update user's subscription status
-      const user = await User.findById(subscription.userId);
-      if (user) {
-        user.subscriptionStatus = 'active';
-        user.planId = subscription.planId;
-        if (subscription.nextBillingDate) {
-          user.subscriptionCurrentPeriodEnd = subscription.nextBillingDate;
-        }
-        await user.save();
-      }
-
-      await subscription.save();
-      console.log(`✅ Paymob payment succeeded for order ${orderId}, subscription activated for user ${subscription.userId}`);
+      subscription.nextBillingDate = nextBillingDate;
     } else {
-      // Payment failed
-      subscription.status = 'past_due';
-      subscription.failedRenewalAttempts = (subscription.failedRenewalAttempts || 0) + 1;
-      await subscription.save();
-      console.log(`⚠️  Paymob payment failed for order ${orderId}`);
+      // Default to 1 month if plan not found
+      const nextBillingDate = new Date();
+      nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+      subscription.nextBillingDate = nextBillingDate;
+    }
+    
+    // Reset failed renewal attempts on successful payment
+    subscription.failedRenewalAttempts = 0;
+    
+    // Save subscription
+    await subscription.save();
+    
+    // Update user's subscription status
+    const user = await User.findById(subscription.userId);
+    if (user) {
+      user.subscriptionStatus = 'active';
+      user.planId = subscription.planId;
+      user.subscriptionCurrentPeriodEnd = subscription.nextBillingDate;
+      
+      // Mark trial as expired since user has paid subscription
+      // Trial fields remain for historical purposes
+      
+      await user.save();
+      console.log(`✅ User ${user._id} subscription activated. Plan: ${subscription.planId}, Expires: ${subscription.nextBillingDate}`);
     }
 
-    // Always return 200 to acknowledge receipt
-    res.status(200).json({ received: true });
+    console.log(`✅ Paymob payment succeeded for order ${paymobOrderId}, subscription activated for user ${subscription.userId}`);
+
+    // Return success response to Paymob
+    return res.status(200).json({ status: 'ok' });
   } catch (error) {
-    console.error('Error handling Paymob webhook:', error);
+    console.error('⚠️  Error handling Paymob webhook:', error);
     // Still return 200 to prevent Paymob from retrying
-    res.status(200).json({ received: true, error: error.message });
+    return res.status(200).json({ status: 'ok', error: error.message });
   }
 });
 

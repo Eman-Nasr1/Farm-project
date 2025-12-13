@@ -4,6 +4,8 @@
  * Routes for handling Paymob webhooks.
  * These routes do NOT use authentication middleware as they are
  * verified using webhook signatures instead.
+ * 
+ * IMPORTANT: This route must be registered BEFORE any auth middleware in index.js
  */
 
 const express = require('express');
@@ -11,18 +13,21 @@ const router = express.Router();
 const webhookController = require('../Controllers/webhook.controller');
 
 /**
- * Paymob webhook endpoint
- * GET/POST /api/webhooks/paymob
+ * Paymob webhook endpoint (POST only)
+ * POST /api/webhooks/paymob
  * 
- * Paymob sends webhooks as GET requests with query parameters
- * This endpoint receives transaction callbacks from Paymob and updates subscription status.
+ * This is a server-to-server webhook endpoint.
+ * Paymob sends POST requests with JSON body containing:
+ * - hmac: HMAC signature for verification
+ * - obj: Transaction object
+ * 
+ * This endpoint:
+ * 1. Verifies HMAC signature
+ * 2. Processes successful transactions
+ * 3. Activates subscriptions
+ * 
  * No authentication middleware is used - verification is done via Paymob HMAC signature.
  */
-router.get(
-  '/',
-  webhookController.handlePaymobWebhook
-);
-
 router.post(
   '/',
   webhookController.handlePaymobWebhook

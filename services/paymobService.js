@@ -293,76 +293,89 @@ async function getPaymentKey(orderId, amount, currency, user) {
 
 /**
  * Verify Paymob webhook HMAC signature
- * @param {Object} webhookData - The webhook payload
- * @param {string} receivedHmac - The HMAC received in headers
+ * 
+ * Paymob sends HMAC in POST webhook requests with the following format:
+ * - req.body.hmac: The HMAC signature
+ * - req.body.obj: The transaction object
+ * 
+ * HMAC is calculated from concatenated string of obj fields in this exact order:
+ * amount_cents, created_at, currency, error_occured, has_parent_transaction, id, 
+ * integration_id, is_3d_secure, is_auth, is_capture, is_refunded, is_standalone_payment, 
+ * is_voided, order.id, owner, pending, source_data.pan, source_data.sub_type, 
+ * source_data.type, success
+ * 
+ * @param {Object} obj - The transaction object from req.body.obj
+ * @param {string} receivedHmac - The HMAC from req.body.hmac
  * @returns {boolean} True if signature is valid
  */
-function verifyWebhookSignature(webhookData, receivedHmac) {
-  const hmacSecret = process.env.PAYMOB_HMAC_SECRET;
+function verifyWebhookSignature(obj, receivedHmac) {
+  const hmacSecret = process.env.PAYMOB_HMAC || process.env.PAYMOB_HMAC_SECRET;
   
   if (!hmacSecret) {
-    console.warn('PAYMOB_HMAC_SECRET not set, skipping webhook verification');
+    console.warn('⚠️  PAYMOB_HMAC not set, skipping webhook verification');
     return true; // Allow if secret is not configured (for development)
   }
 
-  // If no HMAC is provided, we can't verify
-  // This is common for GET requests from Paymob
   if (!receivedHmac) {
-    console.warn('No HMAC provided in webhook request, skipping verification');
-    return true; // Allow if HMAC is not provided (common for GET requests)
+    console.error('⚠️  No HMAC provided in webhook request');
+    return false;
+  }
+
+  if (!obj) {
+    console.error('⚠️  No transaction object (obj) provided in webhook request');
+    return false;
   }
 
   try {
-    // Paymob sends HMAC in a specific format
-    // For GET requests, HMAC might be calculated differently
-    // Try both JSON stringified and query string formats
-    let calculatedHmac;
-    
-    // Method 1: JSON stringified (for POST requests)
-    try {
-      calculatedHmac = crypto
-        .createHmac('sha512', hmacSecret)
-        .update(JSON.stringify(webhookData))
-        .digest('hex');
-      
-      if (crypto.timingSafeEqual(
-        Buffer.from(receivedHmac),
-        Buffer.from(calculatedHmac)
-      )) {
-        return true;
-      }
-    } catch (e) {
-      // Try next method
+    // Build concatenated string from obj fields in exact order as per Paymob docs
+    const fields = [
+      obj.amount_cents || '',
+      obj.created_at || '',
+      obj.currency || '',
+      obj.error_occured !== undefined ? obj.error_occured : '',
+      obj.has_parent_transaction !== undefined ? obj.has_parent_transaction : '',
+      obj.id || '',
+      obj.integration_id || '',
+      obj.is_3d_secure !== undefined ? obj.is_3d_secure : '',
+      obj.is_auth !== undefined ? obj.is_auth : '',
+      obj.is_capture !== undefined ? obj.is_capture : '',
+      obj.is_refunded !== undefined ? obj.is_refunded : '',
+      obj.is_standalone_payment !== undefined ? obj.is_standalone_payment : '',
+      obj.is_voided !== undefined ? obj.is_voided : '',
+      obj.order?.id || '',
+      obj.owner || '',
+      obj.pending !== undefined ? obj.pending : '',
+      obj.source_data?.pan || '',
+      obj.source_data?.sub_type || '',
+      obj.source_data?.type || '',
+      obj.success !== undefined ? obj.success : '',
+    ];
+
+    // Concatenate all fields
+    const concatenatedString = fields.join('');
+
+    // Calculate HMAC
+    const calculatedHmac = crypto
+      .createHmac('sha512', hmacSecret)
+      .update(concatenatedString)
+      .digest('hex');
+
+    // Compare using timing-safe comparison
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(receivedHmac, 'hex'),
+      Buffer.from(calculatedHmac, 'hex')
+    );
+
+    if (!isValid) {
+      console.error('⚠️  Paymob webhook HMAC verification failed');
+      console.error('Received HMAC:', receivedHmac);
+      console.error('Calculated HMAC:', calculatedHmac);
+      console.error('Concatenated string:', concatenatedString);
     }
-    
-    // Method 2: Query string format (for GET requests)
-    // Paymob may send HMAC based on sorted query parameters
-    try {
-      const sortedKeys = Object.keys(webhookData).sort();
-      const queryString = sortedKeys
-        .map(key => `${key}=${webhookData[key]}`)
-        .join('&');
-      
-      calculatedHmac = crypto
-        .createHmac('sha512', hmacSecret)
-        .update(queryString)
-        .digest('hex');
-      
-      if (crypto.timingSafeEqual(
-        Buffer.from(receivedHmac),
-        Buffer.from(calculatedHmac)
-      )) {
-        return true;
-      }
-    } catch (e) {
-      // Both methods failed
-    }
-    
-    // If both methods fail, signature is invalid
-    console.error('Paymob webhook signature verification failed - calculated HMAC does not match received HMAC');
-    return false;
+
+    return isValid;
   } catch (error) {
-    console.error('Error verifying Paymob webhook signature:', error);
+    console.error('⚠️  Error verifying Paymob webhook signature:', error);
     return false;
   }
 }

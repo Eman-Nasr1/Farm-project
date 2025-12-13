@@ -68,6 +68,8 @@ async function verifyWebhookSignature(webhookData, signature) {
 
   switch (activeGateway) {
     case 'paymob':
+      // For Paymob, webhookData should be the obj (transaction object)
+      // and signature should be the hmac
       return paymobService.verifyWebhookSignature(webhookData, signature);
 
     case 'stripe':

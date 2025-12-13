@@ -36,14 +36,22 @@ mongoose.connect(url).then(()=>{
     cronJobs.scheduleSubscriptionRenewals();
 })
 
-// IMPORTANT: Stripe webhook needs raw body for signature verification
-// Register webhook routes BEFORE express.json() middleware
+// IMPORTANT: Webhook and payment routes must be registered BEFORE auth middleware
+// These routes do NOT require authentication
+
+// Stripe webhook needs raw body for signature verification
 const webhookRoutes = require('./Routes/webhookRoutes');
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), webhookRoutes);
 
 // Paymob webhook uses JSON (not raw body)
+// POST /api/webhooks/paymob - Server-to-server webhook (HMAC verified)
 const paymobWebhookRoutes = require('./Routes/paymobWebhookRoutes');
 app.use('/api/webhooks/paymob', express.json(), paymobWebhookRoutes);
+
+// Paymob payment return/redirect route
+// GET /api/payments/paymob/return - User-facing redirect (no auth, no HMAC)
+const paymentRoutes = require('./Routes/paymentRoutes');
+app.use('/', paymentRoutes);
 
 // Now use express.json() for all other routes
 app.use (express.json());
