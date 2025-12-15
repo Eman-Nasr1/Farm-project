@@ -392,8 +392,12 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
     }
 
     // Update treatment stock (deduct all doses, taken or not)
-    treatment.stock.totalVolume -= requiredTotalVolume;
-    treatment.stock.bottles = Math.ceil(treatment.stock.totalVolume / treatment.stock.volumePerBottle);
+    const updatedTotalVolume = treatment.stock.totalVolume - requiredTotalVolume;
+    const updatedBottles = Math.ceil(updatedTotalVolume / treatment.stock.volumePerBottle);
+    treatment.set({
+      'stock.totalVolume': updatedTotalVolume,
+      'stock.bottles': updatedBottles
+    });
     await treatment.save();
 
     // Calculate cost based only on taken doses
@@ -883,8 +887,13 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     if (oldTreatmentId.toString() !== newTreatmentId.toString()) {
       // restore old, deduct new
-      oldTreatment.stock.totalVolume += oldTotalVolume;
-      oldTreatment.stock.bottles = Math.ceil(oldTreatment.stock.totalVolume / oldTreatment.stock.volumePerBottle);
+      const oldNewTotalVolume = oldTreatment.stock.totalVolume + oldTotalVolume;
+      const oldNewBottles = Math.ceil(oldNewTotalVolume / oldTreatment.stock.volumePerBottle);
+      
+      oldTreatment.set({
+        'stock.totalVolume': oldNewTotalVolume,
+        'stock.bottles': oldNewBottles
+      });
 
       if (newTreatment.stock.totalVolume < newTotalVolume) {
         throw AppError.create(
@@ -894,8 +903,13 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
         );
       }
 
-      newTreatment.stock.totalVolume -= newTotalVolume;
-      newTreatment.stock.bottles = Math.ceil(newTreatment.stock.totalVolume / newTreatment.stock.volumePerBottle);
+      const newNewTotalVolume = newTreatment.stock.totalVolume - newTotalVolume;
+      const newNewBottles = Math.ceil(newNewTotalVolume / newTreatment.stock.volumePerBottle);
+      
+      newTreatment.set({
+        'stock.totalVolume': newNewTotalVolume,
+        'stock.bottles': newNewBottles
+      });
 
       await Promise.all([
         oldTreatment.save({ session }),
@@ -910,8 +924,14 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
           httpstatustext.FAIL
         );
       }
-      newTreatment.stock.totalVolume -= volumeDiff; // works for +/-
-      newTreatment.stock.bottles = Math.ceil(newTreatment.stock.totalVolume / newTreatment.stock.volumePerBottle);
+      const updatedTotalVolume = newTreatment.stock.totalVolume - volumeDiff; // works for +/-
+      const updatedBottles = Math.ceil(updatedTotalVolume / newTreatment.stock.volumePerBottle);
+      
+      newTreatment.set({
+        'stock.totalVolume': updatedTotalVolume,
+        'stock.bottles': updatedBottles
+      });
+      
       await newTreatment.save({ session });
     }
 
