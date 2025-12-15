@@ -203,9 +203,30 @@ const updateTreatment = asyncwrapper(async (req, res, next) => {
   if (name) treatment.name = name;
   if (type) treatment.type = type;
 
-  if (bottles !== undefined) treatment.stock.bottles = bottles;
-  if (volumePerBottle !== undefined) treatment.stock.volumePerBottle = volumePerBottle;
-  if (unitOfMeasure) treatment.stock.unitOfMeasure = unitOfMeasure;
+  // Track if bottles or volumePerBottle changed to recalculate totalVolume
+  const bottlesChanged = bottles !== undefined;
+  const volumePerBottleChanged = volumePerBottle !== undefined;
+  
+  // Prepare stock updates and calculate final values
+  const stockUpdates = {};
+  const finalBottles = bottles !== undefined ? bottles : treatment.stock.bottles;
+  const finalVolumePerBottle = volumePerBottle !== undefined ? volumePerBottle : treatment.stock.volumePerBottle;
+  
+  if (bottlesChanged) stockUpdates['stock.bottles'] = finalBottles;
+  if (volumePerBottleChanged) stockUpdates['stock.volumePerBottle'] = finalVolumePerBottle;
+  if (unitOfMeasure) stockUpdates['stock.unitOfMeasure'] = unitOfMeasure;
+  
+  // Recalculate totalVolume if bottles or volumePerBottle changed
+  if (bottlesChanged || volumePerBottleChanged) {
+    const newTotalVolume = finalBottles * finalVolumePerBottle;
+    stockUpdates['stock.totalVolume'] = newTotalVolume;
+  }
+  
+  // Apply stock updates using set() to ensure Mongoose tracks nested changes
+  if (Object.keys(stockUpdates).length > 0) {
+    treatment.set(stockUpdates);
+  }
+  
   if (bottlePrice !== undefined) treatment.pricing.bottlePrice = bottlePrice;
 
   if (expireDate) {
@@ -220,8 +241,11 @@ const updateTreatment = asyncwrapper(async (req, res, next) => {
   }
 
   // Recalculate pricePerMl if unit is ml or cm³
-  if (['ml', 'cm³'].includes(treatment.stock.unitOfMeasure)) {
-    treatment.pricePerMl = treatment.pricing.bottlePrice / treatment.stock.volumePerBottle;
+  const finalUnitOfMeasure = unitOfMeasure || treatment.stock.unitOfMeasure;
+  if (['ml', 'cm³'].includes(finalUnitOfMeasure)) {
+    const finalBottlePrice = bottlePrice !== undefined ? bottlePrice : treatment.pricing.bottlePrice;
+    const finalVolumePerBottle = volumePerBottle !== undefined ? volumePerBottle : treatment.stock.volumePerBottle;
+    treatment.pricePerMl = finalBottlePrice / finalVolumePerBottle;
   } else {
     treatment.pricePerMl = null;
   }
