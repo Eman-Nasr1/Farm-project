@@ -28,6 +28,15 @@ const getallanimalscost = asyncwrapper(async (req, res,next) => {
         .skip(skip);
     const total = await AnimalCost.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
+    
+    // Format cost values to 3 decimal places
+    const formattedAnimalCost = animalCost.map(cost => ({
+        ...cost.toObject(),
+        feedCost: parseFloat(cost.feedCost.toFixed(3)),
+        treatmentCost: parseFloat(cost.treatmentCost.toFixed(3)),
+        totalCost: cost.totalCost ? parseFloat(cost.totalCost.toFixed(3)) : 0
+    }));
+    
     // Return response
     res.json({
         status: httpstatustext.SUCCESS,
@@ -39,7 +48,7 @@ const getallanimalscost = asyncwrapper(async (req, res,next) => {
             hasNextPage: page < totalPages,
             hasPrevPage: page > 1
             },
-        data: { animalCost }
+        data: { animalCost: formattedAnimalCost }
     });
 });
 

@@ -13,7 +13,7 @@ const treatmentPlanSchema = new mongoose.Schema({
   },
   volumePerAnimal: {
     type: Number,
-    required: true,
+    required: true, //volume per dose
   },
   numberOfDoses: {
     type: Number,
