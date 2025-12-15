@@ -352,18 +352,6 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // Calculate required volume
-    const actualDoseCount = doses.length > 0 ? doses.length : numberOfDoses;
-    const requiredTotalVolume = animals.length * volumePerAnimal * actualDoseCount;
-
-    // Check stock availability
-    if (!treatment.stock || treatment.stock.totalVolume < requiredTotalVolume) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Insufficient stock for "${treatment.name}". Required: ${requiredTotalVolume} mL, Available: ${treatment.stock?.totalVolume || 0} mL.`,
-      });
-    }
-
     // Process doses - handle both ISO and date-only formats
     const processedDoses = doses.length > 0
       ? doses.map(dose => {
@@ -385,13 +373,31 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
         taken: false
       }));
 
-    // Update treatment stock
+    // Count only taken doses for cost calculation
+    const takenDoseCount = processedDoses.filter(dose => dose.taken === true).length;
+    const actualDoseCount = processedDoses.length;
+    
+    // Calculate required volume for stock check (all doses, taken or not)
+    const requiredTotalVolume = animals.length * volumePerAnimal * actualDoseCount;
+    
+    // Calculate cost based only on taken doses
+    const takenTotalVolume = animals.length * volumePerAnimal * takenDoseCount;
+
+    // Check stock availability
+    if (!treatment.stock || treatment.stock.totalVolume < requiredTotalVolume) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: `Insufficient stock for "${treatment.name}". Required: ${requiredTotalVolume} mL, Available: ${treatment.stock?.totalVolume || 0} mL.`,
+      });
+    }
+
+    // Update treatment stock (deduct all doses, taken or not)
     treatment.stock.totalVolume -= requiredTotalVolume;
     treatment.stock.bottles = Math.ceil(treatment.stock.totalVolume / treatment.stock.volumePerBottle);
     await treatment.save();
 
-    // Calculate cost
-    const treatmentCost = requiredTotalVolume * treatment.pricePerMl;
+    // Calculate cost based only on taken doses
+    const treatmentCost = takenTotalVolume * treatment.pricePerMl;
     totalTreatmentCost += treatmentCost;
 
     // Prepare bulk operations for performance
@@ -552,18 +558,6 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       });
     }
 
-    // Calculate required volume
-    const actualDoseCount = doses.length > 0 ? doses.length : numberOfDoses;
-    const requiredVolume = volumePerAnimal * actualDoseCount;
-
-    // Check stock availability
-    if (!treatment.stock || treatment.stock.totalVolume < requiredVolume) {
-      return res.status(400).json({
-        status: "FAILURE",
-        message: `Insufficient stock for "${treatment.name}". Required: ${requiredVolume} mL, Available: ${treatment.stock?.totalVolume || 0} mL.`,
-      });
-    }
-
     // Process doses - handle both ISO and date-only formats
     const processedDoses = doses.length > 0
       ? doses.map(dose => {
@@ -581,13 +575,31 @@ const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
         taken: false
       }));
 
-    // Update treatment stock
+    // Count only taken doses for cost calculation
+    const takenDoseCount = processedDoses.filter(dose => dose.taken === true).length;
+    const actualDoseCount = processedDoses.length;
+    
+    // Calculate required volume for stock check (all doses, taken or not)
+    const requiredVolume = volumePerAnimal * actualDoseCount;
+    
+    // Calculate cost based only on taken doses
+    const takenVolume = volumePerAnimal * takenDoseCount;
+
+    // Check stock availability
+    if (!treatment.stock || treatment.stock.totalVolume < requiredVolume) {
+      return res.status(400).json({
+        status: "FAILURE",
+        message: `Insufficient stock for "${treatment.name}". Required: ${requiredVolume} mL, Available: ${treatment.stock?.totalVolume || 0} mL.`,
+      });
+    }
+
+    // Update treatment stock (deduct all doses, taken or not)
     treatment.stock.totalVolume -= requiredVolume;
     treatment.stock.bottles = Math.ceil(treatment.stock.totalVolume / treatment.stock.volumePerBottle);
     await treatment.save();
 
-    // Calculate cost
-    const treatmentCost = requiredVolume * treatment.pricePerMl;
+    // Calculate cost based only on taken doses
+    const treatmentCost = takenVolume * treatment.pricePerMl;
     totalTreatmentCost += treatmentCost;
 
     // Create treatment entry
@@ -788,7 +800,9 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
     const oldTreatmentId = oldTreatmentData.treatmentId;
     const oldVolume = Number(oldTreatmentData.volumePerAnimal) || 0;
-    const oldDoses = Number(oldTreatmentData.numberOfDoses) || 0;
+    const oldDosesArray = Array.isArray(oldTreatmentData.doses) ? oldTreatmentData.doses : [];
+    const oldTakenDoseCount = oldDosesArray.filter(dose => dose.taken === true).length;
+    const oldTotalDoseCount = oldDosesArray.length > 0 ? oldDosesArray.length : (Number(oldTreatmentData.numberOfDoses) || 0);
 
     // --- New treatment payload (normalize numbers)
     const newTreatmentItem = treatments[0] || {};
@@ -833,10 +847,39 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       throw AppError.create(`Treatment "${newTreatment.name}" expired on ${d}.`, 400, httpstatustext.FAIL);
     }
 
+    // --- Doses (accept ISO or yyyy-mm-dd) - Process before calculating volumes
+    const processedDoses = newDosesArray.length > 0
+      ? newDosesArray.map(dose => {
+        const raw = dose?.date;
+        if (!raw) throw AppError.create("Dose date is required.", 400, httpstatustext.FAIL);
+
+        const doseDate = typeof raw === 'string'
+          ? (raw.includes('T') ? new Date(raw) : new Date(`${raw}T00:00:00Z`))
+          : new Date(raw);
+
+        if (isNaN(doseDate.getTime())) {
+          throw AppError.create(`Invalid dose date: ${raw}`, 400, httpstatustext.FAIL);
+        }
+
+        return { date: doseDate, taken: !!dose.taken };
+      })
+      : Array.from({ length: actualNewDoses }, (_, i) => ({
+        date: new Date(mainDate.getTime() + i * 24 * 60 * 60 * 1000),
+        taken: false,
+      }));
+    
+    // Count taken doses for new treatment
+    const newTakenDoseCount = processedDoses.filter(dose => dose.taken === true).length;
+
     // --- Volumes & stock
-    const oldTotalVolume = oldVolume * oldDoses;
+    // For stock: use total doses (taken or not)
+    const oldTotalVolume = oldVolume * oldTotalDoseCount;
     const newTotalVolume = newVolume * actualNewDoses;
     const volumeDiff = newTotalVolume - oldTotalVolume;
+    
+    // For cost: use only taken doses
+    const oldTakenVolume = oldVolume * oldTakenDoseCount;
+    const newTakenVolume = newVolume * newTakenDoseCount;
 
     if (oldTreatmentId.toString() !== newTreatmentId.toString()) {
       // restore old, deduct new
@@ -872,9 +915,9 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       await newTreatment.save({ session });
     }
 
-    // --- Animal cost delta
-    const oldCost = oldTotalVolume * oldTreatment.pricePerMl;
-    const newCost = newTotalVolume * newTreatment.pricePerMl;
+    // --- Animal cost delta (based only on taken doses)
+    const oldCost = oldTakenVolume * oldTreatment.pricePerMl;
+    const newCost = newTakenVolume * newTreatment.pricePerMl;
     const costDifference = newCost - oldCost;
 
     await AnimalCost.findOneAndUpdate(
@@ -886,27 +929,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
       },
       { upsert: true, session }
     );
-
-    // --- Doses (accept ISO or yyyy-mm-dd)
-    const processedDoses = newDosesArray.length > 0
-      ? newDosesArray.map(dose => {
-        const raw = dose?.date;
-        if (!raw) throw AppError.create("Dose date is required.", 400, httpstatustext.FAIL);
-
-        const doseDate = typeof raw === 'string'
-          ? (raw.includes('T') ? new Date(raw) : new Date(`${raw}T00:00:00Z`))
-          : new Date(raw);
-
-        if (isNaN(doseDate.getTime())) {
-          throw AppError.create(`Invalid dose date: ${raw}`, 400, httpstatustext.FAIL);
-        }
-
-        return { date: doseDate, taken: !!dose.taken };
-      })
-      : Array.from({ length: actualNewDoses }, (_, i) => ({
-        date: new Date(mainDate.getTime() + i * 24 * 60 * 60 * 1000),
-        taken: false,
-      }));
 
     // --- Apply update
     existingTreatmentEntry.set({

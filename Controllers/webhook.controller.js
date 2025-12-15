@@ -356,8 +356,6 @@ function mapStripeStatusToLocal(stripeStatus) {
  */
 const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
   try {
-    console.log(`📥 Paymob webhook received: ${req.method} ${req.path}`);
-    
     let trx, hmac, paymobOrderId;
 
     // Handle GET request (query parameters) or POST request (JSON body)
