@@ -138,6 +138,10 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
     }
 
     try {
+        // Get user's registration type
+        const user = await User.findById(userId).select('registerationType');
+        const isFattening = user?.registerationType === 'fattening';
+
         const data = excelOps.readExcelFile(req.file.buffer);
 
         // Skip header row
@@ -169,10 +173,10 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
             }
 
-            // Parse dates
+            // Parse dates - skip birthDate if fattening
             let birthDate = undefined;
             let purchaseDate = undefined;
-            if (birthDateStr) {
+            if (!isFattening && birthDateStr) {
                 birthDate = new Date(birthDateStr);
                 if (isNaN(birthDate.getTime())) {
                     return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
@@ -193,23 +197,29 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 throw new Error(i18n.__('BREED_NOT_FOUND', { breed: breedName, row: i + 1 }));
             }
 
-            // Create and save new animal
-            const newAnimal = new Animal({
+            // Prepare animal data - skip birthDate, motherId, fatherId if fattening
+            const animalData = {
                 tagId,
                 breed: breed._id,
                 animalType,
-                birthDate,
                 purchaseDate,
                 purchasePrice,
                 traderName,
-                motherId,
-                fatherId,
                 locationShed: locationShed?._id,
                 gender,
                 female_Condition,
                 owner: userId
-            });
+            };
 
+            // Only add birthDate, motherId, fatherId if NOT fattening
+            if (!isFattening) {
+                if (birthDate) animalData.birthDate = birthDate;
+                if (motherId) animalData.motherId = motherId;
+                if (fatherId) animalData.fatherId = fatherId;
+            }
+
+            // Create and save new animal
+            const newAnimal = new Animal(animalData);
             await newAnimal.save();
         }
 
@@ -225,13 +235,25 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
 
 const downloadAnimalTemplate = asyncwrapper(async (req, res, next) => {
     try {
+        const userId = req.user?.id || req.userId;
         const lang = req.query.lang || 'en';
         const isArabic = lang === 'ar';
 
-        const headers = excelOps.headers.animal[lang].template;
-        const exampleRow = excelOps.templateExamples.animal[lang];
-        const sheetName = excelOps.sheetNames.animal.template[lang];
+        // Get user's registration type
+        const user = userId ? await User.findById(userId).select('registerationType') : null;
+        const isFattening = user?.registerationType === 'fattening';
 
+        // Get base headers and example row
+        let headers = excelOps.headers.animal[lang].template;
+        let exampleRow = excelOps.templateExamples.animal[lang];
+
+        // If fattening, exclude birthDate (index 3), motherId (index 7), fatherId (index 8)
+        if (isFattening) {
+            headers = headers.filter((_, index) => ![3, 7, 8].includes(index));
+            exampleRow = exampleRow.filter((_, index) => ![3, 7, 8].includes(index));
+        }
+
+        const sheetName = excelOps.sheetNames.animal.template[lang];
         const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
         const worksheet = workbook.Sheets[sheetName];
         excelOps.setColumnWidths(worksheet, headers.map(() => 20));
@@ -273,10 +295,16 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
             });
         }
 
-        const headers = excelOps.headers.animal[lang].export;
+        // Get user's registration type
+        const user = await User.findById(userId).select('registerationType');
+        const isFattening = user?.registerationType === 'fattening';
+
+        // Get base headers
+        let headers = excelOps.headers.animal[lang].export;
         const sheetName = excelOps.sheetNames.animal.export[lang];
 
-        const data = animals.map(animal => [
+        // Map animals to data rows
+        let data = animals.map(animal => [
             animal.tagId,
             animal.breed?.breedName || '',
             animal.animalType,
@@ -293,11 +321,20 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
             animal.Teething || ''
         ]);
 
+        // If fattening, exclude birthDate (index 3), ageInDays (index 4), motherId (index 8), fatherId (index 9)
+        if (isFattening) {
+            headers = headers.filter((_, index) => ![3, 4, 8, 9].includes(index));
+            data = data.map(row => row.filter((_, index) => ![3, 4, 8, 9].includes(index)));
+        }
+
         const workbook = excelOps.createExcelFile(data, headers, sheetName);
         const worksheet = workbook.Sheets[sheetName];
 
-        // Set column widths
-        const columnWidths = [15, 15, 15, 12, 12, 12, 12, 15, 15, 15, 15, 10, 15, 10];
+        // Set column widths based on filtered headers
+        const baseColumnWidths = [15, 15, 15, 12, 12, 12, 12, 15, 15, 15, 15, 10, 15, 10];
+        const columnWidths = isFattening 
+            ? baseColumnWidths.filter((_, index) => ![3, 4, 8, 9].includes(index))
+            : baseColumnWidths;
         excelOps.setColumnWidths(worksheet, columnWidths);
 
         const buffer = excelOps.writeExcelBuffer(workbook);
