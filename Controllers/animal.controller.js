@@ -317,8 +317,7 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
             animal.fatherId || '',
             animal.locationShed?.locationShedName || '',
             animal.gender,
-            animal.female_Condition || '',
-            animal.Teething || ''
+            animal.female_Condition || ''
         ]);
 
         // If fattening, exclude birthDate (index 3), ageInDays (index 4), motherId (index 8), fatherId (index 9)
@@ -330,8 +329,8 @@ const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
         const workbook = excelOps.createExcelFile(data, headers, sheetName);
         const worksheet = workbook.Sheets[sheetName];
 
-        // Set column widths based on filtered headers
-        const baseColumnWidths = [15, 15, 15, 12, 12, 12, 12, 15, 15, 15, 15, 10, 15, 10];
+        // Set column widths based on filtered headers (removed teething - last column)
+        const baseColumnWidths = [15, 15, 15, 12, 12, 12, 12, 15, 15, 15, 15, 10, 15];
         const columnWidths = isFattening 
             ? baseColumnWidths.filter((_, index) => ![3, 4, 8, 9].includes(index))
             : baseColumnWidths;

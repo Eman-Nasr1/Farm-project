@@ -66,8 +66,7 @@ const headers = {
                 'Father ID',
                 'Location Shed',
                 'Gender (male, female)',
-                'Female Condition (pregnant, not pregnant)',
-                'Teething'
+                'Female Condition (pregnant, not pregnant)'
             ],
             export: [
                 'Tag ID',
@@ -82,8 +81,7 @@ const headers = {
                 'Father ID',
                 'Location Shed',
                 'Gender',
-                'Female Condition',
-                'Teething'
+                'Female Condition'
             ]
         },
         ar: {
@@ -99,8 +97,7 @@ const headers = {
                 'رقم تعريف الأب',
                 'موقع الحظيرة',
                 'الجنس (male, female)',
-                'حالة الأنثى (pregnant, not pregnant)',
-                'الأسنان'
+                'حالة الأنثى (pregnant, not pregnant)'
             ],
             export: [
                 'رقم التعريف',
@@ -115,8 +112,7 @@ const headers = {
                 'رقم تعريف الأب',
                 'موقع الحظيرة',
                 'الجنس (ذكر, أنثى)',
-                'حالة الأنثى',
-                'الأسنان'
+                'حالة الأنثى'
             ]
         }
     },
@@ -329,8 +325,8 @@ const headers = {
 // Example data for templates
 const templateExamples = {
     animal: {
-        en: ['123', 'Arabic', 'goat', '2024-01-01', '2024-01-01', '1000', 'Mohammed', '456', '789', 'Shed 1', 'female', 'pregnant', '2'],
-        ar: ['123', 'عربي', 'ماعز', '2024-01-01', '2024-01-01', '1000', 'محمد', '456', '789', 'حظيرة 1', 'female', 'pregnant', '2']
+        en: ['123', 'Arabic', 'goat', '2024-01-01', '2024-01-01', '1000', 'Mohammed', '456', '789', 'Shed 1', 'female', 'pregnant'],
+        ar: ['123', 'عربي', 'ماعز', '2024-01-01', '2024-01-01', '1000', 'محمد', '456', '789', 'حظيرة 1', 'female', 'pregnant']
     },
     weight: {
         en: ['123', '2024-01-01', '50.5', '120', 'regular'],
