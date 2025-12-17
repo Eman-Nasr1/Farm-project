@@ -10,6 +10,7 @@
 const User = require('../Models/user.model');
 const Plan = require('../Models/Plan');
 const UserSubscription = require('../Models/UserSubscription');
+const DiscountCode = require('../Models/discountCode.model');
 const stripe = require('../config/stripe');
 const paymentGatewayService = require('../services/paymentGatewayService');
 const paymobService = require('../services/paymobService');
@@ -127,6 +128,21 @@ async function handleCheckoutSessionCompleted(session) {
     // Keep trialStart and trialEnd for historical purposes, but status is now 'active'
 
     await user.save();
+    
+    // Increment discount code usage if one was used
+    if (session.metadata?.discountCode) {
+      try {
+        const discountCode = await DiscountCode.findOne({ code: session.metadata.discountCode });
+        if (discountCode) {
+          await discountCode.incrementUsage();
+          console.log(`✅ Discount code ${discountCode.code} usage incremented`);
+        }
+      } catch (error) {
+        console.error('Error incrementing discount code usage:', error);
+        // Don't fail the webhook if discount code update fails
+      }
+    }
+    
     console.log(`✅ Checkout completed for user ${user._id}, subscription: ${status}, plan: ${planId}`);
   } catch (error) {
     console.error('Error retrieving subscription from Stripe:', error);
@@ -523,6 +539,20 @@ const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
       
       await user.save();
       console.log(`✅ User ${user._id} subscription activated. Plan: ${subscription.planId}, Expires: ${subscription.nextBillingDate}`);
+    }
+
+    // Increment discount code usage if one was used
+    if (subscription.metadata?.discountCode) {
+      try {
+        const discountCode = await DiscountCode.findOne({ code: subscription.metadata.discountCode });
+        if (discountCode) {
+          await discountCode.incrementUsage();
+          console.log(`✅ Discount code ${discountCode.code} usage incremented`);
+        }
+      } catch (error) {
+        console.error('Error incrementing discount code usage:', error);
+        // Don't fail the webhook if discount code update fails
+      }
     }
 
     console.log(`✅ Paymob payment succeeded for order ${paymobOrderId}, subscription activated for user ${subscription.userId}`);

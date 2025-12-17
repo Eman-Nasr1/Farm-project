@@ -11,6 +11,7 @@
 const User = require('../Models/user.model');
 const Plan = require('../Models/Plan');
 const UserSubscription = require('../Models/UserSubscription');
+const DiscountCode = require('../Models/discountCode.model');
 const stripe = require('../config/stripe');
 const paymentGatewayService = require('../services/paymentGatewayService');
 const Settings = require('../Models/Settings');
@@ -93,7 +94,7 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
  * }
  */
 const createCheckoutSession = asyncwrapper(async (req, res, next) => {
-  const { planId, successUrl, cancelUrl } = req.body;
+  const { planId, successUrl, cancelUrl, discountCode } = req.body;
 
   if (!planId || !successUrl || !cancelUrl) {
     return next(AppError.create('Missing required fields: planId, successUrl, cancelUrl', 400, httpstatustext.FAIL));
@@ -123,6 +124,63 @@ const createCheckoutSession = asyncwrapper(async (req, res, next) => {
     return next(AppError.create(`This plan is for ${plan.registerationType} registration type, but your account is ${user.registerationType}`, 400, httpstatustext.FAIL));
   }
 
+  // Validate and apply discount code if provided
+  let stripeCouponId = null;
+  let discountCodeDoc = null;
+  
+  if (discountCode) {
+    discountCodeDoc = await DiscountCode.findOne({ code: discountCode.toUpperCase() });
+    
+    if (!discountCodeDoc) {
+      return next(AppError.create('Invalid discount code', 400, httpstatustext.FAIL));
+    }
+
+    if (!discountCodeDoc.isValid()) {
+      return next(AppError.create('Discount code is expired or no longer valid', 400, httpstatustext.FAIL));
+    }
+
+    // Check if code applies to this plan
+    if (discountCodeDoc.applicablePlans.length > 0) {
+      const planIdStr = planId.toString();
+      const isApplicable = discountCodeDoc.applicablePlans.some(
+        p => p.toString() === planIdStr
+      );
+      if (!isApplicable) {
+        return next(AppError.create('This discount code is not applicable to the selected plan', 400, httpstatustext.FAIL));
+      }
+    }
+
+    // Check if code applies to this registration type
+    if (discountCodeDoc.applicableRegistrationTypes.length > 0) {
+      if (!discountCodeDoc.applicableRegistrationTypes.includes(user.registerationType)) {
+        return next(AppError.create('This discount code is not applicable to your registration type', 400, httpstatustext.FAIL));
+      }
+    }
+
+    // Create Stripe coupon
+    try {
+      const couponData = {
+        id: `discount_${discountCodeDoc.code}_${Date.now()}`,
+        name: `Discount: ${discountCodeDoc.code}`,
+      };
+
+      if (discountCodeDoc.discountType === 'percentage') {
+        couponData.percent_off = discountCodeDoc.discountValue;
+      } else {
+        // For fixed amount, we need to get the price amount first
+        const price = await stripe.prices.retrieve(plan.stripePriceId);
+        couponData.amount_off = discountCodeDoc.discountValue * 100; // Convert to cents
+        couponData.currency = price.currency;
+      }
+
+      const coupon = await stripe.coupons.create(couponData);
+      stripeCouponId = coupon.id;
+    } catch (error) {
+      console.error('Error creating Stripe coupon:', error);
+      return next(AppError.create('Failed to apply discount code', 500, httpstatustext.ERROR));
+    }
+  }
+
   // Create or get Stripe customer
   let stripeCustomerId = user.stripeCustomerId;
 
@@ -144,7 +202,7 @@ const createCheckoutSession = asyncwrapper(async (req, res, next) => {
   }
 
   // Create Stripe Checkout Session (NO trial_period_days - user already used free trial)
-  const session = await stripe.checkout.sessions.create({
+  const sessionConfig = {
     customer: stripeCustomerId,
     mode: 'subscription',
     payment_method_types: ['card'],
@@ -167,7 +225,15 @@ const createCheckoutSession = asyncwrapper(async (req, res, next) => {
       userId: userId.toString(),
       planId: planId.toString(),
     },
-  });
+  };
+
+  // Apply discount if available
+  if (stripeCouponId) {
+    sessionConfig.discounts = [{ coupon: stripeCouponId }];
+    sessionConfig.metadata.discountCode = discountCodeDoc.code;
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionConfig);
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
@@ -283,7 +349,7 @@ const getSubscriptionStatus = asyncwrapper(async (req, res, next) => {
  * }
  */
 const createCheckout = asyncwrapper(async (req, res, next) => {
-  const { planId } = req.body;
+  const { planId, discountCode } = req.body;
 
   if (!planId) {
     return next(AppError.create('Missing required field: planId', 400, httpstatustext.FAIL));
@@ -344,15 +410,52 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
     ));
   }
 
+  // Validate and apply discount code if provided
+  let discountCodeDoc = null;
+  let discountAmount = 0;
+  
+  if (discountCode) {
+    discountCodeDoc = await DiscountCode.findOne({ code: discountCode.toUpperCase() });
+    
+    if (!discountCodeDoc) {
+      return next(AppError.create('Invalid discount code', 400, httpstatustext.FAIL));
+    }
+
+    if (!discountCodeDoc.isValid()) {
+      return next(AppError.create('Discount code is expired or no longer valid', 400, httpstatustext.FAIL));
+    }
+
+    // Check if code applies to this plan
+    if (discountCodeDoc.applicablePlans.length > 0) {
+      const planIdStr = planId.toString();
+      const isApplicable = discountCodeDoc.applicablePlans.some(
+        p => p.toString() === planIdStr
+      );
+      if (!isApplicable) {
+        return next(AppError.create('This discount code is not applicable to the selected plan', 400, httpstatustext.FAIL));
+      }
+    }
+
+    // Check if code applies to this registration type
+    if (discountCodeDoc.applicableRegistrationTypes.length > 0) {
+      if (!discountCodeDoc.applicableRegistrationTypes.includes(user.registerationType)) {
+        return next(AppError.create('This discount code is not applicable to your registration type', 400, httpstatustext.FAIL));
+      }
+    }
+
+    // Calculate discount amount
+    discountAmount = discountCodeDoc.calculateDiscount(egpPriceInfo.amount);
+  }
+
   // Display price in USD, but charge in EGP
   const displayPrice = {
     amount: usdPriceInfo.amount,
     currency: 'USD',
   };
 
-  // Actual payment amount in EGP (for Paymob)
+  // Actual payment amount in EGP (for Paymob) - after discount
   const paymentPrice = {
-    amount: egpPriceInfo.amount,
+    amount: Math.max(0, egpPriceInfo.amount - discountAmount), // Ensure non-negative
     currency: 'EGP',
   };
 
@@ -384,11 +487,14 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
       status: 'trialing', // Will be updated to 'active' when webhook confirms payment
       paymentMethod: activeGateway,
       currency: paymentPrice.currency.toUpperCase(), // EGP (actual payment)
-      amount: paymentPrice.amount, // EGP amount (actual payment)
+      amount: paymentPrice.amount, // EGP amount (actual payment, after discount)
       nextBillingDate: nextBillingDate,
       metadata: {
         displayPrice: displayPrice, // USD price for UI display
         displayCurrency: 'USD',
+        originalAmount: egpPriceInfo.amount, // Original amount before discount
+        discountAmount: discountAmount, // Discount applied
+        discountCode: discountCodeDoc ? discountCodeDoc.code : null,
       },
     };
 
@@ -414,6 +520,8 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
       subscription = await UserSubscription.create(subscriptionData);
     }
 
+    // Note: Discount code usage will be incremented in webhook when payment succeeds
+
     res.status(200).json({
       status: httpstatustext.SUCCESS,
       message: 'Checkout created successfully',
@@ -429,6 +537,14 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
           amount: paymentPrice.amount,
           currency: paymentPrice.currency,
         },
+        // Discount information
+        discount: discountCodeDoc ? {
+          code: discountCodeDoc.code,
+          type: discountCodeDoc.discountType,
+          value: discountCodeDoc.discountValue,
+          amount: discountAmount,
+        } : null,
+        originalAmount: egpPriceInfo.amount,
         planId: plan._id,
         planName: plan.name,
         subscriptionId: subscription._id,

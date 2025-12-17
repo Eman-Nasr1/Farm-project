@@ -122,6 +122,9 @@ app.use('/', planRoutes);
 const settingsRoutes = require('./Routes/settingsRoutes');
 app.use('/', settingsRoutes);
 
+const discountCodeRoutes = require('./Routes/discountCodeRoutes');
+app.use('/', discountCodeRoutes);
+
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
 })
