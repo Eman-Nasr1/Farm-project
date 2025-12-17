@@ -11,15 +11,15 @@ const planController = require('../Controllers/plan.controller');
 const verifytoken = require('../middleware/verifytoken');
 const allowedto = require('../middleware/allowedto');
 
-// All routes require authentication and admin role
+// Public route - Get all plans (accessible from home page)
+router.get('/api/admin/plans', planController.getAllPlans);
+
+// All other routes require authentication and admin role
 router.use(verifytoken);
 router.use(allowedto('admin'));
 
 // Create a new plan
 router.post('/api/admin/plans', planController.createPlan);
-
-// Get all plans
-router.get('/api/admin/plans', planController.getAllPlans);
 
 // Get a single plan by ID
 router.get('/api/admin/plans/:id', planController.getPlanById);
