@@ -1,8 +1,9 @@
 /**
- * Plan Routes (Admin only)
+ * Plan Routes
  * 
  * Routes for managing subscription plans.
- * All routes require admin authentication.
+ * GET /api/admin/plans is public (no auth required).
+ * All other routes require admin authentication.
  */
 
 const express = require('express');
@@ -11,24 +12,14 @@ const planController = require('../Controllers/plan.controller');
 const verifytoken = require('../middleware/verifytoken');
 const allowedto = require('../middleware/allowedto');
 
-// Public route - Get all plans (accessible from home page)
+// Public route - Get all plans (accessible from home page, NO AUTH)
 router.get('/api/admin/plans', planController.getAllPlans);
 
-// All other routes require authentication and admin role
-router.use(verifytoken);
-router.use(allowedto('admin'));
-
-// Create a new plan
-router.post('/api/admin/plans', planController.createPlan);
-
-// Get a single plan by ID
-router.get('/api/admin/plans/:id', planController.getPlanById);
-
-// Update a plan
-router.put('/api/admin/plans/:id', planController.updatePlan);
-
-// Delete (deactivate) a plan
-router.delete('/api/admin/plans/:id', planController.deletePlan);
+// Protected routes - require authentication and admin role
+router.post('/api/admin/plans', verifytoken, allowedto('admin'), planController.createPlan);
+router.get('/api/admin/plans/:id', verifytoken, allowedto('admin'), planController.getPlanById);
+router.put('/api/admin/plans/:id', verifytoken, allowedto('admin'), planController.updatePlan);
+router.delete('/api/admin/plans/:id', verifytoken, allowedto('admin'), planController.deletePlan);
 
 module.exports = router;
 
