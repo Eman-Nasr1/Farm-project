@@ -6,6 +6,6 @@
 
 module.exports = {
   // Maximum number of animals allowed during free trial
-  TRIAL_ANIMAL_LIMIT: 50,
+  TRIAL_ANIMAL_LIMIT: 100,
 };
 
