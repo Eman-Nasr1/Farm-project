@@ -59,6 +59,10 @@ app.use (express.json());
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
 
+// Public route - Get all plans (must be before any route files with middleware)
+const planController = require('./Controllers/plan.controller');
+app.get('/api/admin/plans', planController.getAllPlans);
+
 const authrouter=require('./Routes/authRoutes');
 app.use('/',authrouter)
 
