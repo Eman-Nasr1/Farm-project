@@ -230,26 +230,22 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
 });
 
 /**
- * Delete a plan (Admin only) - soft delete by setting isActive to false
+ * Delete a plan (Admin only) - permanently delete the plan
  * DELETE /api/admin/plans/:id
  */
 const deletePlan = asyncwrapper(async (req, res, next) => {
   const { id } = req.params;
 
-  const plan = await Plan.findById(id);
+  const plan = await Plan.findByIdAndDelete(id);
 
   if (!plan) {
     return next(AppError.create('Plan not found', 404, httpstatustext.FAIL));
   }
 
-  // Soft delete: set isActive to false instead of actually deleting
-  plan.isActive = false;
-  await plan.save();
-
   res.status(200).json({
     status: httpstatustext.SUCCESS,
-    message: 'Plan deactivated successfully',
-    data: plan,
+    message: 'Plan deleted successfully',
+    data: null,
   });
 });
 

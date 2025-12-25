@@ -2,6 +2,7 @@ const express=require('express');
 const router=express.Router();
 const animalcontroller=require('../Controllers/animal.controller');
 const verifytoken=require('../middleware/verifytoken');
+const optionalAuth = require('../middleware/optionalAuth');
 const animalCostController=require('../Controllers/animalcost.controller');
 const { animalValidationRules, validateAnimal } =require('../middleware/animal.validation');
 const setLocale = require('../middleware/localeMiddleware');
@@ -22,5 +23,8 @@ router.post('/api/animal/import', verifytoken, excelOps.uploadExcelFile, animalc
 router.post('/api/animal/moveanimals',verifytoken,animalcontroller.moveAnimals);
 router.get('/api/animal/getanimalCost',verifytoken,animalCostController.getallanimalscost);
 router.get('/api/animal/males',verifytoken,animalcontroller.getAllMaleAnimalTagIds);
+
+// Public scan route (optional auth - works with or without login)
+router.get('/api/scan/:token', optionalAuth, animalcontroller.getAnimalByQrToken);
 
 module.exports=router;

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const User = require('../Models/user.model');
 const Breeding = require('../Models/breeding.model');
 const Mating = require('../Models/mating.model');
@@ -61,6 +62,12 @@ const Animalschema = new mongoose.Schema({
         ref: 'User'
        
     },
+    qrToken: {
+        type: String,
+        unique: true,
+        index: true,
+        immutable: true
+    },
     createdAt: {
         type: Date,
         default: Date.now
@@ -72,8 +79,14 @@ const Animalschema = new mongoose.Schema({
 // Compound index to ensure unique tagId per user  
 Animalschema.index({ owner: 1, tagId: 1 }, { unique: true });  
 
-// Calculate age in days on save
+// Calculate age in days on save and generate qrToken if not exists
 Animalschema.pre('save', function (next) {
+    // Generate qrToken only once on creation
+    if (!this.qrToken) {
+        this.qrToken = crypto.randomBytes(16).toString('hex');
+    }
+    
+    // Calculate age in days
     if (this.birthDate) {
         const birthDate = new Date(this.birthDate);
         const currentDate = new Date();

@@ -7,6 +7,11 @@ const LocationShed = require('../Models/locationsed.model');
 const Breed = require('../Models/breed.model');
 const AnimalCost = require('../Models/animalCost.model');
 const Excluded = require('../Models/excluded.model');
+const Mating = require('../Models/mating.model');
+const Breeding = require('../Models/breeding.model');
+const Weight = require('../Models/weight.model');
+const VaccineEntry = require('../Models/vaccineEntry.model');
+const TreatmentEntry = require('../Models/treatmentEntry.model');
 const { afterCreateAnimal,afterUpdateAnimalPurchase} = require('../utilits/animalAccounting');
 const mongoose = require('mongoose');
 const i18n = require('../i18n');
@@ -475,12 +480,25 @@ const addanimal = asyncwrapper(async (req, res, next) => {
         .populate('locationShed', 'locationShedName')
         .populate('breed', 'breedName');
 
-    res.json({ status: httpstatustext.SUCCESS, data: { animal: populatedAnimal } });
+    // Generate QR link
+    const frontendUrl = process.env.FRONTEND_URL || 'https://mazraaonline.com';
+    const qrLink = `${frontendUrl}/scan/${newanimal.qrToken}`;
+
+    res.json({ 
+        status: httpstatustext.SUCCESS, 
+        data: { 
+            animal: populatedAnimal,
+            qrLink 
+        } 
+    });
 });
 
 const updateanimal = asyncwrapper(async (req, res, next) => {
     const animalId = req.params.tagId; // تأكد إن ده هو الـ _id فعلاً وليس tagId
     const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
+    
+    // Prevent qrToken updates (immutable field)
+    delete updateData.qrToken;
 
     // تحديث المكان لو الاسم موجود
     if (locationShedName) {
@@ -747,6 +765,98 @@ const moveAnimals = asyncwrapper(async (req, res, next) => {
     }
 });
 
+/**
+ * Get animal by QR token (Public endpoint with optional auth)
+ * GET /api/scan/:token
+ * 
+ * Returns animal data with related records.
+ * - If no auth: returns basic info + canAdd=false
+ * - If auth and owner: returns full data + canAdd=true
+ * - If auth but not owner: returns basic info + canAdd=false
+ */
+const getAnimalByQrToken = asyncwrapper(async (req, res, next) => {
+    const { token } = req.params;
+    
+    if (!token) {
+        return next(AppError.create('QR token is required', 400, httpstatustext.FAIL));
+    }
+
+    // Find animal by QR token
+    const animal = await Animal.findOne({ qrToken: token })
+        .populate('locationShed', 'locationShedName')
+        .populate('breed', 'breedName');
+
+    if (!animal) {
+        return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
+    }
+
+    // Determine permissions
+    const isOwner = req.user && req.user.id && animal.owner.toString() === req.user.id.toString();
+    const canAdd = isOwner;
+
+    // Prepare animal data based on permissions
+    let animalData;
+    if (isOwner) {
+        // Full data for owner
+        animalData = animal.toObject();
+    } else {
+        // Basic info for non-owners or anonymous
+        animalData = {
+            _id: animal._id,
+            tagId: animal.tagId,
+            animalType: animal.animalType,
+            gender: animal.gender,
+            locationShed: animal.locationShed,
+            breed: animal.breed,
+            birthDate: animal.birthDate,
+            ageInDays: animal.ageInDays,
+        };
+    }
+
+    // Fetch related records (latest first)
+    const [mating, breeding, weight, vaccines, treatments] = await Promise.all([
+        Mating.find({ animalId: animal._id })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean(),
+        Breeding.find({ animalId: animal._id, owner: animal.owner })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean(),
+        Weight.find({ animalId: animal._id })
+            .sort({ Date: -1 })
+            .limit(10)
+            .lean(),
+        VaccineEntry.find({ tagId: animal.tagId })
+            .populate('vaccine', 'otherVaccineName vaccineType')
+            .sort({ date: -1 })
+            .limit(10)
+            .lean(),
+        TreatmentEntry.find({ tagId: animal.tagId })
+            .populate('treatments.treatmentId', 'name')
+            .sort({ date: -1 })
+            .limit(10)
+            .lean(),
+    ]);
+
+    res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        data: {
+            animal: animalData,
+            permissions: {
+                canAdd
+            },
+            records: {
+                mating,
+                breeding,
+                weight,
+                vaccines,
+                treatments
+            }
+        }
+    });
+});
+
 module.exports = {
     getallanimals,
     getsingleanimal,
@@ -759,5 +869,6 @@ module.exports = {
     getAnimalStatistics,
     downloadAnimalTemplate,
     getAllMaleAnimalTagIds,
+    getAnimalByQrToken,
     moveAnimals,
 }

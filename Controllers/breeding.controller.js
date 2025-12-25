@@ -39,8 +39,8 @@ const toDateOrNull = (v) => {
     if (!v) return null;
     const d = new Date(v);
     return Number.isNaN(d.getTime()) ? null : d;
-  };
-  
+};
+
 
 
 const getAllBreeding = asyncwrapper(async (req, res) => {
@@ -105,44 +105,44 @@ const getAllBreeding = asyncwrapper(async (req, res) => {
 const getbreedingforspacficanimal = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const animalId = req.params.animalId;
-  
+
     const animal = await Animal.findOne({ _id: animalId, owner: userId }).lean();
     if (!animal) {
-      return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
+        return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
     }
-  
+
     const breeding = await Breeding.find(
-      { animalId: animal._id, owner: userId },
-      { __v: 0 }
+        { animalId: animal._id, owner: userId },
+        { __v: 0 }
     )
-      .sort({ createdAt: -1 })
-      .lean();
-  
+        .sort({ createdAt: -1 })
+        .lean();
+
     // ملاحظة: find بترجع [] لو مفيش سجلات، فشيك بالطول
     if (!breeding || breeding.length === 0) {
-      return next(AppError.create('Breeding information not found for this animal', 404, httpstatustext.FAIL));
+        return next(AppError.create('Breeding information not found for this animal', 404, httpstatustext.FAIL));
     }
-  
+
     return res.json({ status: httpstatustext.SUCCESS, data: { animal, breeding } });
-  });
-  
-  
-  const getsinglebreeding = asyncwrapper(async (req, res, next) => {
+});
+
+
+const getsinglebreeding = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;
     const breedingId = req.params.breedingId;
-  
+
     const breeding = await Breeding.findOne(
-      { _id: breedingId, owner: userId },
-      { __v: 0 }
+        { _id: breedingId, owner: userId },
+        { __v: 0 }
     )
-      .populate({ path: 'animalId', select: 'animalType' });
-  
+        .populate({ path: 'animalId', select: 'animalType' });
+
     if (!breeding) {
-      return next(AppError.create('Breeding information not found', 404, httpstatustext.FAIL));
+        return next(AppError.create('Breeding information not found', 404, httpstatustext.FAIL));
     }
-  
+
     return res.json({ status: httpstatustext.SUCCESS, data: { breeding } });
-  });
+});
 
 const addBreeding = asyncwrapper(async (req, res, next) => {
     const userId = req.user.id;

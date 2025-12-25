@@ -347,7 +347,7 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
     tagId: entry.tagId,
     date: entry.date,
     entryType: entry.entryType,
-    vaccine: entry.vaccine ? {  
+    vaccine: entry.vaccine ? {
       _id: entry.vaccine._id,
       name: entry.vaccine.otherVaccineName ||
         (lang === 'ar'
@@ -355,7 +355,7 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
           : entry.vaccine.vaccineType?.englishName) ||
         (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
       diseaseType: lang === 'ar'
-          ? entry.vaccine.vaccineType?.arabicDiseaseType
+        ? entry.vaccine.vaccineType?.arabicDiseaseType
         : entry.vaccine.vaccineType?.englishDiseaseType ||
         (lang === 'ar' ? 'نوع مرض غير معروف' : 'Unknown disease type'),
       dosePrice: entry.vaccine.pricing?.dosePrice,
@@ -382,6 +382,7 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
     },
   });
 });
+
 const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
   const userId = req.user.id;
   const { animalId } = req.params;
@@ -436,7 +437,7 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
       _id: entry._id,
       date: entry.date,
       entryType: entry.entryType,
-        vaccine: entry.vaccine ? {
+      vaccine: entry.vaccine ? {
         _id: entry.vaccine._id,
         name: entry.vaccine.otherVaccineName ||
           (lang === 'ar'
@@ -522,7 +523,7 @@ const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
         _id: vaccineEntry.vaccine._id,
         name: vaccineEntry.vaccine.otherVaccineName ||
           (lang === 'ar'
-              ? vaccineEntry.vaccine.vaccineType?.arabicName
+            ? vaccineEntry.vaccine.vaccineType?.arabicName
             : vaccineEntry.vaccine.vaccineType?.englishName) ||
           (lang === 'ar' ? 'لقاح غير معروف' : 'Unnamed Vaccine'),
         diseaseType: lang === 'ar'
@@ -1025,7 +1026,7 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
     }
 
     // Find vaccine and restore dose
-      const vaccine = await Vaccine.findById(entry.vaccine).session(session);
+    const vaccine = await Vaccine.findById(entry.vaccine).session(session);
     if (vaccine) {
       vaccine.stock.totalDoses += 1;
       vaccine.stock.bottles = Math.ceil(vaccine.stock.totalDoses / vaccine.stock.dosesPerBottle);
@@ -1065,9 +1066,6 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
     next(error);
   }
 });
-
-
-
 
 const importVaccineEntriesFromExcel = asyncwrapper(async (req, res, next) => {
   const userId = req.user?.id || req.userId;

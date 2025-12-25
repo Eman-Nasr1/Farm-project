@@ -374,8 +374,6 @@ const getAllAnimalsWithGrowthData = asyncwrapper(async (req, res, next) => {
     }
 });
 
-
-
 const exportWeightsToExcel = asyncwrapper(async (req, res, next) => {
     try {
         const userId = req.user?.id || req.userId;

@@ -1098,9 +1098,6 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   }
 });
 
-
-
-
 const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   try {
     const userId = req.user.id;
