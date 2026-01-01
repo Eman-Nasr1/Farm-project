@@ -11,7 +11,6 @@ router.get('/api/admin/discount-codes/:id', verifytoken, allowedto('admin'), dis
 router.put('/api/admin/discount-codes/:id', verifytoken, allowedto('admin'), discountCodeController.updateDiscountCode);
 router.delete('/api/admin/discount-codes/:id', verifytoken, allowedto('admin'), discountCodeController.deleteDiscountCode);
 
-// Public route for validating discount codes (used during checkout)
-router.get('/api/discount-codes/validate/:code', discountCodeController.validateDiscountCode);
+// Note: GET /api/discount-codes/validate/:code is defined in index.js as a public route (no auth)
 
 module.exports = router;

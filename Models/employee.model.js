@@ -6,17 +6,19 @@ const EmployeeSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true, // Link to the parent user
+        required: true, // Tenant ID (Owner)
+        index: true,
     },
     name: {
         type: String,
         required: true,
+        trim: true,
     },
     email: {
         type: String,
         required: true,
-        unique: true,
         validate: [validator.isEmail, 'Field must be a valid email address'],
+        // Removed global unique - now using compound unique index per tenant
     },
     password: {
         type: String,
@@ -26,20 +28,34 @@ const EmployeeSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    role: {
-        type: String,
-        enum: ['employee', 'manager'],
-        default: 'employee',
-    },
-    permissions: {
-        type: [String], // Array of permissions like ["read", "write", "update"]
+    roleIds: {
+        type: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Role',
+        }],
         default: [],
     },
-    createdAt: {
-        type: Date,
-        default: Date.now,
+    extraPermissions: {
+        type: [String],
+        default: [],
     },
+    deniedPermissions: {
+        type: [String],
+        default: [],
+    },
+    isActive: {
+        type: Boolean,
+        default: true,
+    },
+}, {
+    timestamps: true,
 });
+
+// Compound unique index: email must be unique per tenant
+EmployeeSchema.index({ user: 1, email: 1 }, { unique: true });
+
+// Index for faster queries
+EmployeeSchema.index({ user: 1 });
 
 EmployeeSchema.pre('save', async function (next) {
     if (this.isModified('password')) {

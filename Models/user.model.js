@@ -34,7 +34,7 @@ const Userschema=new mongoose.Schema(
         },
         role:{
             type:String,
-            enum:["user","admin","employee"],
+            enum:["user","admin"],
             default:"user"
         },
         country:{
@@ -72,6 +72,14 @@ const Userschema=new mongoose.Schema(
         },
         subscriptionCurrentPeriodEnd: { 
             type: Date 
+        },
+        tenantCode: {
+            type: String,
+            unique: true,
+            sparse: true, // Allow null values but enforce uniqueness for non-null
+            index: true,
+            uppercase: true,
+            trim: true,
         },
         createdAt: {  
             type: Date,  

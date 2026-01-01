@@ -1,39 +1,53 @@
 const Employee = require('../Models/employee.model');
 const User = require('../Models/user.model');
+const Role = require('../Models/role.model');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
-const bcrypt=require('bcryptjs');
-const jwt =require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { computeEffectivePermissions } = require('../utilits/computePermissions');
 
+// Create employee (requires employees.manage permission)
 const createEmployee = asyncwrapper(async (req, res, next) => {
-    const { name, email, password, phone, role, permissions } = req.body;
-    const userId = req.user.id; // Assume you have middleware that provides the logged-in user ID
+    const { name, email, password, phone, roleIds, extraPermissions, deniedPermissions } = req.body;
+    const tenantId = req.user.tenantId || req.user.id; // Tenant ID
 
-    // Ensure the user exists
-    const user = await User.findById(userId);
-    if (!user) {
-        return next(AppError.create('User not found', 404, httpstatustext.ERROR));
+    // Validate required fields
+    if (!name || !email || !password || !phone) {
+        return next(AppError.create('Name, email, password, and phone are required', 400, httpstatustext.FAIL));
     }
 
-    // Check if the employee already exists
-    const existingEmployee = await Employee.findOne({ email });
+    // Check if employee already exists for this tenant
+    const existingEmployee = await Employee.findOne({ user: tenantId, email });
     if (existingEmployee) {
-        return next(AppError.create('Employee already exists', 400, httpstatustext.FAIL));
+        return next(AppError.create('Employee with this email already exists', 400, httpstatustext.FAIL));
+    }
+
+    // Validate roleIds belong to the same tenant
+    if (roleIds && roleIds.length > 0) {
+        const roles = await Role.find({ _id: { $in: roleIds }, user: tenantId });
+        if (roles.length !== roleIds.length) {
+            return next(AppError.create('One or more roles not found or belong to different tenant', 400, httpstatustext.FAIL));
+        }
     }
 
     // Create the new employee
     const newEmployee = new Employee({
-        user: user._id, // Link the employee to the user
+        user: tenantId,
         name,
         email,
         password,
         phone,
-        role,
-        permissions,
+        roleIds: roleIds || [],
+        extraPermissions: extraPermissions || [],
+        deniedPermissions: deniedPermissions || [],
     });
 
     await newEmployee.save();
+
+    // Populate roles for response
+    await newEmployee.populate('roleIds', 'name key');
 
     res.status(201).json({
         status: httpstatustext.SUCCESS,
@@ -41,42 +55,131 @@ const createEmployee = asyncwrapper(async (req, res, next) => {
     });
 });
 
+// Get all employees for tenant
+const getAllEmployees = asyncwrapper(async (req, res, next) => {
+    const tenantId = req.user.tenantId || req.user.id;
 
-const employeeLogin = asyncwrapper(async (req, res, next) => {
-    const { email, password } = req.body;
-
-    // Check if email and password are provided
-    if (!email || !password) {
-        return next(AppError.create('Email and password are required', 400, httpstatustext.FAIL));
-    }
-
-    // Find the employee by email and populate the associated user
-    const employee = await Employee.findOne({ email }).populate('user', 'role'); // Populate the user details
-
-    if (!employee) {
-        return next(AppError.create('Employee not found', 404, httpstatustext.ERROR));
-    }
-
-    // Check if the password is correct
-    const isPasswordValid = await bcrypt.compare(password, employee.password);
-    if (!isPasswordValid) {
-        return next(AppError.create('Invalid password', 400, httpstatustext.ERROR));
-    }
-
-    // Create a JWT token for both the employee and the parent user
-    const token = jwt.sign(
-        { id: employee._id, role: employee.role, userId: employee.user._id ,permissions: employee.permissions}, // Include both employee and user info
-        process.env.JWT_SECRET_KEY,
-        { expiresIn: '30d' }
-    );
+    const employees = await Employee.find({ user: tenantId })
+        .populate('roleIds', 'name key permissionKeys')
+        .select('-password')
+        .sort({ createdAt: -1 });
 
     res.status(200).json({
         status: httpstatustext.SUCCESS,
-        data: { token, user: employee.user }, // Return the parent user data
+        data: { employees },
+    });
+});
+
+// Get single employee
+const getEmployee = asyncwrapper(async (req, res, next) => {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId || req.user.id;
+
+    const employee = await Employee.findOne({ _id: id, user: tenantId })
+        .populate('roleIds', 'name key permissionKeys')
+        .select('-password');
+
+    if (!employee) {
+        return next(AppError.create('Employee not found', 404, httpstatustext.FAIL));
+    }
+
+    res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        data: { employee },
+    });
+});
+
+// Update employee roles
+const updateEmployeeRoles = asyncwrapper(async (req, res, next) => {
+    const { id } = req.params;
+    const { roleIds, extraPermissions, deniedPermissions } = req.body;
+    const tenantId = req.user.tenantId || req.user.id;
+
+    const employee = await Employee.findOne({ _id: id, user: tenantId });
+    if (!employee) {
+        return next(AppError.create('Employee not found', 404, httpstatustext.FAIL));
+    }
+
+    // Validate roleIds belong to the same tenant
+    if (roleIds && roleIds.length > 0) {
+        const roles = await Role.find({ _id: { $in: roleIds }, user: tenantId });
+        if (roles.length !== roleIds.length) {
+            return next(AppError.create('One or more roles not found or belong to different tenant', 400, httpstatustext.FAIL));
+        }
+        employee.roleIds = roleIds;
+    }
+
+    if (extraPermissions !== undefined) {
+        employee.extraPermissions = extraPermissions;
+    }
+
+    if (deniedPermissions !== undefined) {
+        employee.deniedPermissions = deniedPermissions;
+    }
+
+    await employee.save();
+    await employee.populate('roleIds', 'name key permissionKeys');
+
+    res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        data: { employee },
+    });
+});
+
+// Update employee (general update)
+const updateEmployee = asyncwrapper(async (req, res, next) => {
+    const { id } = req.params;
+    const { name, email, phone, isActive } = req.body;
+    const tenantId = req.user.tenantId || req.user.id;
+
+    const employee = await Employee.findOne({ _id: id, user: tenantId });
+    if (!employee) {
+        return next(AppError.create('Employee not found', 404, httpstatustext.FAIL));
+    }
+
+    if (name) employee.name = name;
+    if (phone) employee.phone = phone;
+    if (isActive !== undefined) employee.isActive = isActive;
+
+    // Check email uniqueness within tenant if changing email
+    if (email && email !== employee.email) {
+        const existing = await Employee.findOne({ user: tenantId, email });
+        if (existing) {
+            return next(AppError.create('Email already in use by another employee', 400, httpstatustext.FAIL));
+        }
+        employee.email = email;
+    }
+
+    await employee.save();
+    await employee.populate('roleIds', 'name key');
+
+    res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        data: { employee },
+    });
+});
+
+// Delete employee
+const deleteEmployee = asyncwrapper(async (req, res, next) => {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId || req.user.id;
+
+    const employee = await Employee.findOneAndDelete({ _id: id, user: tenantId });
+    if (!employee) {
+        return next(AppError.create('Employee not found', 404, httpstatustext.FAIL));
+    }
+
+    res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        data: null,
     });
 });
 
 module.exports = {
     createEmployee,
-    employeeLogin,
+    getAllEmployees,
+    getEmployee,
+    updateEmployee,
+    updateEmployeeRoles,
+    deleteEmployee,
 };

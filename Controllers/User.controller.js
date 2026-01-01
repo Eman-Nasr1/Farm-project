@@ -218,7 +218,7 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
 });
 
 const register = asyncwrapper(async (req, res, next) => {
-  const { name, email, password, confirmpassword, phone, country, role, registerationType } = req.body;
+  const { name, email, password, confirmpassword, phone, country, role, registerationType, tenantCode } = req.body;
 
   const olderuser = await User.findOne({ email: email });
   if (olderuser) {
@@ -234,6 +234,36 @@ const register = asyncwrapper(async (req, res, next) => {
   const now = new Date();
   const trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
   
+  // Generate tenantCode if not provided (unique farm identifier)
+  let finalTenantCode = tenantCode;
+  if (!finalTenantCode) {
+    // Generate unique code: first 3 letters of name + random 4 digits
+    const namePrefix = name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '') || 'FARM';
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 10) {
+      const randomNum = Math.floor(1000 + Math.random() * 9000);
+      finalTenantCode = `${namePrefix}${randomNum}`;
+      const exists = await User.findOne({ tenantCode: finalTenantCode });
+      if (!exists) {
+        isUnique = true;
+      }
+      attempts++;
+    }
+    if (!isUnique) {
+      // Fallback: use timestamp-based code
+      finalTenantCode = `FARM${Date.now().toString().slice(-6)}`;
+    }
+  } else {
+    // Validate tenantCode is unique if provided
+    finalTenantCode = finalTenantCode.toUpperCase().trim();
+    const exists = await User.findOne({ tenantCode: finalTenantCode });
+    if (exists) {
+      const error = AppError.create('Farm code already exists. Please choose a different code.', 400, httpstatustext.FAIL);
+      return next(error);
+    }
+  }
+  
   const newuser = new User({
     name,
     email,
@@ -243,6 +273,7 @@ const register = asyncwrapper(async (req, res, next) => {
     role,
     registerationType,
     country,
+    tenantCode: finalTenantCode,
     // Start 30-day free trial (no Stripe subscription yet)
     subscriptionStatus: 'trialing',
     trialStart: now,
@@ -257,46 +288,147 @@ const register = asyncwrapper(async (req, res, next) => {
   newuser.token = token;
   await newuser.save();
 
+  // Seed default roles for the new tenant
+  try {
+    const { seedDefaultRoles } = require('../utilits/seedDefaultRoles');
+    await seedDefaultRoles(newuser._id);
+  } catch (error) {
+    console.error('Error seeding default roles:', error);
+    // Don't fail registration if role seeding fails, but log it
+  }
+
   res.status(201).json({ status: httpstatustext.SUCCESS, data: { user: newuser } });
 
 })
 
 const login = asyncwrapper(async (req, res, next) => {
-  const { email, password } = req.body;
-  if (!email && !password) {
+  const { email, password, farmCode } = req.body;
+  
+  if (!email || !password) {
     const error = AppError.create(i18n.__('EMAIL_PASSWORD_REQUIRED'), 400, httpstatustext.FAIL);
     return next(error);
   }
-  const user = await User.findOne({ email: email });
 
-  if (!user) {
-    const error = AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.ERROR);
-    return next(error);
-  }
-
-  const matchedpassword = await bcrypt.compare(password, user.password);
-  if (user && matchedpassword) {
-    // Initialize trial for existing users who don't have one yet (only if no subscription)
-    if (!user.trialStart && !user.trialEnd && user.subscriptionStatus === 'none' && !user.planId) {
-      const now = new Date();
-      user.subscriptionStatus = 'trialing';
-      user.trialStart = now;
-      user.trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
-      await user.save();
+  // Step 1: Try Owner login first (User collection) - NO farmCode needed
+  const owner = await User.findOne({ email: email });
+  
+  if (owner) {
+    const matchedPassword = await bcrypt.compare(password, owner.password);
+    if (matchedPassword) {
+      // Initialize trial for existing users who don't have one yet (only if no subscription)
+      if (!owner.trialStart && !owner.trialEnd && owner.subscriptionStatus === 'none' && !owner.planId) {
+        const now = new Date();
+        owner.subscriptionStatus = 'trialing';
+        owner.trialStart = now;
+        owner.trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        await owner.save();
+      }
+      
+      // Owner JWT payload: all permissions
+      const token = await jwt.sign(
+        {
+          id: owner._id,
+          tenantId: owner._id, // Owner's ID is also the tenantId
+          accountType: 'owner',
+          email: owner.email,
+          role: owner.role,
+          registerationType: owner.registerationType,
+          permissions: ['*'], // Owner has all permissions
+        },
+        process.env.JWT_SECRET_KEY,
+        { expiresIn: '7d' }
+      );
+      
+      return res.status(200).json({
+        status: httpstatustext.SUCCESS,
+        data: {
+          token,
+          accountType: 'owner',
+          user: {
+            id: owner._id,
+            email: owner.email,
+            name: owner.name,
+            tenantId: owner._id,
+            tenantCode: owner.tenantCode, // Include farm code in response
+          },
+        },
+      });
     }
-    
-    const token = await jwt.sign(
-      { email: user.email, id: user._id, role: user.role, registerationType: user.registerationType }, // Include 'role' in the payload
-      process.env.JWT_SECRET_KEY,
-      { expiresIn: '7d' }
-    );
-    res.status(201).json({ status: httpstatustext.SUCCESS, data: { token } });
   }
-  else {
-    const error = AppError.create(i18n.__('SOMETHING_WRONG'), 500, httpstatustext.ERROR);
+
+  // Step 2: Employee login - REQUIRES farmCode for security
+  if (!farmCode) {
+    const error = AppError.create(
+      'farmCode required for employee login',
+      400,
+      httpstatustext.FAIL
+    );
     return next(error);
   }
 
+  // Convert farmCode -> tenantId (ownerId)
+  const tenant = await User.findOne({ tenantCode: farmCode.toUpperCase().trim() });
+  if (!tenant) {
+    const error = AppError.create('Invalid farm code', 404, httpstatustext.FAIL);
+    return next(error);
+  }
+
+  const Employee = require('../Models/employee.model');
+  const { computeEffectivePermissions } = require('../utilits/computePermissions');
+
+  // Find employee - MUST use tenantId to prevent cross-tenant lookup
+  const employee = await Employee.findOne({
+    email,
+    user: tenant._id, // CRITICAL: tenantId required for employee login
+    isActive: true,
+  })
+    .populate('user', 'name email tenantCode')
+    .populate('roleIds', 'permissionKeys');
+
+  if (!employee) {
+    const error = AppError.create('Invalid email or password', 401, httpstatustext.ERROR);
+    return next(error);
+  }
+
+  // Verify password
+  const isPasswordValid = await bcrypt.compare(password, employee.password);
+  if (!isPasswordValid) {
+    const error = AppError.create('Invalid email or password', 401, httpstatustext.ERROR);
+    return next(error);
+  }
+
+  // Compute effective permissions from roles
+  const effectivePermissions = await computeEffectivePermissions(employee);
+
+  // Employee JWT payload
+  const token = jwt.sign(
+    {
+      id: employee._id,
+      employeeId: employee._id,
+      tenantId: tenant._id, // Owner's ID (tenantId) - ALWAYS use for tenant isolation
+      accountType: 'employee',
+      email: employee.email,
+      permissions: effectivePermissions,
+    },
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: '30d' }
+  );
+
+  res.status(200).json({
+    status: httpstatustext.SUCCESS,
+    data: {
+      token,
+      accountType: 'employee',
+      employee: {
+        id: employee._id,
+        name: employee.name,
+        email: employee.email,
+        tenantId: tenant._id,
+        tenantCode: tenant.tenantCode,
+      },
+      permissions: effectivePermissions,
+    },
+  });
 })
 
 
