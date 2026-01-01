@@ -15,7 +15,7 @@ router.delete('/api/deleteUser/:userId',verifytoken,usercontroller.deleteUser);
 router.post('/api/register', userValidationRules(), validateUser, usercontroller.register);
 
 // Unified login endpoint: handles both owner and employee login
-router.post('/api/auth/login', loginValidationRules(), validateUser, usercontroller.login);
+router.post('/api/login', loginValidationRules(), validateUser, usercontroller.login);
 router.post ('/api/forgetPassword',usercontroller.forgotPassword);
 router.post ('/api/resetPassword',usercontroller.resetPassword );
 router.post ('/api/verifyCode',usercontroller.verifyCode );
