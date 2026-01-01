@@ -24,29 +24,14 @@ const asyncwrapper = require('../middleware/asyncwrapper');
  * - Other transaction details
  */
 const handlePaymobReturn = asyncwrapper(async (req, res, next) => {
-  const { success, id, order_id, amount_cents } = req.query;
 
-  // Determine if payment was successful
-  const isSuccess = success === 'true' || success === true;
+  console.log('🔁 Paymob return hit – redirecting to success page');
 
-  // Redirect URLs
-  const successUrl = 'https://mazraaonline.com/payment/success';
-  const failureUrl = 'https://mazraaonline.com/payment/failed';
+  const redirectUrl = 'https://mazraaonline.com/payment/success';
 
-  // Log the redirect for debugging
-  console.log(`🔄 Paymob redirect: order_id=${order_id}, success=${isSuccess}, transaction_id=${id}`);
-
-  // Redirect user to frontend
-  if (isSuccess) {
-    // Optionally add query parameters to frontend URL
-    const redirectUrl = `${successUrl}?order_id=${order_id || ''}&transaction_id=${id || ''}`;
-    return res.redirect(redirectUrl);
-  } else {
-    // Payment failed
-    const redirectUrl = `${failureUrl}?order_id=${order_id || ''}&error=payment_failed`;
-    return res.redirect(redirectUrl);
-  }
+  return res.redirect(redirectUrl);
 });
+
 
 module.exports = {
   handlePaymobReturn,
