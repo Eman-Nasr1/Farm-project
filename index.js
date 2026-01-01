@@ -63,6 +63,10 @@ app.use('/uploads', express.static('uploads'));
 const planController = require('./Controllers/plan.controller');
 app.get('/api/admin/plans', planController.getAllPlans);
 
+// Public route - Validate discount code (must be before any route files with middleware)
+const discountCodeController = require('./Controllers/discountCode.controller');
+app.get('/api/discount-codes/validate/:code', discountCodeController.validateDiscountCode);
+
 const authrouter=require('./Routes/authRoutes');
 app.use('/',authrouter)
 
@@ -100,6 +104,9 @@ app.use('/',treatmentRoutes)
 
 const employeetRoutes=require('./Routes/employeeRoute');
 app.use('/',employeetRoutes)
+
+const roleRoutes=require('./Routes/roleRoutes');
+app.use('/',roleRoutes)
 
 const locationshedRoutes=require('./Routes/locationshedRoutes');
 app.use('/',locationshedRoutes)

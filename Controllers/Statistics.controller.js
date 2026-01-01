@@ -409,6 +409,9 @@ exports.getUserStatsV2 = async (req, res) => {
       ]),
 
       // All finance data in one aggregation
+      // NOTE: Finance data comes from Accounting collection, which records ALL financial transactions
+      // (animal purchases, treatments, vaccines, feed, sales, etc.). These entries persist even if
+      // the related animals/records are deleted, as they represent historical financial records.
       Accounting.aggregate([
         { $match: { owner: ownerId, createdAt: { $gte: sixMonthsAgo } } },
         {
