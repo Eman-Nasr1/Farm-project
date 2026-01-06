@@ -8,7 +8,11 @@ const AnimalCost=require('../Models/animalCost.model');
 const getallanimalscost = asyncwrapper(async (req, res,next) => {
     
     
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const query = req.query;
     const limit = query.limit || 10;
     const page = query.page || 1;

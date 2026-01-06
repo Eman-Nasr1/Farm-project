@@ -20,7 +20,11 @@ const { upsertVaccineDoseNotification } = require('../helpers/notifyVaccineDose'
 const { addDays, addMonths } = require('../helpers/dateHelpers');
 
 const addVaccine = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const {
     vaccineTypeId,
     otherVaccineName,
@@ -118,7 +122,11 @@ const addVaccine = asyncwrapper(async (req, res, next) => {
 
 // Get all vaccines (without pagination)
 const getVaccines = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const vaccines = await Vaccine.find({ owner: userId }, { __v: false })
     .populate('vaccineType')
     .sort({ createdAt: -1 });
@@ -145,7 +153,11 @@ const getVaccine = asyncwrapper(async (req, res, next) => {
 
 // Get all vaccines with pagination
 const getAllVaccines = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -188,7 +200,11 @@ const getAllVaccines = asyncwrapper(async (req, res) => {
 
 // Update vaccine
 const updateVaccine = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const vaccineId = req.params.vaccineId;
 
   const {
@@ -262,7 +278,11 @@ const updateVaccine = asyncwrapper(async (req, res, next) => {
 
 // Delete vaccine
 const deleteVaccine = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const vaccineId = req.params.vaccineId;
 
   const vaccine = await Vaccine.findOneAndDelete({
@@ -287,7 +307,11 @@ const deleteVaccine = asyncwrapper(async (req, res, next) => {
 });
 //--------------------------------vaccine entry----------------------------------------
 const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { limit = 10, page = 1, tagId, locationShed, entryType, dateFrom, dateTo, vaccineId, lang = 'en' } = req.query;
 
   // Build filter object
@@ -384,7 +408,11 @@ const getAllVaccineEntries = asyncwrapper(async (req, res, next) => {
 });
 
 const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { animalId } = req.params;
   const { lang = 'en' } = req.query;
 
@@ -470,7 +498,11 @@ const getVaccinesForSpecificAnimal = asyncwrapper(async (req, res, next) => {
 });
 
 const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { vaccineEntryId } = req.params;
   const { lang = 'en' } = req.query;
 
@@ -553,7 +585,11 @@ const getSingleVaccineEntry = asyncwrapper(async (req, res, next) => {
 });
 
 const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { vaccineId, locationShed, date, entryType } = req.body;
 
   if (!vaccineId || !locationShed || !date || !entryType) {
@@ -711,7 +747,11 @@ const addVaccineForAnimals = asyncwrapper(async (req, res, next) => {
 });
 
 const addVaccineForAnimal = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { vaccineId, tagId, date, entryType } = req.body;
 
   if (!vaccineId || !tagId || !date || !entryType) {
@@ -843,7 +883,11 @@ const updateVaccineEntry = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
     const { vaccineEntryId } = req.params;
     const { vaccineId, tagId, date, entryType } = req.body;
 
@@ -1001,7 +1045,11 @@ const deleteVaccineEntry = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
     const { vaccineEntryId } = req.params;
 
     // Find entry

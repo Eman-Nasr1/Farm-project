@@ -15,7 +15,11 @@ const { ConsoleMessage } = require("puppeteer");
 const i18n = require('../i18n');
 const { filterNonExcludedAnimals } = require('../helpers/excluded');
 const getallfeeds = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -48,7 +52,11 @@ const getallfeeds = asyncwrapper(async (req, res) => {
 });
 
 const getfeeds=asyncwrapper(async (req, res)=>{
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const query = req.query;
   const filter = { owner: userId };
   const feeds = await Feed.find(filter, { "__v": false }).sort({ createdAt: -1 });
@@ -67,7 +75,11 @@ const getsniglefeed = asyncwrapper(async (req, res, next) => {
 });
 
 const addfeed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { supplierId, ...payload } = req.body;
 
   // التحقق من supplierId (إلزامي) + المالك
@@ -123,7 +135,11 @@ const addfeed = asyncwrapper(async (req, res, next) => {
 });
 
 const updatefeed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const feedId = req.params.feedId;
   const updatedData = req.body;
 
@@ -149,7 +165,11 @@ const deletefeed = asyncwrapper(async (req, res,next) => {
 
 
 const addFeedToShed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { locationShed, feeds, date } = req.body;
 
   if (!locationShed || !Array.isArray(feeds) || feeds.length === 0) {
@@ -272,7 +292,11 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
     const { shedEntryId } = req.params;
     const { locationShed, feeds, date } = req.body;
 
@@ -480,7 +504,11 @@ const updateFeedToShed = asyncwrapper(async (req, res, next) => {
 });
 
 const getAllFeedsByShed = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const query = req.query;
   const limit = parseInt(query.limit, 10) || 10;
   const page = parseInt(query.page, 10) || 1;
@@ -585,7 +613,11 @@ const getsniglefeedShed = asyncwrapper(async (req, res, next) => {
   }
 });
 const deletefeedshed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id; // Get the user ID from the token
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  } // Get the user ID from the token
   const feedShedId = req.params.feedShedId; // Get the feedShedId from the request parameters
 
   // Step 1: Find and delete the ShedEntry
@@ -675,7 +707,11 @@ const deletefeedshed = asyncwrapper(async (req, res, next) => {
 // --------------------------------------fodder ------------------------
 
 const getAllFodders = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -741,7 +777,11 @@ const getSingleFodder = asyncwrapper(async (req, res, next) => {
 });
 
 const manufactureFodder = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { feeds, name } = req.body;  // Expecting an array of feed IDs and their quantities
 
   // Validate the inputs
@@ -821,7 +861,11 @@ const updateFodder = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
     const { fodderId } = req.params; // معرف العلف المصنع
     const { feeds, name } = req.body; // بيانات التحديث
 

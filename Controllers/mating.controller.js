@@ -8,7 +8,11 @@ const excelOps = require('../utilits/excelOperations');
 const { assertNotExcluded } = require('../helpers/excluded');
 
 const getAllMating = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const query = req.query;
     const limit = parseInt(query.limit) || 10;
     const page = parseInt(query.page) || 1;
@@ -392,7 +396,11 @@ const getmatingforspacficanimal = asyncwrapper(async (req, res, next) => {
 })
 
 const addmating = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const { tagId, checkDays, pregnancyAge, ...matingData } = req.body;
 
     if (checkDays && ![45, 60, 90].includes(checkDays)) {
@@ -456,7 +464,11 @@ const addmating = asyncwrapper(async (req, res, next) => {
 
 
 const addMatingByLocation = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const { locationShed, checkDays, pregnancyAge, ...matingData } = req.body;
 
     if (checkDays && ![45, 60, 90].includes(checkDays)) {
@@ -545,7 +557,11 @@ const getsinglemating = asyncwrapper(async (req, res, next) => {
 });
 
 const deletemating = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const matingId = req.params.matingId;
 
     // Find the Mating document by its ID
@@ -561,7 +577,11 @@ const deletemating = asyncwrapper(async (req, res, next) => {
 })
 
 const updatemating = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const matingId = req.params.matingId;
     const { pregnancyAge, ...updatedData } = req.body;
 

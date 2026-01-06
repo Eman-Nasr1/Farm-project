@@ -7,7 +7,11 @@ const Feed = require('../Models/feed.model');
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Get all suppliers with populated treatments and feeds
 const getSuppliers = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const query = req.query;
   const limit = parseInt(query.limit) || 10;
   const page = parseInt(query.page) || 1;
@@ -66,9 +70,14 @@ const getSuppliers = asyncwrapper(async (req, res) => {
 });
 // Get single supplier with populated treatments and feeds
 const getSingleSupplier = asyncwrapper(async (req, res, next) => {
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const supplier = await Supplier.findOne({
     _id: req.params.supplierId,
-    owner: req.user.id
+    owner: userId
   })
   .populate('treatments')
   .populate('feeds');
@@ -103,7 +112,7 @@ const addSupplier = asyncwrapper(async (req, res, next) => {
     phone,
     company,
     notes,
-    owner: req.user.id,
+    owner: userId,
     // تأكيد إنهم فاضيين عند الإنشاء
     treatments: [],
     feeds: [],
@@ -181,10 +190,15 @@ const addSupplier = asyncwrapper(async (req, res, next) => {
 
 // Update supplier basic info
 const updateSupplier = asyncwrapper(async (req, res, next) => {
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const { name, email, phone, company, notes } = req.body;
 
   const supplier = await Supplier.findOneAndUpdate(
-    { _id: req.params.supplierId, owner: req.user.id },
+    { _id: req.params.supplierId, owner: userId },
     { name, email, phone, company, notes },
     { new: true, runValidators: true }
   )
@@ -206,9 +220,14 @@ const updateSupplier = asyncwrapper(async (req, res, next) => {
 
 // Delete supplier and clean up references
 const deleteSupplier = asyncwrapper(async (req, res, next) => {
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const supplier = await Supplier.findOneAndDelete({
     _id: req.params.supplierId,
-    owner: req.user.id
+    owner: userId
   });
 
   if (!supplier) {

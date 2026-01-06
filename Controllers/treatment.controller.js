@@ -15,7 +15,11 @@ const i18n = require('../i18n');
 const { filterNonExcludedAnimals, assertAnimalNotExcluded } = require('../helpers/excluded');
 
 const getallTreatments = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const query = req.query;
   const limit = query.limit || 10;
   const page = query.page || 1;
@@ -51,7 +55,11 @@ const getallTreatments = asyncwrapper(async (req, res) => {
 });
 
 const getTreatments = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const query = req.query;
   const filter = { owner: userId };
   const treatments = await Treatment.find(filter, { __v: false }).sort({
@@ -76,7 +84,11 @@ const getsnigleTreatment = asyncwrapper(async (req, res, next) => {
 });
 
 const addTreatment = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const {
     name,
     type,
@@ -177,7 +189,11 @@ const addTreatment = asyncwrapper(async (req, res, next) => {
 });
 
 const updateTreatment = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const treatmentId = req.params.treatmentId;
   const {
     name,
@@ -264,7 +280,11 @@ const deleteTreatment = asyncwrapper(async (req, res) => {
 //------------------------------------------treetment for animale-----------------------
 
 const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const {
     treatments,
     locationShed,
@@ -520,7 +540,11 @@ const addTreatmentForAnimals = asyncwrapper(async (req, res, next) => {
   });
 });
 const addTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const {
     treatments,
     tagId,
@@ -835,7 +859,11 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
     const { treatmentEntryId } = req.params;
     const {
       treatments,
@@ -1100,7 +1128,11 @@ const updateTreatmentForAnimal = asyncwrapper(async (req, res, next) => {
 
 const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   try {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
     const { locationShed, tagId, date, limit = 10, page = 1 } = req.query;
 
     // Build filter object
@@ -1202,7 +1234,11 @@ const getAllTreatmentsByShed = asyncwrapper(async (req, res) => {
   }
 });
 const deleteTreatmentShed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+  }
   const { treatmentShedId } = req.params;
 
   // Start a transaction session

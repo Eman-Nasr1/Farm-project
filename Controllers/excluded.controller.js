@@ -16,7 +16,11 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).single('file');
 
 const getallexcluded = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const query = req.query;
     const limit = parseInt(query.limit, 10) || 10;
     const page = parseInt(query.page, 10) || 1;
@@ -82,7 +86,11 @@ const getSingleExcluded = asyncwrapper(async (req, res, next) => {
 
 const addexcluded = asyncwrapper(async (req, res, next) => {
 
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const { tagId, ...excludedData } = req.body;
     const animal = await Animal.findOne({
         tagId,
@@ -100,7 +108,11 @@ const addexcluded = asyncwrapper(async (req, res, next) => {
 })
 
 const updateExcluded = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const excludedId = req.params.excludedId;
     const updatedData = req.body;
     const beforeExcluded = await Excluded.findById(excludedId).lean();
@@ -115,7 +127,11 @@ const updateExcluded = asyncwrapper(async (req, res) => {
 })
 
 const deleteExcluded = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const excludedId = req.params.excludedId;
 
     const excluded = await Excluded.findOne({ _id: excludedId, owner: userId });

@@ -15,7 +15,11 @@ const { assertNotExcluded } = require('../helpers/excluded');
 
 const getallweight =asyncwrapper(async(req,res)=>{
 
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const query=req.query;
     const limit=query.limit||10;
     const page=query.page||1;
@@ -76,7 +80,11 @@ const getsingleWeight = asyncwrapper(async (req, res, next) => {
 });
 
 const addweight = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const { tagId, Date: rawDate, weight, ...rest } = req.body;
   
     const weightDate = new Date(rawDate);
@@ -131,7 +139,11 @@ const addweight = asyncwrapper(async (req, res, next) => {
     });
   });
 const deleteweight= asyncwrapper(async(req,res,next)=>{
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const weightId = req.params.weightId;
 
     // Find the Mating document by its ID
@@ -147,7 +159,11 @@ const deleteweight= asyncwrapper(async(req,res,next)=>{
 })
 
 const updateweight = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const weightId = req.params.weightId;
     const updatedData = req.body;
 
@@ -210,7 +226,11 @@ const updateweight = asyncwrapper(async (req, res, next) => {
 
 const getAnimalWithGrowthData = asyncwrapper(async (req, res, next) => {
     try {
-        const userId = req.user.id;
+        // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
         const { animalId } = req.params;  // Changed from tagId to animalId
 
         // 1. Find the animal by ID
@@ -282,7 +302,11 @@ const getAnimalWithGrowthData = asyncwrapper(async (req, res, next) => {
 });
 const getAllAnimalsWithGrowthData = asyncwrapper(async (req, res, next) => {
     try {
-        const userId = req.user.id;
+        // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
         const { tagId = '', page = 1, limit = 10 } = req.query;
 
         const currentPage = parseInt(page);

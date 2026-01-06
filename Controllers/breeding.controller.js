@@ -44,7 +44,11 @@ const toDateOrNull = (v) => {
 
 
 const getAllBreeding = asyncwrapper(async (req, res) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const q = req.query;
     const limit = parseInt(q.limit, 10) || 10;
     const page = parseInt(q.page, 10) || 1;
@@ -103,7 +107,11 @@ const getAllBreeding = asyncwrapper(async (req, res) => {
 
 
 const getbreedingforspacficanimal = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const animalId = req.params.animalId;
 
     const animal = await Animal.findOne({ _id: animalId, owner: userId }).lean();
@@ -128,7 +136,11 @@ const getbreedingforspacficanimal = asyncwrapper(async (req, res, next) => {
 
 
 const getsinglebreeding = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const breedingId = req.params.breedingId;
 
     const breeding = await Breeding.findOne(
@@ -145,7 +157,11 @@ const getsinglebreeding = asyncwrapper(async (req, res, next) => {
 });
 
 const addBreeding = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const { tagId, birthEntries = [], ...breedingData } = req.body;
 
     // 1) الأم
@@ -300,7 +316,11 @@ const addBreeding = asyncwrapper(async (req, res, next) => {
 
 
 const updatebreeding = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const breedingId = req.params.breedingId;
     const payload = req.body;
 
@@ -458,7 +478,11 @@ const updatebreeding = asyncwrapper(async (req, res, next) => {
 });
 
 const deletebreeding = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
     const breedingId = req.params.breedingId;
 
     // Find the breeding document by its ID
@@ -630,7 +654,7 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
                 milking: milkingStatus,
                 numberOfBirths,
                 birthEntries,
-                owner: req.user.id
+                owner: userId
             });
 
             await newBreeding.save();
@@ -645,7 +669,8 @@ const importBreedingFromExcel = asyncwrapper(async (req, res, next) => {
 
 const exportBreedingToExcel = asyncwrapper(async (req, res, next) => {
     try {
-        const userId = req.user?.id || req.userId;
+        // Use tenantId for tenant isolation (works for both owner and employee)
+        const userId = req.user?.tenantId || req.user?.id || req.userId;
         if (!userId) {
             return next(AppError.create('Unauthorized access', 401, httpstatustext.FAIL));
         }

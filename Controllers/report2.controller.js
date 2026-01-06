@@ -532,7 +532,8 @@ const generateCombinedReport = asyncwrapper(async (req, res) => {
   toDate.setHours(23, 59, 59, 999);
 
   const { data, meta } = await buildCombinedReportData({
-    userId: new mongoose.Types.ObjectId(req.user.id),
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    userId: new mongoose.Types.ObjectId(req.user?.tenantId || req.user?.id),
     animalType, fromDate, toDate, lang
   });
 
@@ -561,7 +562,8 @@ const generateCombinedPDFReport = asyncwrapper(async (req, res) => {
   toDate.setHours(23, 59, 59, 999);
 
   const { data, meta } = await buildCombinedReportData({
-    userId: new mongoose.Types.ObjectId(req.user.id),
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    userId: new mongoose.Types.ObjectId(req.user?.tenantId || req.user?.id),
     animalType, fromDate, toDate, lang
   });
 

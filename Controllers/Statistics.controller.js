@@ -19,7 +19,11 @@ const round2 = (x) => Number((x ?? 0).toFixed(2));
 // ====== USER STATS (نسختك الحالية) ======
 exports.getUserStats = async (req, res) => {
   try {
-    const owner = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const owner = req.user?.tenantId || req.user?.id;
+    if (!owner) {
+      return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+    }
     const ownerId = new mongoose.Types.ObjectId(owner);
     const terminalTypes = ['death', 'sale', 'sweep']; // عدّلي الأنواع حسب الموجود عندك
 
@@ -239,7 +243,12 @@ exports.getAdminStats = async (req, res) => {
 // ====== USER STATS V2 (Optimized for Performance) ======
 exports.getUserStatsV2 = async (req, res) => {
   try {
-    const ownerId = new mongoose.Types.ObjectId(req.user.id);
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+    }
+    const ownerId = new mongoose.Types.ObjectId(userId);
     const terminalTypes = ['death', 'sale', 'sweep'];
     const now = new Date();
 
@@ -582,7 +591,12 @@ exports.getUserStatsV2 = async (req, res) => {
 // ====== DAILY TASKS (مهام اليوم) ======
 exports.getDailyTasks = async (req, res) => {
   try {
-    const ownerId = new mongoose.Types.ObjectId(req.user.id);
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+    }
+    const ownerId = new mongoose.Types.ObjectId(userId);
 
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);

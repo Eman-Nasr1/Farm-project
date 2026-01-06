@@ -7,7 +7,11 @@ const i18n = require('../i18n');
 // Get all breeds for a user (with pagination)
 // Get all breeds for a user (with pagination)
 const getAllBreeds = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const query = req.query;
   const limit = parseInt(query.limit, 10) || 10;
   const page = parseInt(query.page, 10) || 1;
@@ -44,7 +48,11 @@ const getAllBreeds = asyncwrapper(async (req, res) => {
 
 // Get all breeds for a user (without pagination)
 const getAllBreedsWithoutPagination = asyncwrapper(async (req, res) => {
-  const userId = req.user.id; // Get the user ID from the request
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  } // Get the user ID from the request
   const query = req.query;
 
   const filter = { owner: userId }; // Filter by the user's ID
@@ -79,7 +87,11 @@ const getSingleBreed = asyncwrapper(async (req, res, next) => {
 // Add a new breed
 // Add a new breed
 const addBreed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const { breedName, standards } = req.body;
 
   if (!breedName) {
@@ -98,7 +110,11 @@ const addBreed = asyncwrapper(async (req, res, next) => {
 
 // Update a breed
 const updateBreed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const breedId = req.params.breedId;
   const { breedName, standards, ...rest } = req.body;
 
@@ -127,7 +143,11 @@ const updateBreed = asyncwrapper(async (req, res, next) => {
 
 // Delete a breed
 const deleteBreed = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const breedId = req.params.breedId;
 
   // Find the breed by ID and owner

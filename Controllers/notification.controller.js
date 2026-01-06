@@ -10,7 +10,11 @@ const i18n = require('../i18n');
 
 // Get all notifications for the current user
 const getNotifications = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const { 
     type, 
     severity, 
@@ -122,7 +126,11 @@ const getNotifications = asyncwrapper(async (req, res) => {
 
 // Mark notification as read
 const markAsRead = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const notificationId = req.params.notificationId;
 
   await Notification.findOneAndUpdate(
@@ -138,7 +146,11 @@ const markAsRead = asyncwrapper(async (req, res) => {
 
 // Mark all notifications as read
 const markAllAsRead = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
 
   await Notification.updateMany(
     { owner: userId, isRead: false },
@@ -153,7 +165,11 @@ const markAllAsRead = asyncwrapper(async (req, res) => {
 
 // Delete a notification
 const deleteNotification = asyncwrapper(async (req, res, next) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const notificationId = req.params.notificationId;
 
   const notification = await Notification.findOneAndDelete({
@@ -173,7 +189,11 @@ const deleteNotification = asyncwrapper(async (req, res, next) => {
 
 // Check for new notifications
 const checkNotifications = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const lang = req.lang || req.user?.language || 'en';
 
   try {
@@ -250,7 +270,11 @@ const checkNotifications = asyncwrapper(async (req, res) => {
 
 // Get notification statistics
 const getNotificationStats = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const stats = await NotificationService.getNotificationStats(userId);
 
   res.json({
@@ -261,7 +285,11 @@ const getNotificationStats = asyncwrapper(async (req, res) => {
 
 // Get unread notifications only
 const getUnreadNotifications = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const { 
     page = 1,
     limit = 50,
@@ -339,7 +367,11 @@ const getUnreadNotifications = asyncwrapper(async (req, res) => {
 
 // Get or create weekly digest
 const getWeeklyDigest = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const { 
     year, 
     week, 
@@ -534,7 +566,11 @@ const getWeeklyDigest = asyncwrapper(async (req, res) => {
 
 // Get user alert preferences
 const getUserPreferences = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
 
   let preferences = await UserAlertPreference.findOne({ user: userId });
 
@@ -554,7 +590,11 @@ const getUserPreferences = asyncwrapper(async (req, res) => {
 
 // Update user alert preferences
 const updateUserPreferences = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   const updates = req.body;
 
   let preferences = await UserAlertPreference.findOne({ user: userId });
@@ -581,7 +621,11 @@ const updateUserPreferences = asyncwrapper(async (req, res) => {
 
 // Clean up old notifications
 const cleanupNotifications = asyncwrapper(async (req, res) => {
-  const userId = req.user.id;
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
 
   const result = await NotificationService.cleanupOldNotifications(userId);
 

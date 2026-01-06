@@ -16,7 +16,11 @@ async function resolveShed({ id, name, owner }) {
 }
 
 const getAnimalsInShed = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
   
     const {
       locationShedId,
@@ -151,7 +155,11 @@ const getAnimalsInShed = asyncwrapper(async (req, res, next) => {
   
 // Get all location sheds for a user
 const getAllLocationSheds = asyncwrapper(async (req, res) => {
-    const userId = req.user.id; // Get the user ID from the request
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    } // Get the user ID from the request
     const query = req.query;
     const limit = query.limit || 10; // Default limit for pagination
     const page = query.page || 1; // Default page for pagination
@@ -188,7 +196,11 @@ const getAllLocationSheds = asyncwrapper(async (req, res) => {
 });
 
 const getAllLocationShedsWithoutPagination = asyncwrapper(async (req, res) => {
-    const userId = req.user.id; // Get the user ID from the request
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    } // Get the user ID from the request
     const query = req.query;
 
     const filter = { owner: userId }; // Filter by the user's ID
@@ -221,7 +233,11 @@ const getSingleLocationShed = asyncwrapper(async (req, res, next) => {
 
 // Add a new location shed
 const addLocationShed = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id; // Get the user ID from the request
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    } // Get the user ID from the request
     const { locationShedName } = req.body; // Extract location shed name from the request body
 
     // Check if the location shed name is provided
@@ -243,7 +259,11 @@ const addLocationShed = asyncwrapper(async (req, res, next) => {
 
 // Update a location shed
 const updateLocationShed = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id; // Get the user ID from the request
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    } // Get the user ID from the request
     const locationShedId = req.params.locationShedId; // Get the location shed ID from the request params
     const updatedData = req.body; // Get the updated data from the request body
 
@@ -267,7 +287,11 @@ const updateLocationShed = asyncwrapper(async (req, res, next) => {
 
 // Delete a location shed
 const deleteLocationShed = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id; // Get the user ID from the request
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    } // Get the user ID from the request
     const locationShedId = req.params.locationShedId; // Get the location shed ID from the request params
 
     // Find the location shed by ID and owner

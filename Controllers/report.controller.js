@@ -344,7 +344,12 @@ const generatePDF = (data) => {
 
 const generatePDFReport = asyncwrapper(async (req, res, next) => {
     try {
-        const userId = new mongoose.Types.ObjectId(req.user.id);
+        // Use tenantId for tenant isolation (works for both owner and employee)
+        const tenantId = req.user?.tenantId || req.user?.id;
+        if (!tenantId) {
+          return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+        }
+        const userId = new mongoose.Types.ObjectId(tenantId);
         let animalType = req.query.animalType;
         const lang = req.query.lang || 'en';
 

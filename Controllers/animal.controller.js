@@ -28,8 +28,8 @@ async function findShed({ id, name, owner }) {
 }
 const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
     try {
-        // First ensure we have a valid userId from the request
-        const userId = req.userId || req.user?.id;
+        // Use tenantId for tenant isolation (works for both owner and employee)
+        const userId = req.user?.tenantId || req.user?.id || req.userId;
         if (!userId) {
             return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
         }
@@ -137,7 +137,8 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
 });
 
 const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
-    const userId = req.user?.id || req.userId;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id || req.userId;
     if (!userId) {
         return next(AppError.create(i18n.__('UNAUTHORIZED'), 401, httpstatustext.FAIL));
     }
@@ -240,7 +241,8 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
 
 const downloadAnimalTemplate = asyncwrapper(async (req, res, next) => {
     try {
-        const userId = req.user?.id || req.userId;
+        // Use tenantId for tenant isolation (works for both owner and employee)
+        const userId = req.user?.tenantId || req.user?.id || req.userId;
         const lang = req.query.lang || 'en';
         const isArabic = lang === 'ar';
 
@@ -275,7 +277,8 @@ const downloadAnimalTemplate = asyncwrapper(async (req, res, next) => {
 
 const exportAnimalsToExcel = asyncwrapper(async (req, res, next) => {
     try {
-        const userId = req.user?.id || req.userId;
+        // Use tenantId for tenant isolation (works for both owner and employee)
+        const userId = req.user?.tenantId || req.user?.id || req.userId;
         const lang = req.query.lang || 'en';
         const isArabic = lang === 'ar';
 
@@ -361,7 +364,12 @@ const getallanimals = asyncwrapper(async (req, res, next) => {
         return next(AppError.create(i18n.__('PERMISSION_DENIED'), 403, httpstatustext.FAIL));
     }
 
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
+    }
+
     const query = req.query;
     const limit = parseInt(query.limit, 10) || 10;
     const page = parseInt(query.page, 10) || 1;
@@ -420,7 +428,11 @@ const getsingleanimal = asyncwrapper(async (req, res, next) => {
 
 
 const addanimal = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
+    }
     //const { locationShedName, breed, birthDate, age, ...animalData } = req.body;
     const { locationShedName, breed, birthDate, age, marketValue, ...animalData } = req.body;
 
@@ -494,6 +506,12 @@ const addanimal = asyncwrapper(async (req, res, next) => {
 });
 
 const updateanimal = asyncwrapper(async (req, res, next) => {
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
+    }
+
     const animalId = req.params.tagId; // تأكد إن ده هو الـ _id فعلاً وليس tagId
     const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
     
@@ -502,7 +520,7 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
 
     // تحديث المكان لو الاسم موجود
     if (locationShedName) {
-        const locationShed = await LocationShed.findOne({ locationShedName, owner: req.user.id });
+        const locationShed = await LocationShed.findOne({ locationShedName, owner: userId });
         if (!locationShed) {
             return next(AppError.create('Location shed not found for the provided name', 404, httpstatustext.FAIL));
         }
@@ -511,7 +529,7 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
 
     // تحديث السلالة لو الاسم موجود
     if (breedName) {
-        const breed = await Breed.findOne({ breedName, owner: req.user.id });
+        const breed = await Breed.findOne({ breedName, owner: userId });
         if (!breed) {
             return next(AppError.create('Breed not found for the provided name', 404, httpstatustext.FAIL));
         }
@@ -530,10 +548,10 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
         );
         updateData.birthDate = calculatedDate;
     }
-    const beforeAnimal = await Animal.findOne({ _id: animalId, owner: req.user.id }).lean();
+    const beforeAnimal = await Animal.findOne({ _id: animalId, owner: userId }).lean();
     // تنفيذ التحديث
     const updatedanimal = await Animal.findOneAndUpdate(
-        { _id: animalId, owner: req.user.id },
+        { _id: animalId, owner: userId },
         { $set: updateData },
         { new: true, runValidators: true }
     );
@@ -555,7 +573,7 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
 
         const existingCost = await AnimalCost.findOne({
             animalTagId: updatedanimal.tagId,
-            owner: req.user.id
+            owner: userId
         });
 
         const updateCostData = {};
@@ -571,7 +589,7 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
         }
 
         await AnimalCost.findOneAndUpdate(
-            { animalTagId: updatedanimal.tagId, owner: req.user.id },
+            { animalTagId: updatedanimal.tagId, owner: userId },
             { $set: updateCostData },
             { new: true, runValidators: true, upsert: true } // upsert لو مفيش سجل قبل كده
         );
@@ -589,13 +607,19 @@ const updateanimal = asyncwrapper(async (req, res, next) => {
 });
 
 const deleteanimal = asyncwrapper(async (req, res, next) => {
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
+    }
+
     const animalId = req.params.tagId; // Use consistent parameter name
 
-    // 1. Find the animal first to check existence
-    const animal = await Animal.findById(animalId);
+    // 1. Find the animal first to check existence and ownership
+    const animal = await Animal.findOne({ _id: animalId, owner: userId });
 
     if (!animal) {
-        return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
+        return next(AppError.create('Animal not found or unauthorized', 404, httpstatustext.FAIL));
     }
 
     // 2. Perform cascading delete using the pre-delete hook
@@ -608,7 +632,11 @@ const deleteanimal = asyncwrapper(async (req, res, next) => {
     });
 });
 const getAllLocationSheds = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id; // Get the user ID from the request (assuming it's added by authentication middleware)
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
+    }
 
     // Use MongoDB aggregation to get distinct location sheds for the user
     const locationSheds = await Animal.aggregate([
@@ -638,8 +666,8 @@ const getAllLocationSheds = asyncwrapper(async (req, res, next) => {
 });
 
 const getAllMaleAnimalTagIds = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
-
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
     if (!userId) {
         return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
     }
@@ -658,7 +686,11 @@ const getAllMaleAnimalTagIds = asyncwrapper(async (req, res, next) => {
     });
 });
 const moveAnimals = asyncwrapper(async (req, res, next) => {
-    const userId = req.user.id;
+    // Use tenantId for tenant isolation (works for both owner and employee)
+    const userId = req.user?.tenantId || req.user?.id;
+    if (!userId) {
+        return next(AppError.create('Unauthorized', 401, httpstatustext.FAIL));
+    }
 
     const {
         toLocationShed,
@@ -790,8 +822,9 @@ const getAnimalByQrToken = asyncwrapper(async (req, res, next) => {
         return next(AppError.create('Animal not found', 404, httpstatustext.FAIL));
     }
 
-    // Determine permissions
-    const isOwner = req.user && req.user.id && animal.owner.toString() === req.user.id.toString();
+    // Determine permissions - check if user is owner (by tenantId) or employee of the owner
+    const userTenantId = req.user?.tenantId || req.user?.id;
+    const isOwner = req.user && userTenantId && animal.owner.toString() === userTenantId.toString();
     const canAdd = isOwner;
 
     // Prepare animal data based on permissions
