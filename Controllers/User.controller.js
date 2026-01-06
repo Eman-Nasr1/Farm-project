@@ -539,7 +539,44 @@ const resetPassword = asyncwrapper(async (req, res, next) => {
   res.status(200).json({ status: httpstatustext.SUCCESS, message: 'Password has been reset successfully' });
 });
 
+/**
+ * Get owner profile with farm code
+ * GET /api/auth/profile
+ * Returns the authenticated owner's profile including tenantCode (farm code)
+ */
+const getOwnerProfile = asyncwrapper(async (req, res, next) => {
+  const userId = req.user.id || req.user.tenantId; // Get user ID from token
+  
+  // Find the user (owner)
+  const user = await User.findById(userId).select('-password -confirmpassword -token -resetPasswordToken -resetPasswordExpires');
+  
+  if (!user) {
+    const error = AppError.create('User not found', 404, httpstatustext.FAIL);
+    return next(error);
+  }
 
+  // Return profile with farm code (tenantCode)
+  res.status(200).json({
+    status: httpstatustext.SUCCESS,
+    data: {
+      profile: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        country: user.country,
+        role: user.role,
+        registrationType: user.registerationType,
+        tenantCode: user.tenantCode, // Farm code
+        subscriptionStatus: user.subscriptionStatus,
+        planId: user.planId,
+        trialStart: user.trialStart,
+        trialEnd: user.trialEnd,
+        createdAt: user.createdAt,
+      }
+    }
+  });
+});
 
 module.exports = {
   getallusers,
@@ -554,4 +591,5 @@ module.exports = {
   loginAsUser,
   startImpersonation,
   redeemImpersonation,
+  getOwnerProfile,
 }

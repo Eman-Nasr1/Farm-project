@@ -65,6 +65,10 @@ const PERMISSIONS = {
 
   // Statistics
   STATISTICS_VIEW: 'statistics.view',
+
+  // Support Tickets
+  SUPPORT_READ: 'support.read',
+  SUPPORT_MANAGE: 'support.manage',
 };
 
 // Get all permission keys as array
@@ -98,6 +102,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.STATISTICS_VIEW,
     PERMISSIONS.EMPLOYEES_READ,
+    PERMISSIONS.SUPPORT_READ,
+    PERMISSIONS.SUPPORT_MANAGE,
   ],
   EMPLOYEE: [
     PERMISSIONS.ANIMALS_READ,

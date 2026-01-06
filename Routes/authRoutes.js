@@ -16,6 +16,10 @@ router.post('/api/register', userValidationRules(), validateUser, usercontroller
 
 // Unified login endpoint: handles both owner and employee login
 router.post('/api/login', loginValidationRules(), validateUser, usercontroller.login);
+
+// Get owner profile with farm code (authenticated users only)
+router.get('/api/auth/profile', verifytoken, usercontroller.getOwnerProfile);
+
 router.post ('/api/forgetPassword',usercontroller.forgotPassword);
 router.post ('/api/resetPassword',usercontroller.resetPassword );
 router.post ('/api/verifyCode',usercontroller.verifyCode );
