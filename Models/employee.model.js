@@ -7,7 +7,7 @@ const EmployeeSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true, // Tenant ID (Owner)
-        index: true,
+        // Index handled by compound index below
     },
     name: {
         type: String,
@@ -52,10 +52,8 @@ const EmployeeSchema = new mongoose.Schema({
 });
 
 // Compound unique index: email must be unique per tenant
+// Note: This also serves as an index on { user: 1 } for faster tenant queries
 EmployeeSchema.index({ user: 1, email: 1 }, { unique: true });
-
-// Index for faster queries
-EmployeeSchema.index({ user: 1 });
 
 EmployeeSchema.pre('save', async function (next) {
     if (this.isModified('password')) {

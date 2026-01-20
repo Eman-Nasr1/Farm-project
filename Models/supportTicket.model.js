@@ -4,8 +4,9 @@ const SupportTicketSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false, // Optional - allows anonymous ticket submission
     index: true,
+    default: null,
   },
   name: {
     type: String,

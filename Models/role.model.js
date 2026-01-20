@@ -5,7 +5,7 @@ const RoleSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true, // Tenant ID (Owner)
-    index: true,
+    // Index handled by compound index below
   },
   name: {
     type: String,
@@ -36,9 +36,7 @@ const RoleSchema = new mongoose.Schema({
 });
 
 // Compound unique index: role key must be unique per tenant
+// Note: This also serves as an index on { user: 1 } for faster tenant queries
 RoleSchema.index({ user: 1, key: 1 }, { unique: true });
-
-// Index for faster queries
-RoleSchema.index({ user: 1 });
 
 module.exports = mongoose.model('Role', RoleSchema);
