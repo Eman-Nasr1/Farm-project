@@ -14,8 +14,8 @@ const createTransporter = () => {
   return nodemailer.createTransport({
     service: 'Gmail',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: process.env.SUPPORT_EMAIL || 'support@mazraaonline.com',
+      pass: process.env.EMAIL_PASSWORD,
     },
   });
 };
@@ -58,7 +58,7 @@ const sendContactEmail = asyncwrapper(async (req, res, next) => {
 
   // Email to support team
   const mailToSupport = {
-    from: process.env.EMAIL_USER,
+    from: supportEmail,
     to: supportEmail,
     replyTo: email, // Allow support to reply directly to the user
     subject: `[Contact Form] ${subject}`,
@@ -91,7 +91,7 @@ const sendContactEmail = asyncwrapper(async (req, res, next) => {
 
   // Confirmation email to the user
   const mailToUser = {
-    from: process.env.EMAIL_USER,
+    from: supportEmail,
     to: email,
     subject: 'We received your message - Mazraa Online',
     html: `
@@ -150,7 +150,17 @@ const sendContactEmail = asyncwrapper(async (req, res, next) => {
       data: null,
     });
   } catch (error) {
-    console.error('Failed to send contact email:', error);
+    console.error('Failed to send contact email:', error.message);
+    console.error('Full error:', error);
+    
+    // Provide more specific error messages
+    if (error.code === 'EAUTH') {
+      return next(AppError.create('Email authentication failed. Please check email configuration.', 500, httpstatustext.ERROR));
+    }
+    if (error.code === 'ESOCKET' || error.code === 'ECONNECTION') {
+      return next(AppError.create('Could not connect to email server. Please try again later.', 500, httpstatustext.ERROR));
+    }
+    
     return next(AppError.create('Failed to send email. Please try again later.', 500, httpstatustext.ERROR));
   }
 });
