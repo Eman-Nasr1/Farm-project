@@ -49,7 +49,7 @@ router.get('/api/animal/males',
 
 router.get('/api/animal/getanimalCost', 
   verifytoken, 
-  authorize(PERMISSIONS.ANIMALS_READ), 
+  authorize(PERMISSIONS.ANIMALS_COST), 
   animalCostController.getallanimalscost
 );
 
