@@ -73,9 +73,7 @@ const PERMISSIONS = {
   EXCLUDED_UPDATE: 'excluded.update',
   EXCLUDED_DELETE: 'excluded.delete',
 
-  // Support Tickets
-  SUPPORT_READ: 'support.read',
-  SUPPORT_MANAGE: 'support.manage',
+
 };
 
 // Get all permission keys as array

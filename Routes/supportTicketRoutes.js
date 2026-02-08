@@ -37,22 +37,22 @@ router.post('/api/support/tickets/:id/reply', verifytoken, supportTicketControll
  */
 
 // Get all tickets (with filters)
-router.get('/api/admin/support/tickets', verifytoken, authorize(PERMISSIONS.SUPPORT_READ), supportTicketController.getAllTickets);
+router.get('/api/admin/support/tickets', verifytoken,supportTicketController.getAllTickets);
 
 // Get single ticket details
-router.get('/api/admin/support/tickets/:id', verifytoken, authorize(PERMISSIONS.SUPPORT_READ), supportTicketController.getTicket);
+router.get('/api/admin/support/tickets/:id', verifytoken,supportTicketController.getTicket);
 
 // Update ticket status
-router.patch('/api/admin/support/tickets/:id/status', verifytoken, authorize(PERMISSIONS.SUPPORT_MANAGE), supportTicketController.updateStatus);
+router.patch('/api/admin/support/tickets/:id/status', verifytoken, supportTicketController.updateStatus);
 
 // Admin reply to ticket
-router.post('/api/admin/support/tickets/:id/reply', verifytoken, authorize(PERMISSIONS.SUPPORT_MANAGE), supportTicketController.replyToTicket);
+router.post('/api/admin/support/tickets/:id/reply', verifytoken, supportTicketController.replyToTicket);
 
 // Delete ticket
-router.delete('/api/admin/support/tickets/:id', verifytoken, authorize(PERMISSIONS.SUPPORT_MANAGE), supportTicketController.deleteTicket);
+router.delete('/api/admin/support/tickets/:id', verifytoken, supportTicketController.deleteTicket);
 
 // Get ticket statistics
-router.get('/api/admin/support/statistics', verifytoken, authorize(PERMISSIONS.SUPPORT_READ), supportTicketController.getStatistics);
+router.get('/api/admin/support/statistics', verifytoken, supportTicketController.getStatistics);
 
 module.exports = router;
 
