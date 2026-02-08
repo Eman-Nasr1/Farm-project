@@ -94,6 +94,11 @@ const getSingleSupplier = asyncwrapper(async (req, res, next) => {
 
 // Add new supplier with optional treatment and feed associations
 const addSupplier = asyncwrapper(async (req, res, next) => {
+  // Use tenantId for tenant isolation (works for both owner and employee)
+  const userId = req.user?.tenantId || req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ status: 'fail', message: 'Unauthorized' });
+  }
   // بنفصل ونطنّش أي treatmentIds / feedIds لو جُم في البودي
   const { name, email, phone, company, notes, supplyType } = req.body;
 
