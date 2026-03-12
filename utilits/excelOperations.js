@@ -54,6 +54,28 @@ const setColumnWidths = (worksheet, widths) => {
 const headers = {
     animal: {
         en: {
+            templateBorn: [
+                'Tag ID',
+                'Breed',
+                'Animal Type',
+                'Birth Date (YYYY-MM-DD)',
+                'Mother ID',
+                'Father ID',
+                'Location Shed',
+                'Gender (male, female)',
+                'Female Condition (pregnant, not pregnant)'
+            ],
+            templatePurchased: [
+                'Tag ID',
+                'Breed',
+                'Animal Type',
+                'Purchase Date (YYYY-MM-DD)',
+                'Purchase Price',
+                'Trader Name',
+                'Location Shed',
+                'Gender (male, female)',
+                'Female Condition (pregnant, not pregnant)'
+            ],
             template: [
                 'Tag ID',
                 'Breed',
@@ -85,6 +107,28 @@ const headers = {
             ]
         },
         ar: {
+            templateBorn: [
+                'رقم التعريف',
+                'السلالة',
+                'نوع الحيوان',
+                'تاريخ الميلاد (YYYY-MM-DD)',
+                'رقم تعريف الأم',
+                'رقم تعريف الأب',
+                'موقع الحظيرة',
+                'الجنس (male, female)',
+                'حالة الأنثى (pregnant, not pregnant)'
+            ],
+            templatePurchased: [
+                'رقم التعريف',
+                'السلالة',
+                'نوع الحيوان',
+                'تاريخ الشراء (YYYY-MM-DD)',
+                'سعر الشراء',
+                'اسم التاجر',
+                'موقع الحظيرة',
+                'الجنس (male, female)',
+                'حالة الأنثى (pregnant, not pregnant)'
+            ],
             template: [
                 'رقم التعريف',
                 'السلالة',
@@ -325,8 +369,14 @@ const headers = {
 // Example data for templates
 const templateExamples = {
     animal: {
-        en: ['123', 'Arabic', 'goat', '2024-01-01', '2024-01-01', '1000', 'Mohammed', '456', '789', 'Shed 1', 'female', 'pregnant'],
-        ar: ['123', 'عربي', 'ماعز', '2024-01-01', '2024-01-01', '1000', 'محمد', '456', '789', 'حظيرة 1', 'female', 'pregnant']
+        en: {
+            born: ['123', 'Arabic', 'goat', '2024-01-01', '456', '789', 'Shed 1', 'female', 'pregnant'],
+            purchased: ['123', 'Arabic', 'goat', '2024-01-01', '1000', 'Mohammed', 'Shed 1', 'female', 'pregnant']
+        },
+        ar: {
+            born: ['123', 'عربي', 'goat', '2024-01-01', '456', '789', 'حظيرة 1', 'female', 'pregnant'],
+            purchased: ['123', 'عربي', 'goat', '2024-01-01', '1000', 'محمد', 'حظيرة 1', 'female', 'pregnant']
+        }
     },
     weight: {
         en: ['123', '2024-01-01', '50.5', '120', 'regular'],
@@ -356,6 +406,14 @@ const sheetNames = {
         template: {
             en: 'Animals Template',
             ar: 'نموذج الحيوانات'
+        },
+        templateBorn: {
+            en: 'Born Animals Template',
+            ar: 'نموذج مواليد المزرعة'
+        },
+        templatePurchased: {
+            en: 'Purchased Animals Template',
+            ar: 'نموذج حيوانات مشتراة'
         },
         export: {
             en: 'Animal Records',

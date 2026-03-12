@@ -26,6 +26,54 @@ async function findShed({ id, name, owner }) {
     const shed = await LocationShed.findOne(q);
     return shed;
 }
+
+const normalizeAnimalHeader = (value = '') => {
+    return value
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/[()]/g, '')
+        .replace(/\s+/g, ' ');
+};
+
+const animalHeaderAliases = {
+    tagId: ['tag id', 'رقم التعريف'],
+    breedName: ['breed', 'السلالة'],
+    animalType: ['animal type', 'نوع الحيوان'],
+    birthDateStr: ['birth date yyyy-mm-dd', 'birth date', 'تاريخ الميلاد yyyy-mm-dd', 'تاريخ الميلاد'],
+    purchaseDateStr: ['purchase date yyyy-mm-dd', 'purchase date', 'تاريخ الشراء yyyy-mm-dd', 'تاريخ الشراء'],
+    purchasePrice: ['purchase price', 'سعر الشراء'],
+    traderName: ['trader name', 'اسم التاجر'],
+    motherId: ['mother id', 'رقم تعريف الأم'],
+    fatherId: ['father id', 'رقم تعريف الأب'],
+    locationShedName: ['location shed', 'موقع الحظيرة'],
+    gender: ['gender male, female', 'gender', 'الجنس male, female', 'الجنس ذكر, أنثى', 'الجنس'],
+    female_Condition: [
+        'female condition pregnant, not pregnant',
+        'female condition',
+        'حالة الأنثى pregnant, not pregnant',
+        'حالة الأنثى'
+    ]
+};
+
+const buildAnimalHeaderIndexMap = (headerRow = []) => {
+    const headerIndexMap = {};
+    const normalizedAliases = Object.entries(animalHeaderAliases).reduce((acc, [key, values]) => {
+        acc[key] = values.map(normalizeAnimalHeader);
+        return acc;
+    }, {});
+
+    headerRow.forEach((headerCell, index) => {
+        const normalizedHeader = normalizeAnimalHeader(headerCell);
+        const matchedEntry = Object.entries(normalizedAliases).find(([, aliases]) => aliases.includes(normalizedHeader));
+        if (matchedEntry) {
+            headerIndexMap[matchedEntry[0]] = index;
+        }
+    });
+
+    return headerIndexMap;
+};
+
 const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
     try {
         // Use tenantId for tenant isolation (works for both owner and employee)
@@ -149,34 +197,50 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
         const isFattening = user?.registerationType === 'fattening';
 
         const data = excelOps.readExcelFile(req.file.buffer);
+        if (!data || data.length < 2) {
+            return next(AppError.create(i18n.__('EMPTY_FILE'), 400, httpstatustext.FAIL));
+        }
+
+        const headerRow = data[0];
+        const headerIndexMap = buildAnimalHeaderIndexMap(headerRow);
+        const requiredColumns = ['tagId', 'breedName', 'animalType', 'gender'];
+        const missingColumns = requiredColumns.filter((key) => headerIndexMap[key] === undefined);
+
+        if (missingColumns.length > 0) {
+            return next(AppError.create(i18n.__('INVALID_TEMPLATE_FORMAT'), 400, httpstatustext.FAIL));
+        }
 
         // Skip header row
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
+            const rowNumber = i + 1;
 
             // Skip empty rows
             if (!row || row.length === 0 || row.every(cell => !cell)) continue;
 
-            // Extract and validate data
-            const [
-                tagId,
-                breedName,
-                animalType,
-                birthDateStr,
-                purchaseDateStr,
-                purchasePrice,
-                traderName,
-                motherId,
-                fatherId,
-                locationShedName,
-                gender,
-                female_Condition,
-                teething
-            ] = row.map(cell => cell?.toString().trim());
+            const getValue = (key) => {
+                const columnIndex = headerIndexMap[key];
+                if (columnIndex === undefined) return undefined;
+                const rawValue = row[columnIndex];
+                return rawValue !== undefined && rawValue !== null ? rawValue.toString().trim() : undefined;
+            };
+
+            const tagId = getValue('tagId');
+            const breedName = getValue('breedName');
+            const animalType = getValue('animalType');
+            const birthDateStr = getValue('birthDateStr');
+            const purchaseDateStr = getValue('purchaseDateStr');
+            const purchasePrice = getValue('purchasePrice');
+            const traderName = getValue('traderName');
+            const motherId = getValue('motherId');
+            const fatherId = getValue('fatherId');
+            const locationShedName = getValue('locationShedName');
+            const gender = getValue('gender');
+            const female_Condition = getValue('female_Condition');
 
             // Validate required fields
             if (!tagId || !breedName || !animalType || !gender) {
-                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: i + 1 }), 400, httpstatustext.FAIL));
+                return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: rowNumber }), 400, httpstatustext.FAIL));
             }
 
             // Parse dates - skip birthDate if fattening
@@ -185,13 +249,13 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             if (!isFattening && birthDateStr) {
                 birthDate = new Date(birthDateStr);
                 if (isNaN(birthDate.getTime())) {
-                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: rowNumber }), 400, httpstatustext.FAIL));
                 }
             }
             if (purchaseDateStr) {
                 purchaseDate = new Date(purchaseDateStr);
                 if (isNaN(purchaseDate.getTime())) {
-                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: i + 1 }), 400, httpstatustext.FAIL));
+                    return next(AppError.create(i18n.__('INVALID_DATE_FORMAT', { row: rowNumber }), 400, httpstatustext.FAIL));
                 }
             }
 
@@ -200,7 +264,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             const breed = await Breed.findOne({ breedName, owner: userId });
 
             if (!breed) {
-                throw new Error(i18n.__('BREED_NOT_FOUND', { breed: breedName, row: i + 1 }));
+                throw new Error(i18n.__('BREED_NOT_FOUND', { breed: breedName, row: rowNumber }));
             }
 
             // Prepare animal data - skip birthDate, motherId, fatherId if fattening
@@ -244,29 +308,38 @@ const downloadAnimalTemplate = asyncwrapper(async (req, res, next) => {
         // Use tenantId for tenant isolation (works for both owner and employee)
         const userId = req.user?.tenantId || req.user?.id || req.userId;
         const lang = req.query.lang || 'en';
-        const isArabic = lang === 'ar';
+        const requestedTemplateType = (req.query.templateType || '').toLowerCase();
 
         // Get user's registration type
         const user = userId ? await User.findById(userId).select('registerationType') : null;
         const isFattening = user?.registerationType === 'fattening';
+        const templateType = requestedTemplateType || (isFattening ? 'purchase' : 'born');
 
-        // Get base headers and example row
-        let headers = excelOps.headers.animal[lang].template;
-        let exampleRow = excelOps.templateExamples.animal[lang];
-
-        // If fattening, exclude birthDate (index 3), motherId (index 7), fatherId (index 8)
-        if (isFattening) {
-            headers = headers.filter((_, index) => ![3, 7, 8].includes(index));
-            exampleRow = exampleRow.filter((_, index) => ![3, 7, 8].includes(index));
+        if (!['born', 'purchase'].includes(templateType)) {
+            return next(AppError.create(i18n.__('INVALID_TEMPLATE_FORMAT'), 400, httpstatustext.FAIL));
         }
 
-        const sheetName = excelOps.sheetNames.animal.template[lang];
+        if (isFattening && templateType === 'born') {
+            return next(AppError.create(i18n.__('INVALID_TEMPLATE_FORMAT'), 400, httpstatustext.FAIL));
+        }
+
+        const isBornTemplate = templateType === 'born';
+        const headers = isBornTemplate
+            ? excelOps.headers.animal[lang].templateBorn
+            : excelOps.headers.animal[lang].templatePurchased;
+        const exampleRow = isBornTemplate
+            ? excelOps.templateExamples.animal[lang].born
+            : excelOps.templateExamples.animal[lang].purchased;
+        const sheetName = isBornTemplate
+            ? excelOps.sheetNames.animal.templateBorn[lang]
+            : excelOps.sheetNames.animal.templatePurchased[lang];
+
         const workbook = excelOps.createExcelFile([exampleRow], headers, sheetName);
         const worksheet = workbook.Sheets[sheetName];
         excelOps.setColumnWidths(worksheet, headers.map(() => 20));
 
         const buffer = excelOps.writeExcelBuffer(workbook);
-        excelOps.setExcelResponseHeaders(res, `animals_template_${lang}.xlsx`);
+        excelOps.setExcelResponseHeaders(res, `animals_template_${templateType}_${lang}.xlsx`);
         res.send(buffer);
 
     } catch (error) {
