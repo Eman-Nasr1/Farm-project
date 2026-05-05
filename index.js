@@ -10,6 +10,7 @@ const matingNotificationCron = require('./middleware/matingNotification');
 const cors=require('cors');
 require('dotenv').config();
 
+
 const ALLOWLIST = [
   'http://localhost:3000',              // لوكال
   'https://online-farm.vercel.app',     // الدومين القديم لو لسه بتستخدميه
@@ -58,10 +59,6 @@ app.use (express.json());
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
-
-// Public route - Get all plans (must be before any route files with middleware)
-const planController = require('./Controllers/plan.controller');
-app.get('/api/admin/plans', planController.getAllPlans);
 
 // Public route - Validate discount code (must be before any route files with middleware)
 const discountCodeController = require('./Controllers/discountCode.controller');
@@ -141,6 +138,9 @@ app.use('/', supportTicketRoutes);
 
 const contactRoutes = require('./Routes/contactRoutes');
 app.use('/', contactRoutes);
+
+// const syncRoutes = require('./Routes/syncRoutes');
+// app.use('/', syncRoutes);
 
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
