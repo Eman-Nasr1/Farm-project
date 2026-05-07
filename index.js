@@ -139,8 +139,8 @@ app.use('/', supportTicketRoutes);
 const contactRoutes = require('./Routes/contactRoutes');
 app.use('/', contactRoutes);
 
-// const syncRoutes = require('./Routes/syncRoutes');
-// app.use('/', syncRoutes);
+const syncRoutes = require('./Routes/syncRoutes');
+app.use('/', syncRoutes);
 
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 
