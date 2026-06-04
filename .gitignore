@@ -9,4 +9,5 @@ node_modules/
 # local docs and maintenance scripts (not published to GitHub)
 docs/
 scripts/
+*.md
 
