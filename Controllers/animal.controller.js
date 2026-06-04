@@ -17,6 +17,30 @@ const mongoose = require('mongoose');
 const i18n = require('../i18n');
 const excelOps = require('../utilits/excelOperations');
 const MovementLocation = require('../Models/movementLocation.model');
+const {
+    ANIMAL_TYPES,
+    normalizeAnimalTypeInput,
+    isAnimalTypeAllowed,
+    getEnabledAnimalTypes,
+} = require('../utilits/animalTypes');
+
+async function assertAnimalTypeAllowedForUser(userId, animalType, next) {
+    const user = await User.findById(userId).select('registerationType fatteningFarmProfile enabledAnimalTypes');
+    if (!user) {
+        next(AppError.create(i18n.__('USER_NOT_FOUND'), 404, httpstatustext.FAIL));
+        return null;
+    }
+    const normalized = normalizeAnimalTypeInput(animalType);
+    if (!normalized) {
+        next(AppError.create(i18n.__('INVALID_ANIMAL_TYPE'), 400, httpstatustext.FAIL));
+        return null;
+    }
+    if (!isAnimalTypeAllowed(user, normalized)) {
+        next(AppError.create(i18n.__('ANIMAL_TYPE_NOT_ENABLED_FOR_FARM'), 400, httpstatustext.FAIL));
+        return null;
+    }
+    return normalized;
+}
 
 async function findShed({ id, name, owner }) {
     const q = {};
@@ -119,13 +143,14 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
             }
         ]);
 
-        // Initialize with all possible types
-        const typeStats = {
-            sheep: { total: 0, males: 0, females: 0 },
-            goat: { total: 0, males: 0, females: 0 }
-        };
+        const user = await User.findById(userId).select('registerationType fatteningFarmProfile enabledAnimalTypes');
+        const enabledTypes = getEnabledAnimalTypes(user);
 
-        // Update with actual data
+        const typeStats = ANIMAL_TYPES.reduce((acc, type) => {
+            acc[type] = { total: 0, males: 0, females: 0 };
+            return acc;
+        }, {});
+
         animalsByType.forEach(stat => {
             if (stat.animalType && typeStats[stat.animalType]) {
                 typeStats[stat.animalType] = {
@@ -174,6 +199,7 @@ const getAnimalStatistics = asyncwrapper(async (req, res, next) => {
             status: httpstatustext.SUCCESS,
             data: {
                 totalAnimals,
+                enabledAnimalTypes: enabledTypes,
                 byType: typeStats,
                 byGender: genderStats
             }
@@ -192,8 +218,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
     }
 
     try {
-        // Get user's registration type
-        const user = await User.findById(userId).select('registerationType');
+        const user = await User.findById(userId).select('registerationType fatteningFarmProfile enabledAnimalTypes');
         const isFattening = user?.registerationType === 'fattening';
 
         const data = excelOps.readExcelFile(req.file.buffer);
@@ -243,6 +268,11 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
                 return next(AppError.create(i18n.__('REQUIRED_FIELDS_MISSING', { row: rowNumber }), 400, httpstatustext.FAIL));
             }
 
+            const normalizedType = normalizeAnimalTypeInput(animalType);
+            if (!normalizedType || !isAnimalTypeAllowed(user, normalizedType)) {
+                return next(AppError.create(i18n.__('ANIMAL_TYPE_NOT_ENABLED_FOR_FARM') + ` (row ${rowNumber})`, 400, httpstatustext.FAIL));
+            }
+
             // Parse dates - skip birthDate if fattening
             let birthDate = undefined;
             let purchaseDate = undefined;
@@ -271,7 +301,7 @@ const importAnimalsFromExcel = asyncwrapper(async (req, res, next) => {
             const animalData = {
                 tagId,
                 breed: breed._id,
-                animalType,
+                animalType: normalizedType,
                 purchaseDate,
                 purchasePrice,
                 traderName,
@@ -501,17 +531,23 @@ const getsingleanimal = asyncwrapper(async (req, res, next) => {
 
 
 const addanimal = asyncwrapper(async (req, res, next) => {
-    // Use tenantId for tenant isolation (works for both owner and employee)
     const userId = req.user?.tenantId || req.user?.id;
     if (!userId) {
         return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
     }
-    //const { locationShedName, breed, birthDate, age, ...animalData } = req.body;
-    const { locationShedName, breed, birthDate, age, marketValue, ...animalData } = req.body;
+    const { locationShedName, breed, birthDate, age, marketValue, animalType, ...animalData } = req.body;
 
+    const owner = await User.findById(userId).select('registerationType fatteningFarmProfile enabledAnimalTypes');
+    const isFattening = owner?.registerationType === 'fattening';
 
-    // Validate input: either birthDate or age must be provided
-    if (!birthDate && !age) {
+    if (!animalType) {
+        return next(AppError.create(i18n.__('INVALID_ANIMAL_TYPE'), 400, httpstatustext.FAIL));
+    }
+    const normalizedType = await assertAnimalTypeAllowedForUser(userId, animalType, next);
+    if (!normalizedType) return;
+    animalData.animalType = normalizedType;
+
+    if (!isFattening && !birthDate && !age) {
         return next(AppError.create('Either birthDate or age must be provided', 400, httpstatustext.FAIL));
     }
 
@@ -579,17 +615,21 @@ const addanimal = asyncwrapper(async (req, res, next) => {
 });
 
 const updateanimal = asyncwrapper(async (req, res, next) => {
-    // Use tenantId for tenant isolation (works for both owner and employee)
     const userId = req.user?.tenantId || req.user?.id;
     if (!userId) {
         return next(AppError.create(i18n.__('USER_NOT_AUTHENTICATED'), 401, httpstatustext.FAIL));
     }
 
-    const animalId = req.params.tagId; // تأكد إن ده هو الـ _id فعلاً وليس tagId
-    const { locationShedName, breedName, birthDate, age, ...updateData } = req.body;
+    const animalId = req.params.tagId;
+    const { locationShedName, breedName, birthDate, age, animalType, ...updateData } = req.body;
     
-    // Prevent qrToken updates (immutable field)
     delete updateData.qrToken;
+
+    if (animalType) {
+        const normalizedType = await assertAnimalTypeAllowedForUser(userId, animalType, next);
+        if (!normalizedType) return;
+        updateData.animalType = normalizedType;
+    }
 
     // تحديث المكان لو الاسم موجود
     if (locationShedName) {

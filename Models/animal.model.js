@@ -16,7 +16,7 @@ const Animalschema = new mongoose.Schema({
     },
     animalType: {
         type: String,
-        enum: ["goat", "sheep"],
+        enum: ["goat", "sheep", "cattle", "buffalo"],
         required: true
     },
     birthDate: {

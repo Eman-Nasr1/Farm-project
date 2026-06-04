@@ -12,6 +12,7 @@ router.get ('/api/getSingleUser/:userId',verifytoken,usercontroller.getsnigleuse
 router.patch('/api/updateUser/:userId',verifytoken,usercontroller.updateUser);
 router.delete('/api/deleteUser/:userId',verifytoken,usercontroller.deleteUser);
 
+router.get('/api/fattening/farm-profile-options', usercontroller.getFatteningFarmProfileOptions);
 router.post('/api/register', userValidationRules(), validateUser, usercontroller.register);
 
 // Unified login endpoint: handles both owner and employee login

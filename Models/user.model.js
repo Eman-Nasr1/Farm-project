@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const validator=require('validator');
+const { syncEnabledAnimalTypes } = require('../utilits/animalTypes');
 const Userschema=new mongoose.Schema(
     {
         name:{
@@ -24,6 +25,16 @@ const Userschema=new mongoose.Schema(
         registerationType:{
             type:String,
             enum:["fattening","breeding"],
+        },
+        // Fattening only: small_ruminants | large_ruminants | all
+        fatteningFarmProfile: {
+            type: String,
+            enum: ['small_ruminants', 'large_ruminants', 'all'],
+        },
+        enabledAnimalTypes: {
+            type: [String],
+            enum: ['sheep', 'goat', 'cattle', 'buffalo'],
+            default: ['sheep', 'goat'],
         },
         phone:{
             type: String,
@@ -89,5 +100,10 @@ const Userschema=new mongoose.Schema(
          
     }
 )
+
+Userschema.pre('save', function (next) {
+    syncEnabledAnimalTypes(this);
+    next();
+});
 
 module.exports= mongoose.model('User',Userschema)

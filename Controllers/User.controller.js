@@ -9,6 +9,12 @@ const nodemailer = require('nodemailer');
 const i18n = require('../i18n');
 const { v4: uuidv4 } = require('uuid');
 const ImpersonationSession = require('../Models/ImpersonationSession');
+const {
+  FATTENING_PROFILE_OPTIONS,
+  isValidFatteningProfile,
+  getTypesForProfile,
+  getEnabledAnimalTypes,
+} = require('../utilits/animalTypes');
 const IMPERSONATION_SECRET = process.env.IMPERSONATION_SECRET || process.env.JWT_SECRET_KEY;
 const APP_URL = process.env.APP_URL || 'http://localhost:5173';
  // غيريها حسب بيئتك
@@ -217,8 +223,15 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
   return res.json({ status: httpstatustext.SUCCESS, data: { token } });
 });
 
+const getFatteningFarmProfileOptions = asyncwrapper(async (req, res) => {
+  res.status(200).json({
+    status: httpstatustext.SUCCESS,
+    data: { profiles: FATTENING_PROFILE_OPTIONS },
+  });
+});
+
 const register = asyncwrapper(async (req, res, next) => {
-  const { name, email, password, confirmpassword, phone, country, role, registerationType, tenantCode } = req.body;
+  const { name, email, password, confirmpassword, phone, country, role, registerationType, tenantCode, fatteningFarmProfile } = req.body;
 
   const olderuser = await User.findOne({ email: email });
   if (olderuser) {
@@ -228,6 +241,13 @@ const register = asyncwrapper(async (req, res, next) => {
   if (password !== confirmpassword) {
     const error = AppError.create(i18n.__('PASSWORD_MISMATCH'), 400, httpstatustext.FAIL);
     return next(error);
+  }
+
+  if (registerationType === 'fattening') {
+    if (!isValidFatteningProfile(fatteningFarmProfile)) {
+      const error = AppError.create(i18n.__('FATTENING_FARM_PROFILE_REQUIRED'), 400, httpstatustext.FAIL);
+      return next(error);
+    }
   }
 
   const hashpassword = await bcrypt.hash(password, 7);
@@ -264,7 +284,7 @@ const register = asyncwrapper(async (req, res, next) => {
     }
   }
   
-  const newuser = new User({
+  const userPayload = {
     name,
     email,
     password: hashpassword,
@@ -274,12 +294,20 @@ const register = asyncwrapper(async (req, res, next) => {
     registerationType,
     country,
     tenantCode: finalTenantCode,
-    // Start 30-day free trial (no Stripe subscription yet)
     subscriptionStatus: 'trialing',
     trialStart: now,
     trialEnd: trialEnd,
-    planId: null // no paid plan yet
-  })
+    planId: null,
+  };
+
+  if (registerationType === 'fattening') {
+    userPayload.fatteningFarmProfile = fatteningFarmProfile;
+    userPayload.enabledAnimalTypes = getTypesForProfile(fatteningFarmProfile);
+  } else {
+    userPayload.enabledAnimalTypes = ['sheep', 'goat'];
+  }
+
+  const newuser = new User(userPayload);
   const token = await jwt.sign(
     { email: newuser.email, id: newuser._id, role: newuser.role, name: newuser.name, registerationType: newuser.registerationType }, // Include 'role' in the payload
     process.env.JWT_SECRET_KEY,
@@ -349,7 +377,10 @@ const login = asyncwrapper(async (req, res, next) => {
             email: owner.email,
             name: owner.name,
             tenantId: owner._id,
-            tenantCode: owner.tenantCode, // Include farm code in response
+            tenantCode: owner.tenantCode,
+            registerationType: owner.registerationType,
+            fatteningFarmProfile: owner.fatteningFarmProfile,
+            enabledAnimalTypes: getEnabledAnimalTypes(owner),
           },
         },
       });
@@ -567,7 +598,9 @@ const getOwnerProfile = asyncwrapper(async (req, res, next) => {
         country: user.country,
         role: user.role,
         registrationType: user.registerationType,
-        tenantCode: user.tenantCode, // Farm code
+        fatteningFarmProfile: user.fatteningFarmProfile,
+        enabledAnimalTypes: getEnabledAnimalTypes(user),
+        tenantCode: user.tenantCode,
         subscriptionStatus: user.subscriptionStatus,
         planId: user.planId,
         trialStart: user.trialStart,
@@ -580,6 +613,7 @@ const getOwnerProfile = asyncwrapper(async (req, res, next) => {
 
 module.exports = {
   getallusers,
+  getFatteningFarmProfileOptions,
   register,
   login,
   resetPassword,

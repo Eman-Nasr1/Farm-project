@@ -34,6 +34,9 @@
     "VERIFICATION_CODE_VALID": "رمز التحقق صالح",
     "ADMIN_ACCESS_ONLY": "الوصول للمسؤول فقط",
     
+    "FATTENING_FARM_PROFILE_REQUIRED": "يجب اختيار نوع مزرعة التسمين: أغنام وماعز، أو أبقار وجاموس، أو الكل",
+    "INVALID_ANIMAL_TYPE": "نوع الحيوان غير صالح",
+    "ANIMAL_TYPE_NOT_ENABLED_FOR_FARM": "نوع الحيوان غير مفعّل في مزرعتك",
     "BREED_NOT_FOUND": "السلالة غير موجودة أو غير مصرح بالوصول إليها",
     "BREED_DELETED": "تم حذف السلالة بنجاح",
     "BREED_UNAUTHORIZED": "السلالة غير موجودة أو غير مصرح بالتحديث",

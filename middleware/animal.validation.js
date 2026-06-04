@@ -1,6 +1,7 @@
 // middleware/animalValidation.js  
 
-const { body, validationResult } = require('express-validator');  
+const { body, validationResult } = require('express-validator');
+const { ANIMAL_TYPES } = require('../utilits/animalTypes');
 
 const animalValidationRules = () => {  
     return [  
@@ -12,7 +13,7 @@ const animalValidationRules = () => {
             .isString().withMessage('Breed must be a string'),  
         body('animalType')  
             .notEmpty().withMessage('Animal type is required')  
-            .isIn(['goat', 'sheep']).withMessage('Animal type must be either goat or sheep'),  
+            .isIn(ANIMAL_TYPES).withMessage(`Animal type must be one of: ${ANIMAL_TYPES.join(', ')}`),  
         // body('birthDate')  
         //     .optional()  ,
            
