@@ -15,6 +15,86 @@ const daysAgo = (n) => new Date(Date.now() - n * 864e5);
 const daysAhead = (n) => new Date(Date.now() + n * 864e5);
 const round2 = (x) => Number((x ?? 0).toFixed(2));
 
+const positiveSonarFilter = {
+  $or: [
+    { sonarResult: { $regex: /^positive$/i } },
+    { sonarRsult: { $regex: /^positive$/i } }
+  ]
+};
+
+const endOfDay = (date) => {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+};
+
+const startOfDay = (date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+/** Currently pregnant = latest mating per mother is positive and no delivery recorded since that mating. */
+async function getBreedingReproductionStats(ownerId, now = new Date()) {
+  const todayStart = startOfDay(now);
+  const horizon7 = endOfDay(daysAhead(7));
+  const horizon14 = endOfDay(daysAhead(14));
+  const horizon30 = endOfDay(daysAhead(30));
+
+  const pregnantMatings = await Mating.aggregate([
+    { $match: { owner: ownerId, ...positiveSonarFilter } },
+    { $sort: { tagId: 1, matingDate: -1, createdAt: -1 } },
+    { $group: { _id: '$tagId', doc: { $first: '$$ROOT' } } },
+    { $replaceRoot: { newRoot: '$doc' } },
+    { $match: positiveSonarFilter },
+    {
+      $lookup: {
+        from: 'breedings',
+        let: { motherTag: '$tagId', mateDate: '$matingDate', own: ownerId },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$tagId', '$$motherTag'] },
+                  { $eq: ['$owner', '$$own'] },
+                  { $gte: ['$deliveryDate', { $ifNull: ['$$mateDate', new Date(0)] }] }
+                ]
+              }
+            }
+          }
+        ],
+        as: 'deliveriesSinceMating'
+      }
+    },
+    { $match: { 'deliveriesSinceMating.0': { $exists: false } } },
+    {
+      $project: {
+        tagId: 1,
+        expectedDeliveryDate: 1,
+        matingDate: 1,
+        fetusCount: 1
+      }
+    }
+  ]);
+
+  const countInHorizon = (matings, endDate) =>
+    matings.filter(m => {
+      if (!m.expectedDeliveryDate) return false;
+      const expected = new Date(m.expectedDeliveryDate);
+      return expected >= todayStart && expected <= endDate;
+    }).length;
+
+  return {
+    currentlyPregnant: pregnantMatings.length,
+    expectedDeliveries: {
+      within7Days: countInHorizon(pregnantMatings, horizon7),
+      within14Days: countInHorizon(pregnantMatings, horizon14),
+      within30Days: countInHorizon(pregnantMatings, horizon30)
+    }
+  };
+}
+
 // ====== USER STATS (نسختك الحالية) ======
 exports.getUserStats = async (req, res) => {
   try {
@@ -292,7 +372,8 @@ exports.getUserStatsV2 = async (req, res) => {
       notificationKPIs,
       sonarPeriodResults,
       bornResult,
-      weanedResult
+      weanedResult,
+      breedingReproStats
     ] = await Promise.all([
       // Births last 30 days
       Breeding
@@ -387,7 +468,10 @@ exports.getUserStatsV2 = async (req, res) => {
         : Animal.countDocuments({ owner: ownerId, birthDate: { $gte: periodStart } }),
 
       // Weaned last month
-      Weights.countDocuments({ owner: ownerId, weightType: 'Weaning', Date: { $gte: periodStart } })
+      Weights.countDocuments({ owner: ownerId, weightType: 'Weaning', Date: { $gte: periodStart } }),
+
+      // Breeding: currently pregnant + expected deliveries
+      getBreedingReproductionStats(ownerId, now)
     ]);
 
     // Calculate KPIs
@@ -552,6 +636,7 @@ exports.getUserStatsV2 = async (req, res) => {
           sonarPositive: sonarPos30Result
         },
         dueSoon: { count: dueSoonResult, horizonDays: 7 },
+        breeding: breedingReproStats,
         trends: { animalsPerMonth },
         finances: {
           month: {
