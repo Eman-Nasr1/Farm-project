@@ -9,8 +9,7 @@ const Weights = require('../Models/weight.model');          // وزن الحيو
 const AnimalCost = require('../Models/animalCost.model');   // تكاليف الحيوان (علف/علاج/تطعيم)
 
 const Vaccine = require('../Models/vaccine.model');
-// لو هتستخدم النسخة B للمواليد:
-let Breeding; try { Breeding = require('../Models/breed.model'); } catch (e) { }
+let Breeding; try { Breeding = require('../Models/breeding.model'); } catch (e) { }
 
 const daysAgo = (n) => new Date(Date.now() - n * 864e5);
 const daysAhead = (n) => new Date(Date.now() + n * 864e5);
@@ -33,9 +32,8 @@ exports.getUserStats = async (req, res) => {
     // 2) المواليد آخر 30 يوم
     const births30_A = await Animal.countDocuments({ owner: ownerId, birthDate: { $gte: daysAgo(30) } });
     const births30_B = Breeding ? await Breeding.aggregate([
-      { $match: { owner: ownerId } },
+      { $match: { owner: ownerId, deliveryDate: { $gte: daysAgo(30) } } },
       { $unwind: '$birthEntries' },
-      { $match: { 'birthEntries.birthDate': { $gte: daysAgo(30) } } },
       { $count: 'c' }
     ]).then(r => r[0]?.c || 0) : 0;
     const births30 = Breeding ? births30_B : births30_A;
@@ -299,9 +297,8 @@ exports.getUserStatsV2 = async (req, res) => {
       // Births last 30 days
       Breeding
         ? Breeding.aggregate([
-            { $match: { owner: ownerId } },
+            { $match: { owner: ownerId, deliveryDate: { $gte: days30Ago } } },
             { $unwind: '$birthEntries' },
-            { $match: { 'birthEntries.birthDate': { $gte: days30Ago } } },
             { $count: 'c' }
           ]).then(r => r[0]?.c || 0)
         : Animal.countDocuments({ owner: ownerId, birthDate: { $gte: days30Ago } }),
@@ -383,9 +380,8 @@ exports.getUserStatsV2 = async (req, res) => {
       // Born last month
       Breeding
         ? Breeding.aggregate([
-            { $match: { owner: ownerId, 'birthEntries.birthDate': { $gte: periodStart } } },
+            { $match: { owner: ownerId, deliveryDate: { $gte: periodStart } } },
             { $unwind: '$birthEntries' },
-            { $match: { 'birthEntries.birthDate': { $gte: periodStart } } },
             { $count: 'c' }
           ]).then(r => r[0]?.c || 0)
         : Animal.countDocuments({ owner: ownerId, birthDate: { $gte: periodStart } }),
