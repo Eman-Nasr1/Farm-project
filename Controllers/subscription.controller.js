@@ -47,6 +47,10 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
     query.registerationType = user.registerationType;
   }
 
+  if (user.registerationType === 'fattening' && user.fatteningFarmProfile) {
+    query.fatteningFarmProfile = { $in: [user.fatteningFarmProfile, 'all'] };
+  }
+
   // Filter by payment gateway
   if (activeGateway === 'paymob') {
     // For Paymob: only plans with prices array (multi-currency support)

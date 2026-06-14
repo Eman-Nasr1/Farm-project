@@ -40,6 +40,12 @@ const PlanSchema = new mongoose.Schema({
     enum: ["fattening", "breeding"],
     required: true,
   },
+
+  // Fattening only: small_ruminants | large_ruminants | all
+  fatteningFarmProfile: {
+    type: String,
+    enum: ['small_ruminants', 'large_ruminants', 'all'],
+  },
   
   // Legacy Stripe fields (optional, for backward compatibility)
   stripePriceId: { 

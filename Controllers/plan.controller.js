@@ -9,6 +9,9 @@ const Plan = require('../Models/Plan');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
+const { isValidFatteningProfile } = require('../utilits/animalTypes');
+
+const FATTENING_PROFILES = ['small_ruminants', 'large_ruminants', 'all'];
 
 /**
  * Create a new subscription plan (Admin only)
@@ -22,6 +25,7 @@ const createPlan = asyncwrapper(async (req, res, next) => {
   const { 
     name, 
     registerationType, 
+    fatteningFarmProfile,
     stripePriceId, 
     currency, 
     interval, 
@@ -35,6 +39,16 @@ const createPlan = asyncwrapper(async (req, res, next) => {
   // Validate required fields
   if (!name || !registerationType || animalLimit === undefined || animalLimit === null) {
     return next(AppError.create('Missing required fields: name, registerationType, animalLimit', 400, httpstatustext.FAIL));
+  }
+
+  if (registerationType === 'fattening') {
+    if (!fatteningFarmProfile || !isValidFatteningProfile(fatteningFarmProfile)) {
+      return next(AppError.create(
+        'fatteningFarmProfile is required for fattening plans: small_ruminants, large_ruminants, or all',
+        400,
+        httpstatustext.FAIL
+      ));
+    }
   }
 
   // Validate animalLimit is a positive number
@@ -70,11 +84,12 @@ const createPlan = asyncwrapper(async (req, res, next) => {
     }
   }
 
-  // Check if plan with same registrationType and name already exists
-  const existingPlan = await Plan.findOne({ 
-    registerationType, 
-    name 
-  });
+  // Check if plan with same registrationType, profile, and name already exists
+  const existingQuery = { registerationType, name };
+  if (registerationType === 'fattening') {
+    existingQuery.fatteningFarmProfile = fatteningFarmProfile;
+  }
+  const existingPlan = await Plan.findOne(existingQuery);
 
   if (existingPlan) {
     return next(AppError.create('Plan with this registration type and name already exists', 400, httpstatustext.FAIL));
@@ -88,6 +103,10 @@ const createPlan = asyncwrapper(async (req, res, next) => {
     animalLimit: Number(animalLimit),
     isActive: isActive !== undefined ? isActive : true,
   };
+
+  if (registerationType === 'fattening') {
+    planData.fatteningFarmProfile = fatteningFarmProfile;
+  }
 
   // Add Stripe-specific fields if provided
   if (isStripePlan) {
@@ -126,7 +145,34 @@ const createPlan = asyncwrapper(async (req, res, next) => {
  * GET /api/admin/plans
  */
 const getAllPlans = asyncwrapper(async (req, res, next) => {
-  const plans = await Plan.find().sort({ createdAt: -1 });
+  const { registerationType, fatteningFarmProfile } = req.query;
+  const query = {};
+
+  if (registerationType) {
+    query.registerationType = registerationType;
+  }
+
+  if (registerationType === 'fattening' && fatteningFarmProfile) {
+    if (!FATTENING_PROFILES.includes(fatteningFarmProfile)) {
+      return next(AppError.create(
+        'Invalid fatteningFarmProfile: small_ruminants, large_ruminants, or all',
+        400,
+        httpstatustext.FAIL
+      ));
+    }
+    query.fatteningFarmProfile = { $in: [fatteningFarmProfile, 'all'] };
+  } else if (fatteningFarmProfile) {
+    if (!FATTENING_PROFILES.includes(fatteningFarmProfile)) {
+      return next(AppError.create(
+        'Invalid fatteningFarmProfile: small_ruminants, large_ruminants, or all',
+        400,
+        httpstatustext.FAIL
+      ));
+    }
+    query.fatteningFarmProfile = fatteningFarmProfile;
+  }
+
+  const plans = await Plan.find(query).sort({ createdAt: -1 });
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
@@ -162,6 +208,7 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
   const { 
     name, 
     registerationType, 
+    fatteningFarmProfile,
     stripePriceId, 
     currency, 
     interval, 
@@ -210,9 +257,27 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
     }));
   }
 
+  const nextRegisterationType = registerationType !== undefined ? registerationType : plan.registerationType;
+
+  if (nextRegisterationType === 'fattening') {
+    const nextProfile = fatteningFarmProfile !== undefined ? fatteningFarmProfile : plan.fatteningFarmProfile;
+    if (!nextProfile || !isValidFatteningProfile(nextProfile)) {
+      return next(AppError.create(
+        'fatteningFarmProfile is required for fattening plans: small_ruminants, large_ruminants, or all',
+        400,
+        httpstatustext.FAIL
+      ));
+    }
+  }
+
   // Update fields if provided
   if (name !== undefined) plan.name = name;
   if (registerationType !== undefined) plan.registerationType = registerationType;
+  if (fatteningFarmProfile !== undefined) {
+    plan.fatteningFarmProfile = fatteningFarmProfile;
+  } else if (nextRegisterationType === 'breeding') {
+    plan.fatteningFarmProfile = undefined;
+  }
   if (stripePriceId !== undefined) plan.stripePriceId = stripePriceId;
   if (currency !== undefined) plan.currency = currency;
   if (interval !== undefined) plan.interval = interval;
