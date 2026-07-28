@@ -18,6 +18,7 @@ const Settings = require('../Models/Settings');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
+const { formatPlanForResponse, getPaymentAmounts } = require('../services/planPricingService');
 
 /**
  * Get available subscription plans
@@ -53,13 +54,16 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
 
   // Filter by payment gateway
   if (activeGateway === 'paymob') {
-    // For Paymob: only plans with prices array (multi-currency support)
-    // Must have at least EGP price (since all users pay in EGP)
-    query.prices = { 
-      $exists: true, 
-      $ne: [],
-      $elemMatch: { currency: 'EGP' }
-    };
+    query.$or = [
+      { priceEGP: { $gt: 0 } },
+      {
+        prices: {
+          $exists: true,
+          $ne: [],
+          $elemMatch: { currency: 'EGP' },
+        },
+      },
+    ];
   } else if (activeGateway === 'stripe') {
     // For Stripe: only plans with stripePriceId
     query.stripePriceId = { $exists: true, $ne: null };
@@ -70,7 +74,9 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
   // Filter plans to ensure they match gateway requirements
   const filteredPlans = plans.filter(plan => {
     if (activeGateway === 'paymob') {
-      // Must have EGP price in prices array
+      if (plan.priceEGP != null && plan.priceEGP > 0) {
+        return true;
+      }
       return plan.prices && plan.prices.some(p => p.currency === 'EGP');
     } else if (activeGateway === 'stripe') {
       // Must have stripePriceId
@@ -81,7 +87,7 @@ const getAvailablePlans = asyncwrapper(async (req, res, next) => {
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
-    data: filteredPlans,
+    data: filteredPlans.map((plan) => formatPlanForResponse(plan)),
     gateway: activeGateway,
   });
 });
@@ -387,15 +393,9 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
     ));
   }
 
-  // Get USD price for display (all users see USD price in UI)
-  // But we'll charge everyone in EGP via Paymob
-  const userCountry = user.country?.toUpperCase() || 'US';
-  
-  // Get USD price for display purposes
-  const usdPriceInfo = plan.prices?.find(p => p.currency === 'USD') || 
-                       (plan.prices && plan.prices.length > 0 ? plan.prices[0] : null);
-  
-  if (!usdPriceInfo || !usdPriceInfo.amount || usdPriceInfo.amount <= 0) {
+  const paymentAmounts = getPaymentAmounts(plan);
+
+  if (!paymentAmounts.priceUSD || paymentAmounts.priceUSD <= 0) {
     return next(AppError.create(
       'No USD price configured for this plan. Please contact support.',
       400,
@@ -403,10 +403,7 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
     ));
   }
 
-  // Get EGP price for Paymob payment (all users pay in EGP)
-  const egpPriceInfo = plan.prices?.find(p => p.currency === 'EGP');
-  
-  if (!egpPriceInfo || !egpPriceInfo.amount || egpPriceInfo.amount <= 0) {
+  if (!paymentAmounts.priceEGP || paymentAmounts.priceEGP <= 0 || paymentAmounts.paymentAmount <= 0) {
     return next(AppError.create(
       'No EGP price configured for this plan. Please contact support.',
       400,
@@ -417,7 +414,7 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
   // Validate and apply discount code if provided
   let discountCodeDoc = null;
   let discountAmount = 0;
-  
+
   if (discountCode) {
     discountCodeDoc = await DiscountCode.findOne({ code: discountCode.toUpperCase() });
     
@@ -448,19 +445,17 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
     }
 
     // Calculate discount amount
-    discountAmount = discountCodeDoc.calculateDiscount(egpPriceInfo.amount);
+    discountAmount = discountCodeDoc.calculateDiscount(paymentAmounts.paymentAmount);
   }
 
-  // Display price in USD, but charge in EGP
   const displayPrice = {
-    amount: usdPriceInfo.amount,
-    currency: 'USD',
+    amount: paymentAmounts.displayAmount,
+    currency: paymentAmounts.displayCurrency,
   };
 
-  // Actual payment amount in EGP (for Paymob) - after discount
   const paymentPrice = {
-    amount: Math.max(0, egpPriceInfo.amount - discountAmount), // Ensure non-negative
-    currency: 'EGP',
+    amount: Math.max(0, paymentAmounts.paymentAmount - discountAmount),
+    currency: paymentAmounts.paymentCurrency,
   };
 
   // Create checkout using EGP for Paymob (all users pay in EGP)
@@ -496,7 +491,7 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
       metadata: {
         displayPrice: displayPrice, // USD price for UI display
         displayCurrency: 'USD',
-        originalAmount: egpPriceInfo.amount, // Original amount before discount
+        originalAmount: paymentAmounts.paymentAmount,
         discountAmount: discountAmount, // Discount applied
         discountCode: discountCodeDoc ? discountCodeDoc.code : null,
       },
@@ -535,6 +530,8 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
         displayPrice: {
           amount: displayPrice.amount,
           currency: displayPrice.currency,
+          priceUSD: paymentAmounts.priceUSD,
+          priceEGP: paymentAmounts.priceEGP,
         },
         // Actual payment amount in EGP (for reference)
         paymentAmount: {
@@ -548,7 +545,9 @@ const createCheckout = asyncwrapper(async (req, res, next) => {
           value: discountCodeDoc.discountValue,
           amount: discountAmount,
         } : null,
-        originalAmount: egpPriceInfo.amount,
+        originalAmount: paymentAmounts.paymentAmount,
+        priceUSD: paymentAmounts.priceUSD,
+        priceEGP: paymentAmounts.priceEGP,
         planId: plan._id,
         planName: plan.name,
         subscriptionId: subscription._id,

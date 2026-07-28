@@ -1,8 +1,8 @@
 /**
  * Plan Controller
- * 
+ *
  * Handles CRUD operations for subscription plans (admin only).
- * Supports both Stripe (legacy) and Paymob (multi-currency) payment gateways.
+ * Supports Stripe (legacy) and Paymob pricing with USD/EGP auto-conversion.
  */
 
 const Plan = require('../Models/Plan');
@@ -10,33 +10,58 @@ const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
 const { isValidFatteningProfile } = require('../utilits/animalTypes');
+const exchangeRateService = require('../services/exchangeRateService');
+const {
+  buildPlanPricingFields,
+  previewPlanPricing,
+  formatPlanForResponse,
+  normalizeCurrency,
+} = require('../services/planPricingService');
 
 const FATTENING_PROFILES = ['small_ruminants', 'large_ruminants', 'all'];
+
+function formatPlansForResponse(plans) {
+  return plans.map((plan) => formatPlanForResponse(plan));
+}
+
+function hasEnteredPricing(body) {
+  return body.enteredPrice !== undefined && body.enteredPrice !== null && body.enteredCurrency;
+}
+
+async function applyEnteredPricing(planData, enteredPrice, enteredCurrency) {
+  const pricing = await buildPlanPricingFields(enteredPrice, enteredCurrency);
+
+  planData.enteredPrice = pricing.enteredPrice;
+  planData.enteredCurrency = pricing.enteredCurrency;
+  planData.priceUSD = pricing.priceUSD;
+  planData.priceEGP = pricing.priceEGP;
+  planData.exchangeRate = pricing.exchangeRate;
+  planData.exchangeRateUpdatedAt = pricing.exchangeRateUpdatedAt;
+  planData.prices = pricing.prices;
+
+  return planData;
+}
 
 /**
  * Create a new subscription plan (Admin only)
  * POST /api/admin/plans
- * 
- * Supports two formats:
- * 1. Stripe plan: requires stripePriceId and amount
- * 2. Paymob plan: requires prices array (multi-currency)
  */
 const createPlan = asyncwrapper(async (req, res, next) => {
-  const { 
-    name, 
-    registerationType, 
+  const {
+    name,
+    registerationType,
     fatteningFarmProfile,
-    stripePriceId, 
-    currency, 
-    interval, 
-    intervalCount, 
-    amount, 
-    prices, // Multi-currency prices array for Paymob
-    animalLimit, 
-    isActive 
+    stripePriceId,
+    currency,
+    interval,
+    intervalCount,
+    amount,
+    enteredPrice,
+    enteredCurrency,
+    animalLimit,
+    isActive,
   } = req.body;
 
-  // Validate required fields
   if (!name || !registerationType || animalLimit === undefined || animalLimit === null) {
     return next(AppError.create('Missing required fields: name, registerationType, animalLimit', 400, httpstatustext.FAIL));
   }
@@ -51,40 +76,31 @@ const createPlan = asyncwrapper(async (req, res, next) => {
     }
   }
 
-  // Validate animalLimit is a positive number
   if (typeof animalLimit !== 'number' || animalLimit <= 0) {
     return next(AppError.create('animalLimit must be a positive number', 400, httpstatustext.FAIL));
   }
 
-  // Determine if this is a Stripe or Paymob plan
   const isStripePlan = stripePriceId && amount;
-  const isPaymobPlan = prices && Array.isArray(prices) && prices.length > 0;
+  const isPaymobPlan = hasEnteredPricing(req.body);
 
   if (!isStripePlan && !isPaymobPlan) {
     return next(AppError.create(
-      'Either provide stripePriceId + amount (for Stripe) OR prices array (for Paymob multi-currency)',
+      'Either provide stripePriceId + amount (for Stripe) OR enteredPrice + enteredCurrency (for Paymob)',
       400,
       httpstatustext.FAIL
     ));
   }
 
-  // Validate Paymob prices array if provided
   if (isPaymobPlan) {
-    for (const price of prices) {
-      if (!price.country || !price.currency || price.amount === undefined) {
-        return next(AppError.create(
-          'Each price in prices array must have: country, currency, and amount',
-          400,
-          httpstatustext.FAIL
-        ));
-      }
-      if (typeof price.amount !== 'number' || price.amount < 0) {
-        return next(AppError.create('Price amount must be a non-negative number', 400, httpstatustext.FAIL));
-      }
+    const normalizedCurrency = normalizeCurrency(enteredCurrency);
+    if (typeof enteredPrice !== 'number' || enteredPrice <= 0) {
+      return next(AppError.create('enteredPrice must be a number greater than zero', 400, httpstatustext.FAIL));
+    }
+    if (!['USD', 'EGP'].includes(normalizedCurrency)) {
+      return next(AppError.create('enteredCurrency must be USD or EGP', 400, httpstatustext.FAIL));
     }
   }
 
-  // Check if plan with same registrationType, profile, and name already exists
   const existingQuery = { registerationType, name };
   if (registerationType === 'fattening') {
     existingQuery.fatteningFarmProfile = fatteningFarmProfile;
@@ -95,40 +111,31 @@ const createPlan = asyncwrapper(async (req, res, next) => {
     return next(AppError.create('Plan with this registration type and name already exists', 400, httpstatustext.FAIL));
   }
 
-  // Prepare plan data
   const planData = {
     name,
     registerationType,
     interval: interval || 'month',
     animalLimit: Number(animalLimit),
     isActive: isActive !== undefined ? isActive : true,
+    intervalCount: intervalCount !== undefined && intervalCount !== null ? Number(intervalCount) : 1,
   };
 
   if (registerationType === 'fattening') {
     planData.fatteningFarmProfile = fatteningFarmProfile;
   }
 
-  // Add Stripe-specific fields if provided
   if (isStripePlan) {
     planData.stripePriceId = stripePriceId;
     planData.currency = currency || 'usd';
     planData.amount = amount;
   }
 
-  // Add Paymob multi-currency prices if provided
   if (isPaymobPlan) {
-    planData.prices = prices.map(p => ({
-      country: p.country.toUpperCase(),
-      currency: p.currency.toUpperCase(),
-      amount: Number(p.amount),
-    }));
-  }
-
-  // Always include intervalCount (convert to number if provided)
-  if (intervalCount !== undefined && intervalCount !== null) {
-    planData.intervalCount = Number(intervalCount);
-  } else {
-    planData.intervalCount = 1; // default
+    try {
+      await applyEnteredPricing(planData, enteredPrice, enteredCurrency);
+    } catch (error) {
+      return next(AppError.create(error.message, 400, httpstatustext.FAIL));
+    }
   }
 
   const plan = await Plan.create(planData);
@@ -136,7 +143,7 @@ const createPlan = asyncwrapper(async (req, res, next) => {
   res.status(201).json({
     status: httpstatustext.SUCCESS,
     message: 'Plan created successfully',
-    data: plan,
+    data: formatPlanForResponse(plan),
   });
 });
 
@@ -176,7 +183,7 @@ const getAllPlans = asyncwrapper(async (req, res, next) => {
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
-    data: plans,
+    data: formatPlansForResponse(plans),
   });
 });
 
@@ -195,7 +202,7 @@ const getPlanById = asyncwrapper(async (req, res, next) => {
 
   res.status(200).json({
     status: httpstatustext.SUCCESS,
-    data: plan,
+    data: formatPlanForResponse(plan),
   });
 });
 
@@ -205,18 +212,19 @@ const getPlanById = asyncwrapper(async (req, res, next) => {
  */
 const updatePlan = asyncwrapper(async (req, res, next) => {
   const { id } = req.params;
-  const { 
-    name, 
-    registerationType, 
+  const {
+    name,
+    registerationType,
     fatteningFarmProfile,
-    stripePriceId, 
-    currency, 
-    interval, 
-    intervalCount, 
-    amount, 
-    prices, // Multi-currency prices array for Paymob
-    animalLimit, 
-    isActive 
+    stripePriceId,
+    currency,
+    interval,
+    intervalCount,
+    amount,
+    enteredPrice,
+    enteredCurrency,
+    animalLimit,
+    isActive,
   } = req.body;
 
   const plan = await Plan.findById(id);
@@ -225,7 +233,6 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
     return next(AppError.create('Plan not found', 404, httpstatustext.FAIL));
   }
 
-  // Validate animalLimit if provided
   if (animalLimit !== undefined && animalLimit !== null) {
     if (typeof animalLimit !== 'number' || animalLimit <= 0) {
       return next(AppError.create('animalLimit must be a positive number', 400, httpstatustext.FAIL));
@@ -233,28 +240,27 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
     plan.animalLimit = Number(animalLimit);
   }
 
-  // Validate prices array if provided
-  if (prices !== undefined) {
-    if (!Array.isArray(prices) || prices.length === 0) {
-      return next(AppError.create('prices must be a non-empty array', 400, httpstatustext.FAIL));
+  if (hasEnteredPricing(req.body)) {
+    const normalizedCurrency = normalizeCurrency(enteredCurrency);
+    if (typeof enteredPrice !== 'number' || enteredPrice <= 0) {
+      return next(AppError.create('enteredPrice must be a number greater than zero', 400, httpstatustext.FAIL));
     }
-    for (const price of prices) {
-      if (!price.country || !price.currency || price.amount === undefined) {
-        return next(AppError.create(
-          'Each price in prices array must have: country, currency, and amount',
-          400,
-          httpstatustext.FAIL
-        ));
-      }
-      if (typeof price.amount !== 'number' || price.amount < 0) {
-        return next(AppError.create('Price amount must be a non-negative number', 400, httpstatustext.FAIL));
-      }
+    if (!['USD', 'EGP'].includes(normalizedCurrency)) {
+      return next(AppError.create('enteredCurrency must be USD or EGP', 400, httpstatustext.FAIL));
     }
-    plan.prices = prices.map(p => ({
-      country: p.country.toUpperCase(),
-      currency: p.currency.toUpperCase(),
-      amount: Number(p.amount),
-    }));
+
+    try {
+      const pricing = await buildPlanPricingFields(enteredPrice, enteredCurrency);
+      plan.enteredPrice = pricing.enteredPrice;
+      plan.enteredCurrency = pricing.enteredCurrency;
+      plan.priceUSD = pricing.priceUSD;
+      plan.priceEGP = pricing.priceEGP;
+      plan.exchangeRate = pricing.exchangeRate;
+      plan.exchangeRateUpdatedAt = pricing.exchangeRateUpdatedAt;
+      plan.prices = pricing.prices;
+    } catch (error) {
+      return next(AppError.create(error.message, 400, httpstatustext.FAIL));
+    }
   }
 
   const nextRegisterationType = registerationType !== undefined ? registerationType : plan.registerationType;
@@ -270,7 +276,6 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
     }
   }
 
-  // Update fields if provided
   if (name !== undefined) plan.name = name;
   if (registerationType !== undefined) plan.registerationType = registerationType;
   if (fatteningFarmProfile !== undefined) {
@@ -290,12 +295,12 @@ const updatePlan = asyncwrapper(async (req, res, next) => {
   res.status(200).json({
     status: httpstatustext.SUCCESS,
     message: 'Plan updated successfully',
-    data: plan,
+    data: formatPlanForResponse(plan),
   });
 });
 
 /**
- * Delete a plan (Admin only) - permanently delete the plan
+ * Delete a plan (Admin only)
  * DELETE /api/admin/plans/:id
  */
 const deletePlan = asyncwrapper(async (req, res, next) => {
@@ -314,11 +319,51 @@ const deletePlan = asyncwrapper(async (req, res, next) => {
   });
 });
 
+/**
+ * Preview converted pricing for admin form
+ * POST /api/admin/plans/preview-pricing
+ */
+const previewPricing = asyncwrapper(async (req, res, next) => {
+  const { enteredPrice, enteredCurrency } = req.body;
+
+  try {
+    const data = await previewPlanPricing(enteredPrice, enteredCurrency);
+    res.status(200).json({
+      status: httpstatustext.SUCCESS,
+      data,
+    });
+  } catch (error) {
+    return next(AppError.create(error.message, 400, httpstatustext.FAIL));
+  }
+});
+
+/**
+ * Get current USD → EGP exchange rate
+ * GET /api/admin/exchange-rate/usd-egp
+ */
+const getExchangeRate = asyncwrapper(async (req, res, next) => {
+  try {
+    const { rate, source, fetchedAt } = await exchangeRateService.getUsdToEgpRate();
+
+    res.status(200).json({
+      status: httpstatustext.SUCCESS,
+      data: {
+        usdToEgpRate: rate,
+        source,
+        fetchedAt,
+      },
+    });
+  } catch (error) {
+    return next(AppError.create(error.message, 500, httpstatustext.ERROR));
+  }
+});
+
 module.exports = {
   createPlan,
   getAllPlans,
   getPlanById,
   updatePlan,
   deletePlan,
+  previewPricing,
+  getExchangeRate,
 };
-

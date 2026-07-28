@@ -212,14 +212,26 @@ const loginAsUser = asyncwrapper(async (req, res, next) => {
     return next(error);
   }
 
-  // Create a token for the user  
-  const token = await jwt.sign(
-    { email: user.email, id: user._id, role: user.role }, // Include user info in the payload  
+  if (user.role === 'admin') {
+    const error = AppError.create('Cannot log in as another admin', 403, httpstatustext.FAIL);
+    return next(error);
+  }
+
+  // Match owner login payload so verifytoken and authorize work correctly
+  const token = jwt.sign(
+    {
+      id: user._id,
+      tenantId: user._id,
+      accountType: 'owner',
+      email: user.email,
+      role: user.role,
+      registerationType: user.registerationType,
+      permissions: ['*'],
+    },
     process.env.JWT_SECRET_KEY,
     { expiresIn: '7d' }
   );
 
-  // Send the token back to the admin  
   return res.json({ status: httpstatustext.SUCCESS, data: { token } });
 });
 

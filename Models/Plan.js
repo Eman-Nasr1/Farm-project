@@ -62,7 +62,38 @@ const PlanSchema = new mongoose.Schema({
     type: Number, 
   }, // in smallest unit (e.g. cents for USD)
   
-  // Multi-currency pricing (required for Paymob)
+  // Admin-entered price (source of truth) with auto-converted USD/EGP values
+  enteredPrice: {
+    type: Number,
+    min: 0,
+  },
+
+  enteredCurrency: {
+    type: String,
+    enum: ['USD', 'EGP'],
+    uppercase: true,
+  },
+
+  priceUSD: {
+    type: Number,
+    min: 0,
+  },
+
+  priceEGP: {
+    type: Number,
+    min: 0,
+  },
+
+  exchangeRate: {
+    type: Number,
+    min: 0,
+  },
+
+  exchangeRateUpdatedAt: {
+    type: Date,
+  },
+
+  // Multi-currency pricing (required for Paymob; synced from priceUSD/priceEGP)
   prices: [PlanPriceSchema], // Array of prices per country/currency
   
   interval: { 
@@ -91,8 +122,24 @@ const PlanSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Helper method to get price for a specific country
+// Helper method to get price for a specific country (amount in smallest unit)
 PlanSchema.methods.getPriceForCountry = function(countryCode) {
+  if (this.priceUSD != null && this.priceEGP != null) {
+    const normalizedCountry = (countryCode || 'US').toUpperCase();
+
+    if (normalizedCountry === 'EG') {
+      return {
+        amount: Math.round(this.priceEGP * 100),
+        currency: 'EGP',
+      };
+    }
+
+    return {
+      amount: Math.round(this.priceUSD * 100),
+      currency: 'USD',
+    };
+  }
+
   if (!this.prices || this.prices.length === 0) {
     // Fallback to legacy amount/currency if no multi-currency prices
     return {
