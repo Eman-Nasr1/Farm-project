@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test tests/planPricing.test.js tests/exchangeRateService.test.js",
-    "migrate:plan-prices": "node scripts/migratePlanPrices.js"
+    "migrate:plan-prices": "node scripts/migratePlanPrices.js",
+    "migrate:enabled-animal-types": "node scripts/migrateEnabledAnimalTypes.js"
   },
   "keywords": [],
   "author": "",
