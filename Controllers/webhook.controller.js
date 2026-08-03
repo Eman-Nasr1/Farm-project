@@ -11,12 +11,18 @@ const User = require('../Models/user.model');
 const Plan = require('../Models/Plan');
 const UserSubscription = require('../Models/UserSubscription');
 const DiscountCode = require('../Models/discountCode.model');
+const CoursePayment = require('../Models/coursePayment.model');
+const CourseRegistration = require('../Models/courseRegistration.model');
+const CourseStudent = require('../Models/courseStudent.model');
 const stripe = require('../config/stripe');
 const paymentGatewayService = require('../services/paymentGatewayService');
 const paymobService = require('../services/paymobService');
 const AppError = require('../utilits/AppError');
 const httpstatustext = require('../utilits/httpstatustext');
 const asyncwrapper = require('../middleware/asyncwrapper');
+const { pushStatusHistory } = require('../services/courseService');
+const { notifyPaymentApproved, notifyRegistrationConfirmed } = require('../utilits/courseEmail');
+const { toAmountCents } = require('../utilits/coursePrices');
 
 /**
  * Handle Stripe webhook events
@@ -460,10 +466,34 @@ const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
       // Continue processing but log warning
     }
 
-    // Only process successful and non-pending transactions
+    // Only process successful and non-pending transactions for activation.
+    // For course payments, also mark failures so the student dashboard updates.
     if (trx.success !== true || trx.pending !== false) {
       console.log(`ℹ️  Paymob webhook received non-successful transaction: success=${trx.success}, pending=${trx.pending}`);
-      // Return 200 to acknowledge receipt, but don't activate subscription
+
+      if (paymobOrderId && trx.success === false) {
+        const failedCoursePayment = await CoursePayment.findOne({
+          gatewayOrderId: paymobOrderId.toString(),
+          paymentContext: 'course_registration',
+          status: { $in: ['pending', 'pending_review'] },
+        });
+
+        if (failedCoursePayment) {
+          const oldStatus = failedCoursePayment.status;
+          failedCoursePayment.status = 'failed';
+          failedCoursePayment.gatewayTransactionId = trx.id?.toString() || null;
+          pushStatusHistory(failedCoursePayment, {
+            oldStatus,
+            newStatus: 'failed',
+            changedBy: null,
+            changedByType: 'paymob',
+            reason: 'Paymob payment failed',
+          });
+          await failedCoursePayment.save();
+          console.log(`⚠️  Course payment ${failedCoursePayment._id} marked as failed`);
+        }
+      }
+
       return res.status(200).json({ status: 'ok', message: 'Transaction not successful or still pending' });
     }
 
@@ -476,6 +506,19 @@ const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
         code: 400, 
         data: null 
       });
+    }
+
+    // ----------------------------------------------------------
+    // Course registration payments (separate from farm subscriptions)
+    // ----------------------------------------------------------
+    const coursePayment = await CoursePayment.findOne({
+      gatewayOrderId: paymobOrderId.toString(),
+      paymentContext: 'course_registration',
+    });
+
+    if (coursePayment) {
+      await handleCoursePaymobSuccess(coursePayment, trx);
+      return res.status(200).json({ status: 'ok', context: 'course_registration' });
     }
 
     // Find the subscription by Paymob order ID
@@ -566,8 +609,63 @@ const handlePaymobWebhook = asyncwrapper(async (req, res, next) => {
   }
 });
 
+/**
+ * Mark a course Paymob payment as paid and confirm registration.
+ * Idempotent: already-paid payments are ignored safely.
+ */
+async function handleCoursePaymobSuccess(coursePayment, trx) {
+  if (coursePayment.status === 'paid') {
+    console.log(`ℹ️  Course payment ${coursePayment._id} already paid (duplicate webhook)`);
+    return;
+  }
+
+  const expectedCents = toAmountCents(coursePayment.amount);
+  if (trx.amount_cents && Number(trx.amount_cents) !== expectedCents) {
+    console.warn(
+      `⚠️  Course payment amount mismatch. Expected ${expectedCents}, got ${trx.amount_cents}`
+    );
+  }
+
+  const oldStatus = coursePayment.status;
+  coursePayment.status = 'paid';
+  coursePayment.gatewayTransactionId = trx.id?.toString() || coursePayment.gatewayTransactionId;
+  coursePayment.reviewedAt = new Date();
+  pushStatusHistory(coursePayment, {
+    oldStatus,
+    newStatus: 'paid',
+    changedBy: null,
+    changedByType: 'paymob',
+    reason: 'Paymob webhook confirmed payment',
+  });
+  await coursePayment.save();
+
+  const registration = await CourseRegistration.findById(coursePayment.registration);
+  if (registration) {
+    const oldRegStatus = registration.registrationStatus;
+    registration.registrationStatus = 'confirmed';
+    registration.payment = coursePayment._id;
+    pushStatusHistory(registration, {
+      oldStatus: oldRegStatus,
+      newStatus: 'confirmed',
+      changedBy: null,
+      changedByType: 'system',
+      reason: 'Paymob payment confirmed',
+    });
+    await registration.save();
+
+    const student = await CourseStudent.findById(coursePayment.student);
+    if (student) {
+      notifyPaymentApproved(student, registration).catch(() => {});
+      notifyRegistrationConfirmed(student, registration).catch(() => {});
+    }
+  }
+
+  console.log(`✅ Course Paymob payment succeeded for order ${coursePayment.gatewayOrderId}`);
+}
+
 module.exports = {
   handleStripeWebhook,
   handlePaymobWebhook,
+  handleCoursePaymobSuccess,
 };
 

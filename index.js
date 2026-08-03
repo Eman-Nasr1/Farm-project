@@ -1,3 +1,12 @@
+require('dotenv').config();
+
+const dns = require('node:dns');
+dns.setServers([
+  '8.8.8.8',
+  '8.8.4.4',
+  '1.1.1.1'
+]);
+
 const express = require('express');
 const app = express();
 const mongoose = require('mongoose');
@@ -141,6 +150,27 @@ app.use('/', contactRoutes);
 
 const syncRoutes = require('./Routes/syncRoutes');
 app.use('/', syncRoutes);
+
+// ============================================================
+// Course Registration Module (independent of farm subscriptions)
+// ============================================================
+const courseAuthRoutes = require('./Routes/courseAuthRoutes');
+app.use('/api/course/auth', courseAuthRoutes);
+
+const courseRegistrationRoutes = require('./Routes/courseRegistrationRoutes');
+app.use('/api/course/registration', courseRegistrationRoutes);
+
+const coursePaymentRoutes = require('./Routes/coursePaymentRoutes');
+app.use('/api/course', coursePaymentRoutes);
+
+const courseLectureRoutes = require('./Routes/courseLectureRoutes');
+app.use('/api/course/lectures', courseLectureRoutes);
+
+const courseFileRoutes = require('./Routes/courseFileRoutes');
+app.use('/api/course/files', courseFileRoutes);
+
+const adminCourseRoutes = require('./Routes/adminCourseRoutes');
+app.use('/api/admin/course', adminCourseRoutes);
 
 app.all('*',(req,res,next)=>{
     return res.status(400).json({status:httpstatustext.ERROR,message:"this resource is not aviliable"}) 

@@ -11,3 +11,5 @@ docs/
 scripts/
 *.md
 
+# private course uploads (receipts / ID documents)
+storage/
