@@ -3,12 +3,34 @@
  *
  * Handles payment-related operations like redirects and callbacks.
  * These are user-facing endpoints, not webhooks.
+ *
+ * Course Paymob return redirect is controlled here.
+ * Prefer COURSE_FRONTEND_URL or FRONTEND_URL (not APP_URL — APP_URL is often localhost for impersonation).
+ * Production default: https://mazraaonline.com
  */
 
 const asyncwrapper = require('../middleware/asyncwrapper');
 const CoursePayment = require('../Models/coursePayment.model');
 
-const APP_URL = process.env.APP_URL || 'https://mazraaonline.com';
+const PRODUCTION_FRONTEND_URL = 'https://mazraaonline.com';
+
+/**
+ * Frontend base URL for Course Paymob user redirects.
+ * Env vars (first match wins):
+ * - COURSE_FRONTEND_URL
+ * - FRONTEND_URL
+ * Fallback: https://mazraaonline.com
+ *
+ * Do NOT use APP_URL here — it is often set to localhost for other features.
+ */
+function getCourseFrontendBaseUrl() {
+  const raw =
+    process.env.COURSE_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    PRODUCTION_FRONTEND_URL;
+
+  return String(raw).trim().replace(/\/$/, '');
+}
 
 /**
  * Handle Paymob payment return/redirect
@@ -47,8 +69,14 @@ const handlePaymobReturn = asyncwrapper(async (req, res) => {
   }
 
   if (isCoursePayment) {
+    const frontendBase = getCourseFrontendBaseUrl();
+
     if (isSuccess) {
-      return res.redirect(`${APP_URL}/course/payment?status=success&order_id=${encodeURIComponent(orderId)}`);
+      // Exact success shape required by the course frontend:
+      // https://mazraaonline.com/course/payment?status=success&order_id=<PAYMOB_ORDER_ID>
+      return res.redirect(
+        `${frontendBase}/course/payment?status=success&order_id=${encodeURIComponent(orderId)}`
+      );
     }
 
     const params = new URLSearchParams();
@@ -56,7 +84,7 @@ const handlePaymobReturn = asyncwrapper(async (req, res) => {
     params.set('error', error || 'payment_failed');
     if (orderId) params.set('order_id', String(orderId));
     if (transactionId) params.set('transaction_id', String(transactionId));
-    return res.redirect(`${APP_URL}/course/payment?${params.toString()}`);
+    return res.redirect(`${frontendBase}/course/payment?${params.toString()}`);
   }
 
   if (isSuccess) {
@@ -65,7 +93,7 @@ const handlePaymobReturn = asyncwrapper(async (req, res) => {
       transactionId,
     });
 
-    return res.redirect('https://mazraaonline.com/payment/success');
+    return res.redirect(`${PRODUCTION_FRONTEND_URL}/payment/success`);
   }
 
   console.log('Paymob return hit - redirecting to failed page', {
@@ -80,10 +108,11 @@ const handlePaymobReturn = asyncwrapper(async (req, res) => {
   if (transactionId) params.set('transaction_id', String(transactionId));
 
   return res.redirect(
-    `https://mazraaonline.com/payment/failed?${params.toString()}`
+    `${PRODUCTION_FRONTEND_URL}/payment/failed?${params.toString()}`
   );
 });
 
 module.exports = {
   handlePaymobReturn,
+  getCourseFrontendBaseUrl,
 };
